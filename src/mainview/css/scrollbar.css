@@ -1,0 +1,62 @@
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-gray-400);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-500);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-gray-300);
+}
+
+.dark {
+    ::-webkit-scrollbar-thumb {
+        background: var(--color-gray-600);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--color-gray-700);
+    }
+
+    ::-webkit-scrollbar-track {
+        background: var(--color-gray-800);
+    }
+}
+
+/* .scrollbar-thin { */
+/*scrollbar-width: thin;*/
+/*--w: 25%;*/
+/*--hover: var(--color-gray-400);*/
+/*--from: var(--color-gray-200);*/
+/*--to: var(--color-gray-300);*/
+/* } */
+
+.scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: linear-gradient(90deg, #ffffff00 0%, #ffffff00 25%, var(--color-gray-800) 25%, var(--color-gray-800) 100%) !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #ffffff00 0%, #ffffff00 25%, var(--color-gray-700) 25%, var(--color-gray-700) 100%) !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-500) 25%;
+}
+
+.scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}

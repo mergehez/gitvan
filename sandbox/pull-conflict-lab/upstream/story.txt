@@ -1,0 +1,7 @@
+Release Notes
+=============
+
+Headline: Origin release draft
+Status: ready-for-release
+Checklist: verify migrations and rollout notes
+Footer: upstream release update
