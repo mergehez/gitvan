@@ -194,7 +194,6 @@ For signing, `scripts/build.ts` reads local values from environment variables or
 If you are preparing a public build or release, read these docs first:
 
 - [CHANGELOG.md](CHANGELOG.md)
-- [PUBLIC_PUBLISH_CHECKLIST.md](PUBLIC_PUBLISH_CHECKLIST.md)
 - [RELEASING.md](RELEASING.md)
 - [SECURITY.md](SECURITY.md)
 
