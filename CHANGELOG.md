@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.2] - 2026-04-09
+
+Focused alpha update for committed-file exploration and repository browsing.
+
+### Added
+
+- Explorer view for browsing the committed file tree of the selected repository.
+- Commit snapshot selector in Explorer for viewing repository state at any commit from history.
+
+### Changed
+
+- File tree component now supports nested folders and collapsible grouped entries.
+
 ## [0.0.1] - 2026-04-08
 
 Initial public alpha release.

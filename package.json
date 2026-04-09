@@ -1,6 +1,6 @@
 {
     "name": "gitvan",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "Gitvan desktop Git client with Vue and Vite",
     "license": "MIT",
     "author": {
