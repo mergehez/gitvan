@@ -1,29 +1,39 @@
 <script setup lang="ts" generic="TData, TRoot = {}">
-import { ref } from 'vue';
-import IconButton from './IconButton.vue';
 import { twMerge } from 'tailwind-merge';
+import { computed, reactive, ref } from 'vue';
+import IconButton from './IconButton.vue';
 
-export type FileTreeChild = {
+export type FileTreeChild<TData = any> = {
     id: any;
     title: string;
     path?: string;
     subtitle?: string;
+    children?: (FileTreeChild<TData> & TData)[];
 };
 
 export type FileTreeItem<TData = any, TRoot = {}> = {
     id?: any;
     title: string;
     subtitle?: string;
-    children: (FileTreeChild & TData)[];
+    count?: number;
+    children: (FileTreeChild<TData> & TData)[];
 } & TRoot;
 
-type Item = FileTreeChild & TData;
+type Item = FileTreeChild<TData> & TData;
+type FlattenedItem = {
+    item: Item;
+    depth: number;
+    isGroup: boolean;
+    isCollapsed: boolean;
+};
+
 const props = defineProps<{
     item: FileTreeItem<TData, TRoot>;
     selection?: any | any[];
     emptyText?: string;
     itemClass?: string;
     noActions?: boolean;
+    selectGroups?: boolean;
     leftIcon?: (item: Item) => `icon-\[${string}`;
     rightIcon?: (item: Item) => `icon-\[${string}` | '' | undefined;
     onSelect: (item: Item, event?: MouseEvent) => void;
@@ -43,6 +53,58 @@ function isSelected(entry: Item) {
 }
 
 const collapsed = ref(false);
+const collapsedGroups = reactive<Record<string, boolean>>({});
+
+function hasChildren(entry: Item) {
+    return Array.isArray(entry.children) && entry.children.length > 0;
+}
+
+function collapseKey(entry: Item) {
+    return String(entry.path ?? entry.id ?? entry.title);
+}
+
+function isCollapsedGroup(entry: Item) {
+    return collapsedGroups[collapseKey(entry)] ?? false;
+}
+
+function toggleGroup(entry: Item) {
+    if (!hasChildren(entry)) {
+        return;
+    }
+
+    const key = collapseKey(entry);
+    collapsedGroups[key] = !isCollapsedGroup(entry);
+}
+
+function flattenEntries(entries: Item[], depth = 0): FlattenedItem[] {
+    return entries.flatMap((entry) => {
+        const isGroup = hasChildren(entry);
+        const isCollapsed = isGroup ? isCollapsedGroup(entry) : false;
+        const currentEntry: FlattenedItem = {
+            item: entry,
+            depth,
+            isGroup,
+            isCollapsed,
+        };
+
+        if (!isGroup || isCollapsed) {
+            return [currentEntry];
+        }
+
+        return [currentEntry, ...flattenEntries(entry.children as Item[], depth + 1)];
+    });
+}
+
+const visibleChildren = computed(() => flattenEntries(props.item.children as Item[]));
+
+function onEntryClick(event: MouseEvent, entry: Item) {
+    if (hasChildren(entry) && !props.selectGroups) {
+        toggleGroup(entry);
+        return;
+    }
+
+    props.onSelect(entry, event);
+}
 </script>
 
 <template>
@@ -54,7 +116,7 @@ const collapsed = ref(false);
             </div>
             <div class="flex items-center gap-1">
                 <slot name="header-actions" :item="item"></slot>
-                <span class="rounded-full bg-white/8 px-1.5 py-px">{{ item.children.length ?? '' }}</span>
+                <span class="rounded-full bg-white/8 px-1.5 py-px">{{ item.count ?? item.children.length ?? '' }}</span>
             </div>
         </div>
 
@@ -64,37 +126,42 @@ const collapsed = ref(false);
 
         <div v-else-if="!collapsed" class="min-h-0 overflow-auto">
             <div
-                v-for="entry in item.children"
-                :key="`${entry.id}`"
+                v-for="entryState in visibleChildren"
+                :key="`${entryState.item.id}`"
                 class="group flex min-h-6 items-center gap-1 px-2 py-0.5 text-left transition relative"
-                :class="[isSelected(entry) ? 'bg-white/10 outline-1 -outline-offset-1 outline-white/8' : 'hover:bg-white/6', itemClass]"
-            >
+                :class="[isSelected(entryState.item) ? 'bg-white/10 outline-1 -outline-offset-1 outline-white/8' : 'hover:bg-white/6', itemClass]">
                 <button
                     type="button"
-                    :data-testid="`file-tree-item-${entry.id}`"
-                    :aria-label="entry.title"
+                    :data-testid="`file-tree-item-${entryState.item.id}`"
+                    :aria-label="entryState.item.title"
+                    :aria-expanded="entryState.isGroup ? !entryState.isCollapsed : undefined"
                     class="flex min-w-0 w-full flex-1 items-center gap-1.5 text-left overflow-hidden"
-                    @click="(event) => props.onSelect(entry, event as MouseEvent)"
-                    @contextmenu="(e) => onContextMenu(e, entry)"
-                >
-                    <slot name="item-leftIcon" :item="entry">
-                        <span v-if="props.leftIcon && props.leftIcon(entry)" :class="twMerge('icon text-sm', props.leftIcon(entry))"></span>
+                    :style="{ paddingLeft: `${entryState.depth * 0.875}rem` }"
+                    @click="(event) => onEntryClick(event as MouseEvent, entryState.item)"
+                    @contextmenu="(e) => onContextMenu(e, entryState.item)">
+                    <span
+                        v-if="entryState.isGroup"
+                        class="icon shrink-0 text-sm opacity-60"
+                        :class="entryState.isCollapsed ? 'icon-[mdi--chevron-right]' : 'icon-[mdi--chevron-down]'"></span>
+                    <span v-else class="block w-3 shrink-0"></span>
+                    <slot name="item-leftIcon" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed">
+                        <span v-if="props.leftIcon && props.leftIcon(entryState.item)" :class="twMerge('icon text-sm', props.leftIcon(entryState.item))"></span>
                     </slot>
                     <div class="flex min-w-0 flex-1 items-center text-xs py-px overflow-hidden">
-                        <slot name="item-title" :item="entry">
-                            <p class="text-xs tracking-tight leading-tight">{{ entry.title }}</p>
+                        <slot name="item-title" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed">
+                            <p class="text-xs tracking-tight leading-tight">{{ entryState.item.title }}</p>
                         </slot>
                     </div>
-                    <p v-if="entry.subtitle" class="hidden truncate text-xs opacity-70 xl:block xl:max-w-44">
-                        {{ entry.subtitle }}
+                    <p v-if="entryState.item.subtitle" class="hidden truncate text-xs opacity-70 xl:block xl:max-w-44">
+                        {{ entryState.item.subtitle }}
                     </p>
                 </button>
                 <div v-if="!props.noActions" class="min-w-0 items-center justify-end gap-1 hidden group-hover:flex">
-                    <slot name="item-actions" :item="entry"></slot>
+                    <slot name="item-actions" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed"></slot>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
-                    <slot name="item-rightIcon" :item="entry">
-                        <span v-if="props.rightIcon && props.rightIcon(entry)" :class="twMerge('icon text-sm', props.rightIcon(entry))"></span>
+                    <slot name="item-rightIcon" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed">
+                        <span v-if="props.rightIcon && props.rightIcon(entryState.item)" :class="twMerge('icon text-sm', props.rightIcon(entryState.item))"></span>
                     </slot>
                 </div>
             </div>

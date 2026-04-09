@@ -1,12 +1,12 @@
 import { mount } from '@vue/test-utils';
-import { computed, defineComponent, reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { computed, defineComponent, reactive } from 'vue';
 import type { EditorSettings, NativeCommand, NavigationView, Repo, SettingsPanel } from '../../shared/gitClient';
+import App from '../App.vue';
 import { useRepo, type RepositoryState } from '../composables/useRepo';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
-import App from '../App.vue';
 
 type SettingsState = ReturnType<typeof useSettings>;
 type ReposState = ReturnType<typeof useRepos>;
@@ -168,6 +168,7 @@ const gitClientHeaderStub = defineComponent({
         <div data-testid="GitClientHeader">
             <p data-testid="selected-repository-name">{{ repoName }}</p>
             <button type="button" data-testid="switch-view-changes" @click="setActiveView('changes')">Changes</button>
+            <button type="button" data-testid="switch-view-explorer" @click="setActiveView('explorer')">Explorer</button>
             <button type="button" data-testid="switch-view-history" @click="setActiveView('history')">History</button>
             <p data-testid="active-view-name">{{ activeView }}</p>
         </div>
@@ -192,6 +193,16 @@ const historyViewStub = defineComponent({
         };
     },
     template: `<div data-testid="RepHistoryView">History View: {{ repoName }}</div>`,
+});
+
+const explorerViewStub = defineComponent({
+    name: 'RepExplorerView',
+    setup() {
+        return {
+            repoName: computed(() => mockRepos.getSelectedRepo()?.name ?? 'No repository selected'),
+        };
+    },
+    template: `<div data-testid="RepExplorerView">Explorer View: {{ repoName }}</div>`,
 });
 
 const branchesViewStub = defineComponent({
@@ -219,6 +230,7 @@ function mountApp() {
                 Settings: stubComponent('Settings'),
                 SidebarRepositories: sidebarRepositoriesStub,
                 RepChangesView: changesViewStub,
+                RepExplorerView: explorerViewStub,
                 RepHistoryView: historyViewStub,
                 RepBranchesView: branchesViewStub,
             },
@@ -261,6 +273,7 @@ describe('App', () => {
         const wrapper = mountApp();
 
         expect(wrapper.get('[data-testid="RepChangesView"]').text()).toContain('Changes View');
+        expect(wrapper.find('[data-testid="RepExplorerView"]').exists()).toBe(false);
         expect(wrapper.find('[data-testid="RepHistoryView"]').exists()).toBe(false);
         expect(wrapper.find('[data-testid="RepBranchesView"]').exists()).toBe(false);
     });
@@ -277,13 +290,17 @@ describe('App', () => {
         expect(wrapper.get('[data-testid="RepChangesView"]').text()).toContain('Beta');
     });
 
-    it('switches between changes and history in the right panel', async () => {
+    it('switches between changes, explorer, and history in the right panel', async () => {
         const wrapper = mountApp();
 
         expect(wrapper.get('[data-testid="RepChangesView"]').text()).toContain('Alpha');
 
-        await wrapper.get('[data-testid="switch-view-history"]').trigger('click');
+        await wrapper.get('[data-testid="switch-view-explorer"]').trigger('click');
         expect(wrapper.find('[data-testid="RepChangesView"]').exists()).toBe(false);
+        expect(wrapper.get('[data-testid="RepExplorerView"]').text()).toContain('Alpha');
+
+        await wrapper.get('[data-testid="switch-view-history"]').trigger('click');
+        expect(wrapper.find('[data-testid="RepExplorerView"]').exists()).toBe(false);
         expect(wrapper.get('[data-testid="RepHistoryView"]').text()).toContain('Alpha');
 
         await wrapper.get('[data-testid="switch-view-changes"]').trigger('click');
@@ -298,6 +315,7 @@ describe('App', () => {
         const wrapper = mountApp();
 
         expect(wrapper.find('[data-testid="RepChangesView"]').exists()).toBe(false);
+        expect(wrapper.find('[data-testid="RepExplorerView"]').exists()).toBe(false);
         expect(wrapper.get('[data-testid="RepHistoryView"]').text()).toContain('History View');
         expect(wrapper.find('[data-testid="RepBranchesView"]').exists()).toBe(false);
     });

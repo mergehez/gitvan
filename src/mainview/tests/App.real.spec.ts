@@ -70,6 +70,8 @@ const touchedTaskKeys = [
     'getChanges',
     'getFileDiff',
     'getHistory',
+    'getCommittedTree',
+    'getCommittedFile',
     'getCommitDetail',
     'getCommitFileDiff',
     'getBranches',
@@ -123,6 +125,8 @@ const realAppMethods = {
     getChanges: (params: { repoId: number }) => app.getChanges(params),
     getFileDiff: (params: { repoId: number; path: string; kind: 'staged' | 'unstaged' }) => app.getDiff(params),
     getHistory: (params: { repoId: number }) => app.getHistory(params),
+    getCommittedTree: (params: { repoId: number }) => app.getCommittedTree(params),
+    getCommittedFile: (params: { repoId: number; path: string }) => app.getCommittedFile(params),
     getCommitDetail: (params: { repoId: number; commitSha: string }) => app.getCommit(params),
     getCommitFileDiff: (params: { repoId: number; commitSha: string; path: string; previousPath?: string | undefined }) => app.getCommitDiff(params),
     getBranches: (params: { repoId: number }) => app.getBranches(params),
@@ -136,7 +140,7 @@ const realAppMethods = {
 
 async function invokeRealAppMethod<TMethodName extends keyof typeof realAppMethods>(methodName: TMethodName, params: Parameters<(typeof realAppMethods)[TMethodName]>[0]) {
     const method = realAppMethods[methodName] as (
-        params: Parameters<(typeof realAppMethods)[TMethodName]>[0],
+        params: Parameters<(typeof realAppMethods)[TMethodName]>[0]
     ) => ReturnType<(typeof realAppMethods)[TMethodName]> | Promise<ReturnType<(typeof realAppMethods)[TMethodName]>>;
 
     return await method(params);
@@ -159,9 +163,11 @@ function installRealAppTasks() {
     taskStore.getChanges = createTask((params: { repoId: number }) => invokeRealAppMethod('getChanges', params));
     taskStore.getFileDiff = createTask((params: { repoId: number; path: string; kind: 'staged' | 'unstaged' }) => invokeRealAppMethod('getFileDiff', params));
     taskStore.getHistory = createTask((params: { repoId: number }) => invokeRealAppMethod('getHistory', params));
+    taskStore.getCommittedTree = createTask((params: { repoId: number }) => invokeRealAppMethod('getCommittedTree', params));
+    taskStore.getCommittedFile = createTask((params: { repoId: number; path: string }) => invokeRealAppMethod('getCommittedFile', params));
     taskStore.getCommitDetail = createTask((params: { repoId: number; commitSha: string }) => invokeRealAppMethod('getCommitDetail', params));
     taskStore.getCommitFileDiff = createTask((params: { repoId: number; commitSha: string; path: string; previousPath?: string | undefined }) =>
-        invokeRealAppMethod('getCommitFileDiff', params),
+        invokeRealAppMethod('getCommitFileDiff', params)
     );
     taskStore.getBranches = createTask((params: { repoId: number }) => invokeRealAppMethod('getBranches', params));
     taskStore.getMergeConflictState = createTask((params: { repoId: number }) => invokeRealAppMethod('getMergeConflictState', params));
@@ -212,7 +218,7 @@ async function resetRealAppState(resetSandboxes = false) {
                 return await (
                     invokeRealAppMethod as <TMethodName extends keyof typeof realAppMethods>(
                         methodName: TMethodName,
-                        nextParams: Parameters<(typeof realAppMethods)[TMethodName]>[0],
+                        nextParams: Parameters<(typeof realAppMethods)[TMethodName]>[0]
                     ) => Promise<Awaited<ReturnType<(typeof realAppMethods)[TMethodName]>>>
                 )(method as keyof typeof realAppMethods, params as never);
             }

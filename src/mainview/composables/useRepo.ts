@@ -3,6 +3,8 @@ import type {
     BranchesData,
     CommitDetail,
     CommitFormState,
+    CommittedFileData,
+    CommittedTreeData,
     FileChangeEntry,
     FileDiffData,
     FileDiffRequestKind,
@@ -94,6 +96,11 @@ const _useRepository = (repo: Repo) => {
         currCommit: undefined as CommitDetail | undefined,
         currCommitFilePath: undefined as string | undefined,
         currCommitDiff: undefined as FileDiffData | undefined,
+
+        committedTree: undefined as CommittedTreeData | undefined,
+        explorerCommitSha: undefined as string | undefined,
+        currCommittedFilePath: undefined as string | undefined,
+        currCommittedFile: undefined as CommittedFileData | undefined,
 
         commitForm: { summary: '', description: '', amend: false } as CommitFormState,
         resetCommitForm() {
@@ -421,10 +428,52 @@ const _useRepository = (repo: Repo) => {
                 return;
             }
 
+            if (settings.state.activeView === 'explorer') {
+                await this.loadCommittedTree();
+                return;
+            }
+
             if (settings.state.activeView === 'history') {
                 await this.loadHistory();
                 return;
             }
+        },
+
+        async loadCommittedTree(commitSha?: string, refreshHistory = true) {
+            const nextHistory = refreshHistory || !this.history ? await tasks.getHistory.run({ repoId: this.id }) : this.history;
+
+            this.history = nextHistory;
+            const nextExplorerCommitSha =
+                (commitSha && nextHistory.commits.some((commit) => commit.sha === commitSha) && commitSha) ||
+                (this.explorerCommitSha && nextHistory.commits.some((commit) => commit.sha === this.explorerCommitSha) && this.explorerCommitSha) ||
+                nextHistory.commits[0]?.sha;
+
+            if (!nextExplorerCommitSha) {
+                this.explorerCommitSha = undefined;
+                this.committedTree = undefined;
+                this.currCommittedFilePath = undefined;
+                this.currCommittedFile = undefined;
+                return;
+            }
+
+            this.explorerCommitSha = nextExplorerCommitSha;
+            const nextCommittedTree = await tasks.getCommittedTree.run({ repoId: this.id, commitSha: nextExplorerCommitSha });
+
+            this.committedTree = nextCommittedTree;
+            const nextSelectedPath =
+                (this.currCommittedFilePath && nextCommittedTree.files.some((file) => file.path === this.currCommittedFilePath) && this.currCommittedFilePath) ||
+                nextCommittedTree.files[0]?.path;
+
+            if (!nextSelectedPath) {
+                this.currCommittedFilePath = undefined;
+                this.currCommittedFile = undefined;
+                return;
+            }
+
+            await this.selectCommittedFile(nextSelectedPath);
+        },
+        async selectExplorerCommit(commitSha: string) {
+            await this.loadCommittedTree(commitSha, false);
         },
 
         async loadHistory() {
@@ -482,11 +531,29 @@ const _useRepository = (repo: Repo) => {
                 previousPath: selectedFile.previousPath,
             });
         },
+        async selectCommittedFile(path: string) {
+            if (!this.committedTree?.files.some((file) => file.path === path)) {
+                this.currCommittedFilePath = undefined;
+                this.currCommittedFile = undefined;
+                return;
+            }
+
+            this.currCommittedFilePath = path;
+            this.currCommittedFile = await tasks.getCommittedFile.run({
+                repoId: this.id,
+                path,
+                commitSha: this.explorerCommitSha,
+            });
+        },
         clearViewState() {
             this.changes = undefined;
             this.currChangePath = undefined;
             this.currChangeKind = undefined;
             this.curDiff = undefined;
+            this.committedTree = undefined;
+            this.explorerCommitSha = undefined;
+            this.currCommittedFilePath = undefined;
+            this.currCommittedFile = undefined;
             this.history = undefined;
             this.currCommitSha = undefined;
             this.currCommit = undefined;

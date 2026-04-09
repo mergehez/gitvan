@@ -67,6 +67,8 @@ export const apiMethods = [
     'commitRepo',
     'undoLastCommit',
     'getHistory',
+    'getCommittedTree',
+    'getCommittedFile',
     'getCommitDetail',
     'getCommitFileDiff',
     'getBranches',

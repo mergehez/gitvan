@@ -1,4 +1,4 @@
-export type NavigationView = 'changes' | 'history';
+export type NavigationView = 'changes' | 'explorer' | 'history';
 // export type NavigationView = 'changes' | 'history' | 'branches';
 
 export type SettingsPanel = 'repositories' | 'accounts' | 'editors';
@@ -263,6 +263,30 @@ export type CommitDetail = CommitSummary & {
     body: string;
     files: CommitFileEntry[];
     patch: string;
+};
+
+export type CommittedFileEntry = {
+    path: string;
+    sizeBytes: number;
+};
+
+export type CommittedTreeData = {
+    commitSha: string | undefined;
+    files: CommittedFileEntry[];
+};
+
+export type CommittedFilePreview = {
+    kind: 'image';
+    src: string;
+};
+
+export type CommittedFileData = {
+    commitSha: string | undefined;
+    path: string;
+    sizeBytes: number;
+    content: string;
+    preview?: CommittedFilePreview;
+    previewMessage?: string;
 };
 
 export type HistoryData = {

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
     AppBootstrapApi,
     BranchesData,
@@ -8,6 +8,8 @@ import type {
     CloneRepoDefaults,
     CommitDetail,
     CommitFormState,
+    CommittedFileData,
+    CommittedTreeData,
     EditorSettings,
     FileDiffData,
     FileDiffRequestKind,
@@ -19,15 +21,15 @@ import type {
     OAuthDeviceStartResult,
     OAuthProviderSettings,
     RemoteOperation,
-    RepoChangesData,
     Repo,
+    RepoChangesData,
 } from '../../shared/gitClient.js';
-import { useDb } from './database.js';
-import type { RepoRow } from './database.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
-import { GitCommandError, git } from './git.js';
-import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
+import type { RepoRow } from './database.js';
+import { useDb } from './database.js';
+import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
+import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
 
 type HostControls = {
     updateWindowTitle?: (title: string) => void;
@@ -161,7 +163,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         })(),
         diffViewMode: raw.diffViewMode === 'changes' ? 'changes' : 'full-file',
         showWhitespaceChanges: raw.showWhitespaceChanges === true,
-        activeView: raw.activeView === 'history' ? 'history' : 'changes',
+        activeView: raw.activeView === 'history' || raw.activeView === 'explorer' ? raw.activeView : 'changes',
         showBranches: raw.showBranches === true,
     };
 }
@@ -342,7 +344,7 @@ async function resolveRepoRemoteAuth(repoId: number): Promise<RepoRemoteAuth | u
 function rethrowRemoteAuthError(error: unknown, auth: RepoRemoteAuth | undefined): never {
     if (auth && error instanceof GitCommandError && /repository .* not found/i.test(error.stderr)) {
         throw new Error(
-            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.',
+            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.'
         );
     }
 
@@ -370,7 +372,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
             };
 
             return r;
-        }),
+        })
     );
 
     let selectedRepoId = db.getSelectedRepoId();
@@ -498,7 +500,7 @@ export const app = {
                             updatedAt: typeof record.updated_at === 'string' && record.updated_at.trim() ? record.updated_at.trim() : undefined,
                         };
                     })
-                    .filter((entry): entry is CloneableRepo => entry !== undefined),
+                    .filter((entry): entry is CloneableRepo => entry !== undefined)
             );
 
             if (pageItems.length < 100) {
@@ -869,7 +871,7 @@ export const app = {
             'oauth',
             completedResult.account.username,
             completedResult.account.host,
-            completedResult.account.setAsDefault,
+            completedResult.account.setAsDefault
         );
 
         try {
@@ -1005,6 +1007,12 @@ export const app = {
     },
     getHistory: async (ps: { repoId: number }): Promise<HistoryData> => {
         return git.getRepoHistory(db.getRepo(ps.repoId)!.path);
+    },
+    getCommittedTree: async (ps: { repoId: number; commitSha?: string }): Promise<CommittedTreeData> => {
+        return git.getCommittedTree(db.getRepo(ps.repoId)!.path, ps.commitSha);
+    },
+    getCommittedFile: async (ps: { repoId: number; path: string; commitSha?: string }): Promise<CommittedFileData> => {
+        return git.getCommittedFile(db.getRepo(ps.repoId)!.path, ps.path, ps.commitSha);
     },
     getCommit: async (ps: { repoId: number; commitSha: string }): Promise<CommitDetail> => {
         return git.getCommitDetail(db.getRepo(ps.repoId)!.path, ps.commitSha);

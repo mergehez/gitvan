@@ -88,6 +88,8 @@ export const gitClientRequestHandlers = {
     commitRepo: _mapPs(app.commitRepo),
     undoLastCommit: _mapPs(app.undoLastCommit),
     getHistory: _mapPs(app.getHistory),
+    getCommittedTree: _mapPs(app.getCommittedTree),
+    getCommittedFile: _mapPs(app.getCommittedFile),
     getCommitDetail: _mapPs(app.getCommit),
     getCommitFileDiff: _mapPs(app.getCommitDiff),
     getBranches: _mapPs(app.getBranches),

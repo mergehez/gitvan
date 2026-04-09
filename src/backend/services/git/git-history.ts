@@ -1,4 +1,4 @@
-import type { CommitDetail, FileDiffData, HistoryData } from '../../../shared/gitClient.js';
+import type { CommitDetail, CommittedFileData, CommittedTreeData, FileDiffData, HistoryData } from '../../../shared/gitClient.js';
 import { runGit } from './git-common.js';
 import {
     buildDiffStats,
@@ -9,11 +9,64 @@ import {
     isPreviewTooLarge,
     parseCommitFilesWithConflicts,
     parseRefs,
+    readGitRevisionFile,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
 } from './git-helpers.js';
 
+function parseLsTreeEntries(output: string) {
+    return output
+        .split('\0')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .flatMap((line) => {
+            const match = line.match(/^(\d+)\s+(blob|commit|tree)\s+([0-9a-f]+)\s+(\d+|-)\t(.+)$/i);
+            if (!match) {
+                return [];
+            }
+
+            const [, , type, , sizeRaw, path] = match;
+            if (type !== 'blob') {
+                return [];
+            }
+
+            return [
+                {
+                    path,
+                    sizeBytes: sizeRaw === '-' ? 0 : Number.parseInt(sizeRaw, 10) || 0,
+                },
+            ];
+        })
+        .sort((a, b) => a.path.localeCompare(b.path, undefined, { sensitivity: 'accent' }));
+}
+
+function isBinaryBuffer(buffer: Buffer | undefined) {
+    if (!buffer || buffer.length === 0) {
+        return false;
+    }
+
+    for (const byte of buffer.subarray(0, Math.min(buffer.length, 8000))) {
+        if (byte === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 export const historyGit = {
+    async _getHeadCommitSha(repoPath: string) {
+        const output = await runGit(['rev-parse', '--verify', 'HEAD'], repoPath, [0, 128]);
+        return output || undefined;
+    },
+    async _resolveCommittedRevision(repoPath: string, commitSha?: string) {
+        if (commitSha) {
+            const output = await runGit(['rev-parse', '--verify', commitSha], repoPath, [0, 128]);
+            return output || undefined;
+        }
+
+        return await this._getHeadCommitSha(repoPath);
+    },
     async _getUnpushedCommitSet(repoPath: string, maxCount?: number) {
         const args = ['rev-list'];
 
@@ -29,7 +82,7 @@ export const historyGit = {
             output
                 .split('\n')
                 .map((line) => line.trim())
-                .filter(Boolean),
+                .filter(Boolean)
         );
     },
     async getRepoHistory(repoPath: string): Promise<HistoryData> {
@@ -48,6 +101,23 @@ export const historyGit = {
                     const commit = { sha, shortSha, summary, authorName, authorEmail, authoredAt, refs: parseRefs(refsRaw ?? ''), isUnpushed: false };
                     return { ...commit, isUnpushed: unpushedCommits.has(commit.sha) };
                 }),
+        };
+    },
+    async getCommittedTree(repoPath: string, commitSha?: string): Promise<CommittedTreeData> {
+        const resolvedCommitSha = await this._resolveCommittedRevision(repoPath, commitSha);
+
+        if (!resolvedCommitSha) {
+            return {
+                commitSha: undefined,
+                files: [],
+            };
+        }
+
+        const output = await runGit(['ls-tree', '-r', '-l', '-z', '--full-tree', resolvedCommitSha], repoPath);
+
+        return {
+            commitSha: resolvedCommitSha,
+            files: parseLsTreeEntries(output),
         };
     },
     async getCommitDetail(repoPath: string, commitSha: string): Promise<CommitDetail> {
@@ -73,6 +143,60 @@ export const historyGit = {
             body: parsedBody.body,
             files: parseCommitFilesWithConflicts(filesRaw, parsedBody.conflictPaths),
             patch,
+        };
+    },
+    async getCommittedFile(repoPath: string, filePath: string, commitSha?: string): Promise<CommittedFileData> {
+        const resolvedCommitSha = await this._resolveCommittedRevision(repoPath, commitSha);
+
+        if (!resolvedCommitSha) {
+            throw new Error('The repository does not have any commits yet.');
+        }
+
+        const revisionPath = `${resolvedCommitSha}:${filePath}`;
+        const sizeBytes = (await readGitRevisionFileSize(repoPath, revisionPath)) ?? 0;
+
+        if (isPreviewTooLarge(sizeBytes)) {
+            return {
+                commitSha: resolvedCommitSha,
+                path: filePath,
+                sizeBytes,
+                content: '',
+                previewMessage: fileTooBigPreviewMessage,
+            };
+        }
+
+        const buffer = await readGitRevisionFileBuffer(repoPath, revisionPath);
+        const imagePreview = buildImagePreview(filePath, undefined, buffer);
+        const previewSrc = imagePreview?.modifiedSrc ?? imagePreview?.originalSrc;
+
+        if (previewSrc) {
+            return {
+                commitSha: resolvedCommitSha,
+                path: filePath,
+                sizeBytes,
+                content: '',
+                preview: {
+                    kind: 'image',
+                    src: previewSrc,
+                },
+            };
+        }
+
+        if (isBinaryBuffer(buffer)) {
+            return {
+                commitSha: resolvedCommitSha,
+                path: filePath,
+                sizeBytes,
+                content: '',
+                previewMessage: 'Binary file cannot be previewed.',
+            };
+        }
+
+        return {
+            commitSha: resolvedCommitSha,
+            path: filePath,
+            sizeBytes,
+            content: await readGitRevisionFile(repoPath, revisionPath),
         };
     },
     async getCommitFileDiff(repoPath: string, commitSha: string, filePath: string, previousPath?: string): Promise<FileDiffData> {
@@ -109,7 +233,7 @@ export const historyGit = {
             ? buildImagePreview(
                   filePath,
                   await readGitRevisionFileBuffer(repoPath, `${parentRevision}:${originalPath}`),
-                  await readGitRevisionFileBuffer(repoPath, `${commitSha}:${filePath}`),
+                  await readGitRevisionFileBuffer(repoPath, `${commitSha}:${filePath}`)
               )
             : undefined;
 

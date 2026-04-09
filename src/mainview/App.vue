@@ -9,14 +9,15 @@ import AppSuccessToast from './components/AppSuccessToast.vue';
 import EtSplitter from './components/EtSplitter.vue';
 import GitClientHeader from './components/GitClientHeader.vue';
 import RepChangesView from './components/RepChangesView.vue';
+import RepExplorerView from './components/RepExplorerView.vue';
 import RepHistoryView from './components/RepHistoryView.vue';
-import SidebarRepositories from './components/SidebarRepositories.vue';
-import { useSettings } from './composables/useSettings';
-import { useRepos } from './composables/useRepos';
-import { initializeStates } from './composables/initializeStates';
-import { tasks } from './composables/useTasks';
-import SidebarBranches from './components/SidebarBranches.vue';
 import Settings from './components/Settings.vue';
+import SidebarBranches from './components/SidebarBranches.vue';
+import SidebarRepositories from './components/SidebarRepositories.vue';
+import { initializeStates } from './composables/initializeStates';
+import { useRepos } from './composables/useRepos';
+import { useSettings } from './composables/useSettings';
+import { tasks } from './composables/useTasks';
 
 initializeStates();
 
@@ -53,8 +54,7 @@ onBeforeUnmount(() => {
             default-width="200px"
             min-width="180px"
             max-width="50%"
-            local-storage-key="repositorySidebarWidth"
-        >
+            local-storage-key="repositorySidebarWidth">
             <template #left>
                 <SidebarRepositories />
             </template>
@@ -74,8 +74,7 @@ onBeforeUnmount(() => {
                                 max-width="50%"
                                 right-class="bg-x0 opacity-80"
                                 dragger-class="bg-x0 opacity-80"
-                                local-storage-key="branchesSidebarWidth"
-                            >
+                                local-storage-key="branchesSidebarWidth">
                                 <template #left>
                                     <SidebarBranches />
                                 </template>
@@ -86,6 +85,7 @@ onBeforeUnmount(() => {
 
                             <div class="flex flex-1 overflow-y-auto">
                                 <RepChangesView v-if="settings.state.activeView === 'changes'" />
+                                <RepExplorerView v-else-if="settings.state.activeView === 'explorer'" />
                                 <RepHistoryView v-else-if="settings.state.activeView === 'history'" />
                                 <!-- <RepBranchesView v-else /> -->
                             </div>
