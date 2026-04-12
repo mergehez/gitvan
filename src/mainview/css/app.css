@@ -37,4 +37,69 @@
     .text-3xs {
         font-size: 0.5rem;
     }
+
+    /* case 'xs':
+            text.style.padding = '0.25rem 0.5rem';
+            tooltip.style.fontSize = '0.75rem';
+            tooltip.style.lineHeight = '1rem';
+            break;
+        case 'sm':
+            text.style.padding = '0.375rem 0.625rem';
+            tooltip.style.fontSize = '0.8125rem';
+            tooltip.style.lineHeight = '1.125rem';
+            break;
+        default:
+            text.style.padding = '0.5rem 0.75rem';
+            tooltip.style.fontSize = '0.875rem';
+            tooltip.style.lineHeight = '1.25rem';
+            break; */
+    .tooltip {
+        @apply bg-x5 border border-x7 shadow-lg;
+        position: absolute;
+        z-index: 9999;
+        display: none;
+        pointer-events: none;
+        width: fit-content;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        max-width: 300px;
+        visibility: visible;
+        top: 0;
+        left: 0;
+
+        .tooltip-arrow {
+            position: absolute;
+            width: 0.5rem;
+            height: 0.5rem;
+            background: inherit;
+        }
+
+        .tooltip-text {
+            padding: 0.5rem 0.75rem;
+            white-space: pre-line;
+            word-break: break-word;
+        }
+    }
+    .tooltip-nowrap {
+        max-width: none;
+    }
+    .tooltip-nowrap .tooltip-text {
+        white-space: nowrap;
+        word-break: normal;
+    }
+    .tooltip-sm {
+        font-size: 0.8125rem;
+        line-height: 1.125rem;
+        .tooltip-text {
+            padding: 0.375rem 0.625rem;
+        }
+    }
+    .tooltip-xs {
+        font-size: 0.75rem;
+        line-height: 1rem;
+        .tooltip-text {
+            padding: 0.25rem 0.5rem;
+        }
+    }
 }

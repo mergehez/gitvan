@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/gitClient';
+import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption, type FileDiffHunk } from '../../shared/gitClient';
 import { useContextMenu } from '../composables/useContextMenu';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useMergeHelper } from '../composables/useMerge';
@@ -15,6 +15,7 @@ import DiffViewer from './DiffViewer.vue';
 import EtSplitter from './EtSplitter.vue';
 import FileTree, { FileTreeItem } from './FileTree.vue';
 import IconButton from './IconButton.vue';
+import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
 const contextMenu = useContextMenu();
 const repos = useRepos();
@@ -125,8 +126,81 @@ const stashFilesTreeItem = computed<FileTreeItem>(() => {
     };
 });
 
+const partialDiffHunks = computed(() => repo.value.curDiff?.entry.hunks ?? []);
+const showPartialChangeButtons = computed(() => {
+    const entry = repo.value.curDiff?.entry;
+
+    return Boolean(entry && partialDiffHunks.value.length > 1 && (entry.supportsPartialStage || entry.supportsPartialUnstage || entry.supportsPartialDiscard));
+});
+
+const partialDiffActionZones = computed<MonacoEditorActionZone[]>(() => {
+    const currentDiff = repo.value.curDiff;
+    const entry = currentDiff?.entry;
+
+    if (!currentDiff || !entry || !showPartialChangeButtons.value) {
+        return [];
+    }
+
+    return partialDiffHunks.value.map((hunk, index) => {
+        const hunkBusy = isAnyPartialChangeOperationRunning(currentDiff.path, hunk.id);
+        const actions = [
+            entry.supportsPartialStage
+                ? {
+                      id: `stage:${hunk.id}`,
+                      label: 'Stage Change',
+                      title: 'Stage only this hunk',
+                      busy: isPartialChangeOperationRunning('stageFileHunks', currentDiff.path, hunk.id),
+                      disabled: hunkBusy,
+                      onClick: () => void stagePartialHunk(hunk.id),
+                  }
+                : undefined,
+            entry.supportsPartialUnstage
+                ? {
+                      id: `unstage:${hunk.id}`,
+                      label: 'Unstage Change',
+                      title: 'Unstage only this hunk',
+                      busy: isPartialChangeOperationRunning('unstageFileHunks', currentDiff.path, hunk.id),
+                      disabled: hunkBusy,
+                      onClick: () => void unstagePartialHunk(hunk.id),
+                  }
+                : undefined,
+            entry.supportsPartialDiscard
+                ? {
+                      id: `discard:${hunk.id}`,
+                      label: 'Discard Change',
+                      title: 'Discard only this hunk',
+                      busy: isPartialChangeOperationRunning('discardFileHunks', currentDiff.path, hunk.id),
+                      disabled: hunkBusy,
+                      tone: 'danger' as const,
+                      onClick: () => void discardPartialHunk(hunk.id),
+                  }
+                : undefined,
+        ].filter((action) => action !== undefined);
+
+        return {
+            id: hunk.id,
+            afterLineNumber: Math.max(0, (hunk.newStart || hunk.oldStart) - 1),
+            startLineNumber: Math.max(1, hunk.newStart || hunk.oldStart),
+            endLineNumber: Math.max(1, (hunk.newStart || hunk.oldStart) + Math.max(hunk.newLines, 1) - 1),
+            originalStartLineNumber: Math.max(1, hunk.oldStart || hunk.newStart),
+            originalEndLineNumber: Math.max(1, (hunk.oldStart || hunk.newStart) + Math.max(hunk.oldLines, 1) - 1),
+            label: partialHunkLabel(hunk, index),
+            meta: partialHunkSummary(hunk),
+            actions,
+        };
+    });
+});
+
 function isFileOperationRunning(action: 'openFileInEditor' | 'discardFile' | 'stageFile' | 'unstageFile', path: string) {
     return tasks.isOperationRunning(`${action}:${path}`);
+}
+
+function isPartialChangeOperationRunning(action: 'stageFileHunks' | 'unstageFileHunks' | 'discardFileHunks', path: string, hunkId: string) {
+    return tasks.isOperationRunning(`${action}:${path}:${hunkId}`);
+}
+
+function isAnyPartialChangeOperationRunning(path: string, hunkId: string) {
+    return ['stageFileHunks', 'unstageFileHunks', 'discardFileHunks'].some((action) => tasks.isOperationRunning(`${action}:${path}:${hunkId}` as `stageFileHunks:${string}`));
 }
 
 function isStashOperationRunning(action: 'restoreStash' | 'discardStash', stashRef: string) {
@@ -140,6 +214,39 @@ async function onSelectChangeFile(path: string, kind: 'staged' | 'unstaged') {
 
 async function onSelectStash(stashRef: string) {
     await repo.value.selectRepositoryStash(stashRef);
+}
+
+function partialHunkLabel(hunk: FileDiffHunk, index: number) {
+    return `#${index + 1} -${hunk.removedLines} +${hunk.addedLines}`;
+}
+
+function partialHunkSummary(hunk: FileDiffHunk) {
+    return ``;
+    // return `Old ${hunk.oldStart}:${hunk.oldLines}  New ${hunk.newStart}:${hunk.newLines}`;
+}
+
+async function stagePartialHunk(hunkId: string) {
+    if (!repo.value.curDiff) {
+        return;
+    }
+
+    await repo.value.stageFileHunks(repo.value.curDiff.path, [hunkId]);
+}
+
+async function unstagePartialHunk(hunkId: string) {
+    if (!repo.value.curDiff) {
+        return;
+    }
+
+    await repo.value.unstageFileHunks(repo.value.curDiff.path, [hunkId]);
+}
+
+async function discardPartialHunk(hunkId: string) {
+    if (!repo.value.curDiff) {
+        return;
+    }
+
+    await repo.value.discardFileHunks(repo.value.curDiff.path, [hunkId]);
 }
 
 function buildIgnoreOptions(path: string): ChangeFileContextMenuIgnoreOption[] {
@@ -740,7 +847,7 @@ onUnmounted(() => {
             </div>
             <div v-else-if="repo.curDiff" class="flex flex-col h-full overflow-auto bg-x1">
                 <div :key="`${repo.curDiff.path}-${repo.curDiff.entry.label}`" class="border border-white/10 bg-x0/80 flex-1 overflow-auto">
-                    <DiffViewer :state="selectedDiffViewerState">
+                    <DiffViewer :state="selectedDiffViewerState" :action-zones="partialDiffActionZones" action-zone-visibility="hover">
                         <template #before-header-actions>
                             <Alert severity="secondary" class="py-0 px-1 rounded text-xs font-semibold">
                                 {{ repo.curDiff.entry.label.replace('changes', '') }}

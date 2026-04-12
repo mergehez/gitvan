@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import type { ChangeStatus, CommitFileEntry } from '../../../shared/gitClient.js';
-import { runGit, runGitBuffer } from './git-common.js';
+import type { ChangeStatus, CommitFileEntry, FileDiffHunk } from '../../../shared/gitClient.js';
+import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
 
 const previewByteLimit = 1024 * 1024;
 export const fileTooBigPreviewMessage = 'File too big to preview';
@@ -135,6 +135,72 @@ export function buildDiffStats(patch: string, oldSizeBytes: number | undefined, 
         addedLines: lineChanges.addedLines,
         removedLines: lineChanges.removedLines,
     };
+}
+
+type ParsedPatchHunk = FileDiffHunk & {
+    lines: string[];
+};
+
+type ParsedUnifiedPatch = {
+    headerLines: string[];
+    hunks: ParsedPatchHunk[];
+};
+
+export function parseUnifiedDiffHunks(patch: string): FileDiffHunk[] {
+    return parseUnifiedPatch(patch).hunks.map(({ lines: _lines, ...hunk }) => hunk);
+}
+
+export function buildPartialFilePatch(patch: string, hunkIds: string[], mode: 'stage' | 'unstage' | 'discard') {
+    const parsedPatch = parseUnifiedPatch(patch);
+    const selectedIds = new Set(hunkIds);
+    const selectedHunks = parsedPatch.hunks.filter((hunk) => selectedIds.has(hunk.id));
+
+    if (selectedHunks.length !== selectedIds.size) {
+        throw new Error('The selected file changes could not be found in the current diff.');
+    }
+
+    if (selectedHunks.length === 0) {
+        throw new Error('At least one file change must be selected.');
+    }
+
+    let cumulativeAllDelta = 0;
+    let cumulativeSelectedDelta = 0;
+    const rebasedHunks = parsedPatch.hunks.flatMap((hunk) => {
+        const delta = hunk.newLines - hunk.oldLines;
+        const isSelected = selectedIds.has(hunk.id);
+
+        if (!isSelected) {
+            cumulativeAllDelta += delta;
+            return [];
+        }
+
+        const rebasedHeader =
+            mode === 'unstage'
+                ? formatHunkHeader(Math.max(0, hunk.oldStart + (cumulativeAllDelta - cumulativeSelectedDelta)), hunk.oldLines, hunk.newStart, hunk.newLines)
+                : formatHunkHeader(hunk.oldStart, hunk.oldLines, Math.max(0, hunk.newStart - (cumulativeAllDelta - cumulativeSelectedDelta)), hunk.newLines);
+
+        cumulativeAllDelta += delta;
+        cumulativeSelectedDelta += delta;
+
+        return [rebasedHeader, ...hunk.lines];
+    });
+
+    return `${[...parsedPatch.headerLines, ...rebasedHunks].join('\n')}\n`;
+}
+
+export async function applyPartialFilePatch(repoPath: string, patch: string, mode: 'stage' | 'unstage' | 'discard') {
+    const args = ['apply', '--recount', '--unidiff-zero', '--whitespace=nowarn'];
+
+    if (mode === 'stage' || mode === 'unstage') {
+        args.push('--cached');
+    }
+
+    if (mode === 'unstage' || mode === 'discard') {
+        args.push('-R');
+    }
+
+    args.push('-');
+    await runGitWithInput(args, repoPath, patch, [0], false);
 }
 
 export async function readGitMetadataFile(repoPath: string, gitPathName: string) {
@@ -434,6 +500,98 @@ function countPatchLineChanges(patch: string) {
         addedLines,
         removedLines,
     };
+}
+
+function parseUnifiedPatch(patch: string): ParsedUnifiedPatch {
+    const lines = patch.split('\n');
+    const headerLines: string[] = [];
+    const hunks: ParsedPatchHunk[] = [];
+    let index = 0;
+
+    while (index < lines.length && !lines[index]?.startsWith('@@ ')) {
+        const line = lines[index++];
+        if (line === undefined) {
+            break;
+        }
+
+        if (!headerLines.length && !line.trim()) {
+            continue;
+        }
+
+        headerLines.push(line);
+    }
+
+    while (index < lines.length) {
+        const header = lines[index];
+        if (!header?.startsWith('@@ ')) {
+            index += 1;
+            continue;
+        }
+
+        index += 1;
+        const hunkLines: string[] = [];
+        while (index < lines.length && !lines[index]?.startsWith('@@ ')) {
+            hunkLines.push(lines[index] ?? '');
+            index += 1;
+        }
+
+        const parsedHeader = parseHunkHeader(header);
+        let addedLines = 0;
+        let removedLines = 0;
+        let contextLines = 0;
+
+        for (const line of hunkLines) {
+            if (line.startsWith('+')) {
+                addedLines += 1;
+                continue;
+            }
+
+            if (line.startsWith('-')) {
+                removedLines += 1;
+                continue;
+            }
+
+            if (line.startsWith(' ')) {
+                contextLines += 1;
+            }
+        }
+
+        hunks.push({
+            id: `hunk-${hunks.length + 1}`,
+            header,
+            oldStart: parsedHeader.oldStart,
+            oldLines: parsedHeader.oldLines,
+            newStart: parsedHeader.newStart,
+            newLines: parsedHeader.newLines,
+            addedLines,
+            removedLines,
+            contextLines,
+            lines: hunkLines,
+        });
+    }
+
+    return {
+        headerLines,
+        hunks,
+    };
+}
+
+function parseHunkHeader(header: string) {
+    const match = header.match(/^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/);
+    if (!match) {
+        throw new Error(`Failed to parse diff hunk header: ${header}`);
+    }
+
+    return {
+        oldStart: Number.parseInt(match[1] ?? '0', 10),
+        oldLines: Number.parseInt(match[2] ?? '1', 10),
+        newStart: Number.parseInt(match[3] ?? '0', 10),
+        newLines: Number.parseInt(match[4] ?? '1', 10),
+    };
+}
+
+function formatHunkHeader(oldStart: number, oldLines: number, newStart: number, newLines: number) {
+    return `@@ -${oldStart},${oldLines} +${newStart},${newLines} @@`;
 }
 
 function mapNameStatusCode(code: string | undefined): ChangeStatus {

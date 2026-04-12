@@ -75,6 +75,55 @@ export async function runGit(args: string[], cwd: string, allowedExitCodes: numb
     });
 }
 
+export async function runGitWithInput(args: string[], cwd: string, input: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
+    return await new Promise<string>((resolve, reject) => {
+        try {
+            const gitExecutable = resolveGitExecutable();
+            const child = spawn(gitExecutable, args, {
+                cwd,
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: createGitProcessEnv(env),
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            child.stdout.setEncoding('utf8');
+            child.stderr.setEncoding('utf8');
+
+            child.stdout.on('data', (chunk) => {
+                stdout += chunk;
+            });
+
+            child.stderr.on('data', (chunk) => {
+                stderr += chunk;
+            });
+
+            child.on('error', (error) => {
+                reject(new GitCommandError(error.message, [gitExecutable, ...args], error.message));
+            });
+
+            child.on('close', (code) => {
+                const exitCode = code ?? -1;
+                if (!allowedExitCodes.includes(exitCode)) {
+                    const normalizedStderr = stderr.trim();
+                    const normalizedStdout = stdout.trim();
+
+                    reject(new GitCommandError(normalizedStderr || normalizedStdout || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, normalizedStdout));
+                    return;
+                }
+
+                resolve(trimOutput ? stdout.trim() : stdout);
+            });
+
+            child.stdin.end(input, 'utf8');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            reject(new GitCommandError(message, [resolveGitExecutable(), ...args], message));
+        }
+    });
+}
+
 export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes: number[] = [0], env: NodeJS.ProcessEnv = {}) {
     return await new Promise<Buffer>((resolve, reject) => {
         try {

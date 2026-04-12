@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 import type { EditorSettings } from '../../../shared/gitClient';
 import DiffViewer from '../../components/DiffViewer.vue';
+import type { MonacoEditorActionZone } from '../../components/monacoEditorTypes';
 import { useSettings } from '../../composables/useSettings';
 
 type SettingsState = ReturnType<typeof useSettings>;
@@ -41,7 +42,8 @@ const iconButtonStub = {
 
 const monacoEditorStub = {
     name: 'MonacoEditor',
-    template: '<div data-testid="monaco-editor">Monaco</div>',
+    props: ['actionZones'],
+    template: '<div data-testid="monaco-editor" :data-action-zone-count="actionZones?.length ?? 0">Monaco</div>',
 };
 
 const monacoEditorSettingsButtonStub = {
@@ -49,7 +51,7 @@ const monacoEditorSettingsButtonStub = {
     template: '<button type="button" data-testid="monaco-editor-settings">Settings</button>',
 };
 
-function mountDiffViewer(onlyWhitespaceChanges: boolean) {
+function mountDiffViewer(onlyWhitespaceChanges: boolean, actionZones?: MonacoEditorActionZone[]) {
     return mount(DiffViewer, {
         props: {
             state: {
@@ -63,6 +65,7 @@ function mountDiffViewer(onlyWhitespaceChanges: boolean) {
                 originalSrc: undefined,
                 modifiedSrc: undefined,
             },
+            actionZones,
         },
         global: {
             stubs: {
@@ -91,5 +94,25 @@ describe('DiffViewer', () => {
         const wrapper = mountDiffViewer(false);
 
         expect(wrapper.text()).not.toContain('space-only-diff');
+    });
+
+    it('passes Monaco action zones through to the editor', () => {
+        const wrapper = mountDiffViewer(false, [
+            {
+                id: 'hunk-1',
+                afterLineNumber: 4,
+                label: '#1 -1 +2',
+                meta: 'Old 4:1  New 4:2',
+                actions: [
+                    {
+                        id: 'stage:hunk-1',
+                        label: 'Stage Change',
+                        onClick: vi.fn(),
+                    },
+                ],
+            },
+        ]);
+
+        expect(wrapper.get('[data-testid="monaco-editor"]').attributes('data-action-zone-count')).toBe('1');
     });
 });

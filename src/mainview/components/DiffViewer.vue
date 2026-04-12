@@ -6,9 +6,13 @@ import Alert from './Alert.vue';
 import IconButton from './IconButton.vue';
 import MonacoEditor from './MonacoEditor.vue';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
+import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
 const props = defineProps<{
     state?: DiffViewerState;
+    focusLine?: number;
+    actionZones?: MonacoEditorActionZone[];
+    actionZoneVisibility?: 'always' | 'hover';
 }>();
 
 type PreviewPane = {
@@ -61,6 +65,8 @@ const horizontalImages = ref(false);
             />
         </div>
 
+        <slot name="after-header"></slot>
+
         <div v-if="state?.previewMessage" class="grid min-h-0 flex-1 place-items-center bg-x1 px-6 text-sm text-white/50">
             {{ state.previewMessage }}
         </div>
@@ -92,6 +98,9 @@ const horizontalImages = ref(false);
             :path-for-language="state?.pathForLanguage"
             :diff-view-mode="settings.state.diffViewMode"
             :show-whitespace-changes="settings.state.showWhitespaceChanges"
+            :reveal-line="props.focusLine"
+            :action-zones="props.actionZones"
+            :action-zone-visibility="props.actionZoneVisibility"
             :readonly="true"
             class="overflow-y-auto text-xs leading-6 text-white/85"
         />

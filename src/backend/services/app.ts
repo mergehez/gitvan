@@ -933,6 +933,10 @@ export const app = {
         await git.stageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
         return buildBootstrap();
     },
+    stageFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
+        await git.stageRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
+        return buildBootstrap();
+    },
     stageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.stageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
         return buildBootstrap();
@@ -945,12 +949,20 @@ export const app = {
         await git.unstageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
         return buildBootstrap();
     },
+    unstageFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
+        await git.unstageRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
+        return buildBootstrap();
+    },
     unstageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.unstageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
         return buildBootstrap();
     },
     discardFile: async (ps: { repoId: number; path: string }) => {
         await git.discardRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
+        return buildBootstrap();
+    },
+    discardFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
+        await git.discardRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
         return buildBootstrap();
     },
     discardRepoFiles: async (ps: { repoId: number; paths: string[] }) => {

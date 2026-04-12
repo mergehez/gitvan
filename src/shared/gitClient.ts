@@ -210,6 +210,18 @@ export type FileDiffStats = {
     removedLines: number;
 };
 
+export type FileDiffHunk = {
+    id: string;
+    header: string;
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    addedLines: number;
+    removedLines: number;
+    contextLines: number;
+};
+
 export type FileDiffEntry = {
     label: string;
     kind: 'staged' | 'unstaged' | 'untracked';
@@ -217,6 +229,10 @@ export type FileDiffEntry = {
     original: string;
     modified: string;
     stats: FileDiffStats;
+    hunks: FileDiffHunk[];
+    supportsPartialStage: boolean;
+    supportsPartialUnstage: boolean;
+    supportsPartialDiscard: boolean;
     nonCodePreview?: FileDiffNonCodePreview;
     previewMessage?: string;
 };

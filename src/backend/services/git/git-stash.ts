@@ -7,6 +7,7 @@ import {
     isImagePath,
     isPreviewTooLarge,
     parseCommitFilesWithConflicts,
+    parseUnifiedDiffHunks,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
 } from './git-helpers.js';
@@ -46,11 +47,24 @@ export const stashGit = {
         ]);
 
         const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
+        const hunks = parseUnifiedDiffHunks(patch || '');
 
         if (isPreviewTooLarge(originalSize, modifiedSize)) {
             return {
                 path: filePath,
-                entry: { label: stashRef, kind: 'staged', patch: patch || fileTooBigPreviewMessage, original: '', modified: '', stats, previewMessage: fileTooBigPreviewMessage },
+                entry: {
+                    label: stashRef,
+                    kind: 'staged',
+                    patch: patch || fileTooBigPreviewMessage,
+                    original: '',
+                    modified: '',
+                    stats,
+                    hunks,
+                    supportsPartialStage: false,
+                    supportsPartialUnstage: false,
+                    supportsPartialDiscard: false,
+                    previewMessage: fileTooBigPreviewMessage,
+                },
             };
         }
 
@@ -68,7 +82,19 @@ export const stashGit = {
 
         return {
             path: filePath,
-            entry: { label: stashRef, kind: 'staged', patch: patch || 'No diff content was returned for this file.', original, modified, stats, nonCodePreview },
+            entry: {
+                label: stashRef,
+                kind: 'staged',
+                patch: patch || 'No diff content was returned for this file.',
+                original,
+                modified,
+                stats,
+                hunks,
+                supportsPartialStage: false,
+                supportsPartialUnstage: false,
+                supportsPartialDiscard: false,
+                nonCodePreview,
+            },
         };
     },
     async stashRepoChanges(repoPath: string, auth: GitRemoteAuth | undefined = undefined) {

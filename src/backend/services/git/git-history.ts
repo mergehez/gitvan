@@ -9,6 +9,7 @@ import {
     isPreviewTooLarge,
     parseCommitFilesWithConflicts,
     parseRefs,
+    parseUnifiedDiffHunks,
     readGitRevisionFile,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
@@ -209,6 +210,7 @@ export const historyGit = {
             readGitRevisionFileSize(repoPath, `${commitSha}:${filePath}`),
         ]);
         const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
+        const hunks = parseUnifiedDiffHunks(patch || '');
 
         if (isPreviewTooLarge(originalSize, modifiedSize)) {
             return {
@@ -220,6 +222,10 @@ export const historyGit = {
                     original: '',
                     modified: '',
                     stats,
+                    hunks,
+                    supportsPartialStage: false,
+                    supportsPartialUnstage: false,
+                    supportsPartialDiscard: false,
                     previewMessage: fileTooBigPreviewMessage,
                 },
             };
@@ -239,7 +245,19 @@ export const historyGit = {
 
         return {
             path: filePath,
-            entry: { label: commitSha.slice(0, 7), kind: 'staged', patch: patch || 'No diff content was returned for this file.', original, modified, stats, nonCodePreview },
+            entry: {
+                label: commitSha.slice(0, 7),
+                kind: 'staged',
+                patch: patch || 'No diff content was returned for this file.',
+                original,
+                modified,
+                stats,
+                hunks,
+                supportsPartialStage: false,
+                supportsPartialUnstage: false,
+                supportsPartialDiscard: false,
+                nonCodePreview,
+            },
         };
     },
 };
