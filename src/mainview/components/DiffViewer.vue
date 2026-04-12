@@ -57,7 +57,8 @@ const horizontalImages = ref(false);
                 :title="horizontalImages ? 'Switch to vertical layout' : 'Switch to horizontal layout'"
                 :disabled="!hasPreviewImages"
                 smaller
-                @click="horizontalImages = !horizontalImages" />
+                @click="horizontalImages = !horizontalImages"
+            />
         </div>
 
         <div v-if="state?.previewMessage" class="grid min-h-0 flex-1 place-items-center bg-x1 px-6 text-sm text-white/50">
@@ -69,12 +70,14 @@ const horizontalImages = ref(false);
                     {{ pane.label }}
                 </div>
                 <div
-                    class="grid min-h-0 flex-1 place-items-center overflow-auto bg-[linear-gradient(45deg,rgba(255,255,255,0.03)_25%,transparent_25%,transparent_75%,rgba(255,255,255,0.03)_75%,rgba(255,255,255,0.03)),linear-gradient(45deg,rgba(255,255,255,0.03)_25%,transparent_25%,transparent_75%,rgba(255,255,255,0.03)_75%,rgba(255,255,255,0.03))] bg-size-[24px_24px] bg-position-[0_0,12px_12px] p-5">
+                    class="grid min-h-0 flex-1 place-items-center overflow-auto bg-[linear-gradient(45deg,rgba(255,255,255,0.03)_25%,transparent_25%,transparent_75%,rgba(255,255,255,0.03)_75%,rgba(255,255,255,0.03)),linear-gradient(45deg,rgba(255,255,255,0.03)_25%,transparent_25%,transparent_75%,rgba(255,255,255,0.03)_75%,rgba(255,255,255,0.03))] bg-size-[24px_24px] bg-position-[0_0,12px_12px] p-5"
+                >
                     <img
                         v-if="pane.src"
                         :src="pane.src"
                         :alt="`${pane.label} image preview`"
-                        class="max-h-full max-w-full rounded-lg border border-white/10 bg-black/20 object-contain shadow-[0_20px_60px_rgba(0,0,0,0.35)]" />
+                        class="max-h-full max-w-full rounded-lg border border-white/10 bg-black/20 object-contain shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
+                    />
                     <div v-else class="rounded-lg border border-dashed border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">
                         {{ pane.emptyLabel }}
                     </div>
@@ -90,6 +93,7 @@ const horizontalImages = ref(false);
             :diff-view-mode="settings.state.diffViewMode"
             :show-whitespace-changes="settings.state.showWhitespaceChanges"
             :readonly="true"
-            class="overflow-y-auto text-xs leading-6 text-white/85" />
+            class="overflow-y-auto text-xs leading-6 text-white/85"
+        />
     </div>
 </template>

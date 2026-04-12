@@ -82,5 +82,5 @@ export const apiMethods = [
     'openRepoInTerminal',
     'copyRepoFilePath',
     'revealRepoFileInFinder',
-    'openRepoFileWithDefaultProgram'
+    'openRepoFileWithDefaultProgram',
 ] as const;

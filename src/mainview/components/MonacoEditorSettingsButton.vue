@@ -54,7 +54,8 @@ onUnmounted(() => {
             class="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-max rounded-md border border-white/10 bg-[#101114] p-3 shadow-[0_14px_40px_rgba(0,0,0,0.45)]"
             role="dialog"
             aria-label="Diff settings"
-            @click.stop>
+            @click.stop
+        >
             <div class="space-y-3 text-xs text-white/80">
                 <div>
                     <div class="mb-1.5 flex items-center justify-between">
@@ -69,14 +70,16 @@ onUnmounted(() => {
                             max="24"
                             step="1"
                             class="w-full accent-white"
-                            @input="settings.setDiffFontSize(Number(($event.target as HTMLInputElement).value))" />
+                            @input="settings.setDiffFontSize(Number(($event.target as HTMLInputElement).value))"
+                        />
                         <input
                             :value="settings.state.diffFontSize"
                             type="number"
                             min="10"
                             max="24"
                             class="w-14 rounded border border-white/10 bg-black/20 px-2 py-1 text-center text-xs text-white outline-none focus:border-white/30"
-                            @change="settings.setDiffFontSize(Number(($event.target as HTMLInputElement).value))" />
+                            @change="settings.setDiffFontSize(Number(($event.target as HTMLInputElement).value))"
+                        />
                     </div>
                 </div>
 
@@ -87,7 +90,8 @@ onUnmounted(() => {
                                 :checked="settings.state.diffViewMode === 'changes'"
                                 type="checkbox"
                                 class="h-4 w-4 rounded border-white/20 bg-transparent accent-white"
-                                @change="settings.setDiffViewMode(($event.target as HTMLInputElement).checked ? 'changes' : 'full-file')" />
+                                @change="settings.setDiffViewMode(($event.target as HTMLInputElement).checked ? 'changes' : 'full-file')"
+                            />
                             <span>Show changes only</span>
                         </label>
                     </div>
@@ -98,7 +102,8 @@ onUnmounted(() => {
                                 :checked="!settings.state.showWhitespaceChanges"
                                 @change="settings.setShowWhitespaceChanges(!($event.target as HTMLInputElement).checked)"
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-white/20 bg-transparent accent-white" />
+                                class="h-4 w-4 rounded border-white/20 bg-transparent accent-white"
+                            />
                             <span>Hide whitespace changes</span>
                         </label>
                     </div>

@@ -110,7 +110,7 @@ async function onCommitSelection(event: Event) {
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 w-full ">
+    <div class="flex flex-col flex-1 w-full">
         <div class="flex items-center gap-3 border-b border-x6 px-3 py-2">
             <div class="min-w-0 flex-1 text-xs tracking-tight opacity-70">
                 Showing repository files as of {{ explorerCommitShortSha ? `commit ${explorerCommitShortSha}` : 'the selected commit' }}. Later commits are not included.
@@ -120,27 +120,34 @@ async function onCommitSelection(event: Event) {
                 <select
                     class="max-w-90 rounded border border-white/20 bg-x1 px-1.5 py-0.5 text-xs text-white outline-none"
                     :value="repo.explorerCommitSha"
-                    @change="onCommitSelection">
+                    @change="onCommitSelection"
+                >
                     <option v-for="commit in repo.history?.commits ?? []" :key="commit.sha" :value="commit.sha">
                         {{ formatCommitOptionLabel(commit) }}
                     </option>
                 </select>
             </label>
         </div>
-        <EtSplitter class="flex-1 overflow-y-auto " base-side="left" default-width="280px" min-width="220px" max-width="50%"
-            local-storage-key="explorerSidebarWidth">
+        <EtSplitter class="flex-1 overflow-y-auto" base-side="left" default-width="280px" min-width="220px" max-width="50%" local-storage-key="explorerSidebarWidth">
             <template #left>
-                <FileTree :item="treeItem" empty-text="No committed files found" :selection="repo.currCommittedFilePath" no-actions
-                    :onSelect="(item) => item.kind === 'file' && repo.selectCommittedFile(item.path)">
+                <FileTree
+                    :item="treeItem"
+                    empty-text="No committed files found"
+                    :selection="repo.currCommittedFilePath"
+                    no-actions
+                    :onSelect="(item) => item.kind === 'file' && repo.selectCommittedFile(item.path)"
+                >
                     <template #item-leftIcon="slotProps">
                         <span
                             class="icon shrink-0 text-sm"
-                            :class="slotProps.isGroup
-                                ? slotProps.isCollapsed
-                                    ? 'icon-[mdi--folder-outline] text-amber-100'
-                                    : 'icon-[mdi--folder-open-outline] text-amber-100'
-                                : fileIconAndLanguageByPath(slotProps.item.path).icon
-                                "></span>
+                            :class="
+                                slotProps.isGroup
+                                    ? slotProps.isCollapsed
+                                        ? 'icon-[mdi--folder-outline] text-amber-100'
+                                        : 'icon-[mdi--folder-open-outline] text-amber-100'
+                                    : fileIconAndLanguageByPath(slotProps.item.path).icon
+                            "
+                        ></span>
                     </template>
                     <template #item-rightIcon="slotProps">
                         <span v-if="!slotProps.isGroup && slotProps.item.sizeBytes > 0" class="text-2xs opacity-45">
@@ -151,17 +158,13 @@ async function onCommitSelection(event: Event) {
             </template>
 
             <template #right>
-                <div v-if="!(repo.history?.commits.length ?? 0)" class="grid h-full place-items-center px-6 text-sm text-white/45">
-                    No commits found.
-                </div>
+                <div v-if="!(repo.history?.commits.length ?? 0)" class="grid h-full place-items-center px-6 text-sm text-white/45">No commits found.</div>
 
                 <div v-else-if="!(repo.committedTree?.files.length ?? 0)" class="grid h-full place-items-center px-6 text-sm text-white/45">
                     No committed files found in this snapshot.
                 </div>
 
-                <div v-else-if="!repo.currCommittedFile" class="grid h-full place-items-center px-6 text-sm text-white/45">
-                    Select a file to inspect the committed contents.
-                </div>
+                <div v-else-if="!repo.currCommittedFile" class="grid h-full place-items-center px-6 text-sm text-white/45">Select a file to inspect the committed contents.</div>
 
                 <div v-else class="flex h-full min-h-0 flex-col">
                     <div class="flex items-center border-b border-x5 px-2 py-1.5 text-xs font-medium gap-1">
@@ -174,21 +177,18 @@ async function onCommitSelection(event: Event) {
                         {{ repo.currCommittedFile.previewMessage }}
                     </div>
 
-                    <div v-else-if="repo.currCommittedFile.preview?.kind === 'image'"
-                        class="grid min-h-0 flex-1 place-items-center overflow-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.03),transparent_60%)] p-6">
+                    <div
+                        v-else-if="repo.currCommittedFile.preview?.kind === 'image'"
+                        class="grid min-h-0 flex-1 place-items-center overflow-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.03),transparent_60%)] p-6"
+                    >
                         <img
                             :src="repo.currCommittedFile.preview.src"
                             :alt="repo.currCommittedFile.path"
-                            class="max-h-full max-w-full rounded-lg border border-white/10 bg-black/20 object-contain shadow-[0_20px_60px_rgba(0,0,0,0.35)]" />
+                            class="max-h-full max-w-full rounded-lg border border-white/10 bg-black/20 object-contain shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
+                        />
                     </div>
 
-                    <MonacoEditor
-                        v-else
-                        no-head
-                        readonly
-                        :model-value="repo.currCommittedFile.content"
-                        :path-for-language="repo.currCommittedFile.path"
-                        class="min-h-0 flex-1" />
+                    <MonacoEditor v-else no-head readonly :model-value="repo.currCommittedFile.content" :path-for-language="repo.currCommittedFile.path" class="min-h-0 flex-1" />
                 </div>
             </template>
         </EtSplitter>

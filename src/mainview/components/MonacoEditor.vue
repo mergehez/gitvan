@@ -228,7 +228,6 @@ watch(
     },
 );
 
-
 onMounted(() => {
     void syncEditor();
     void syncDiffEditor();
