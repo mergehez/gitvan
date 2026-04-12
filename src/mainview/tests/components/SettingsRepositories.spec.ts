@@ -9,7 +9,10 @@ import { tasks } from '../../composables/useTasks';
 
 type ReposState = ReturnType<typeof useRepos>;
 type TasksState = typeof tasks;
-type SettingsRepositoriesReposMock = Pick<ReposState, 'repos' | 'repoGroups' | 'createRepoGroup' | 'reorderRepo' | 'moveRepoGroup' | 'renameRepoGroup' | 'updateRepoGroups'>;
+type SettingsRepositoriesReposMock = Pick<
+    ReposState,
+    'repos' | 'repoGroups' | 'createRepoGroup' | 'deleteRepoGroup' | 'reorderRepo' | 'moveRepoGroup' | 'renameRepoGroup' | 'updateRepoGroups'
+>;
 
 let mockRepos: SettingsRepositoriesReposMock;
 
@@ -64,6 +67,7 @@ function createMockRepos() {
             { id: 2, name: 'Personal', sequence: 2, repoCount: 1, createdAt: '2026-03-27T00:00:00.000Z' },
         ],
         createRepoGroup: vi.fn(() => Promise.resolve({ id: 3, name: 'Platform', sequence: 3, repoCount: 0, createdAt: '2026-03-27T00:00:00.000Z' })),
+        deleteRepoGroup: vi.fn(() => Promise.resolve()),
         reorderRepo: vi.fn(() => Promise.resolve()),
         moveRepoGroup: vi.fn(() => Promise.resolve()),
         renameRepoGroup: vi.fn(() => Promise.resolve({ id: 1, name: 'Workspace', sequence: 1, repoCount: 1, createdAt: '2026-03-27T00:00:00.000Z' })),
@@ -186,6 +190,18 @@ describe('SettingsRepositories', () => {
         await wrapper.get('button[aria-label="Move Work down"]').trigger('click');
 
         expect(mockRepos.moveRepoGroup).toHaveBeenCalledWith(1, 'down');
+    });
+
+    it('deletes the active group from the detail panel', async () => {
+        const wrapper = mountSettingsRepositories();
+
+        await wrapper.get('button[aria-label="Open group Work"]').trigger('click');
+
+        const deleteButton = wrapper.findAll('button').find((candidate) => candidate.text() === 'Delete');
+        expect(deleteButton).toBeTruthy();
+        await deleteButton!.trigger('click');
+
+        expect(mockRepos.deleteRepoGroup).toHaveBeenCalledWith(1);
     });
 
     it('reorders a repository from the repositories list with one backend call', async () => {

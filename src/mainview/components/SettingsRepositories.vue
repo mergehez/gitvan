@@ -140,6 +140,14 @@ async function moveActiveGroup(direction: 'up' | 'down') {
     await repos.moveRepoGroup(selectedGroupId.value, direction);
 }
 
+async function deleteActiveGroup() {
+    if (selectedGroupId.value === undefined) {
+        return;
+    }
+
+    await repos.deleteRepoGroup(selectedGroupId.value);
+}
+
 async function reorderRepositories({ item, fromIndex, toIndex }: { item: { id: number }; fromIndex: number; toIndex: number }) {
     if (tasks.isBusy || fromIndex === toIndex) {
         return;
@@ -284,6 +292,10 @@ function isSelected(repositoryId: number) {
                     <Button severity="secondary" small :disabled="tasks.isBusy || activeGroupIndex < 0 || activeGroupIndex >= groups.length - 1" @click="moveActiveGroup('down')">
                         <span class="icon icon-[mdi--arrow-down] mr-1"></span>
                         Move down
+                    </Button>
+                    <Button severity="danger" small :disabled="tasks.isBusy" @click="deleteActiveGroup">
+                        <span class="icon icon-[mingcute--delete-2-fill] mr-1"></span>
+                        Delete
                     </Button>
                 </div>
                 <Button severity="primary" :disabled="tasks.isBusy || !canSave" @click="saveGroup">
