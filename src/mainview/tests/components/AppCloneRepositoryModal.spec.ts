@@ -1,12 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { reactive } from 'vue';
 import type { AccountSummary, CloneableRepo } from '../../../shared/gitClient';
+import AppCloneRepositoryModal from '../../components/AppCloneRepositoryModal.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useRepos } from '../../composables/useRepos';
 import { useSettings } from '../../composables/useSettings';
 import { tasks } from '../../composables/useTasks';
-import AppCloneRepositoryModal from '../../components/AppCloneRepositoryModal.vue';
 
 type ReposState = ReturnType<typeof useRepos>;
 type AuthState = ReturnType<typeof useAuth>;
@@ -65,9 +65,9 @@ function createAccount(id: number, label: string, provider: string, authKind: st
     };
 }
 
-function createMockAuth() {
+function createMockAuth(accounts?: AccountSummary[]) {
     return reactive({
-        accounts: [
+        accounts: accounts ?? [
             createAccount(1, 'GitHub Main', 'github', 'oauth', 'octocat', 'github.com', true),
             createAccount(2, 'Enterprise', 'custom', 'https-token', 'enterprise-user', 'git.example.com'),
             createAccount(3, 'System Git', 'system', 'system-git', undefined, undefined),
@@ -168,5 +168,19 @@ describe('AppCloneRepositoryModal', () => {
         expect(listCloneableRepos).toHaveBeenLastCalledWith({ accountId: 2 });
         expect(wrapper.text()).toContain('Enterprise');
         expect(wrapper.text()).toContain('platform/secure-repo');
+    });
+
+    it('shows a missing-account warning for URL cloning when no saved account is available', async () => {
+        mockAuth = createMockAuth([createAccount(3, 'System Git', 'system', 'system-git', undefined, undefined)]);
+
+        const wrapper = mountCloneModal();
+
+        await flushPromises();
+
+        const urlTab = wrapper.findAll('button').find((entry) => entry.text() === 'URL');
+        await urlTab!.trigger('click');
+        await flushPromises();
+
+        expect(wrapper.text()).toContain('No saved account is available for authenticated cloning.');
     });
 });

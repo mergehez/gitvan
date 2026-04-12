@@ -4,14 +4,14 @@ import type { AccountSummary, CloneRepoSourceTab, CloneableRepo } from '../../sh
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
 
+import { useAuth } from '../composables/useAuth';
+import { useSettings } from '../composables/useSettings';
+import { counted } from '../lib/utils';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
-import Icon from './Icon.vue';
 import CenteredModal from './CenteredModal.vue';
 import EtSplitter from './EtSplitter.vue';
-import { counted } from '../lib/utils';
-import { useSettings } from '../composables/useSettings';
-import { useAuth } from '../composables/useAuth';
+import Icon from './Icon.vue';
 import IconButton from './IconButton.vue';
 
 const settings = useSettings();
@@ -126,6 +126,29 @@ const activeAccountId = computed(() => {
 const destinationPathPreview = computed(() => displayDestinationPath(parentDirectory.value, repoName.value));
 const canClone = computed(() => Boolean(parentDirectory.value.trim() && cloneUrl.value && repoName.value));
 const isCloneRunning = computed(() => tasks.isOperationRunning('cloneTrackedRepo'));
+const missingAccountMessage = computed(() => {
+    if (selectedTab.value === 'url') {
+        if (cloneCapableAccounts.value.length === 0) {
+            return 'No saved account is available for authenticated cloning. Public repositories may still work, but private repositories and enterprise hosts usually require an account.';
+        }
+
+        if (selectedUrlAccountId.value === undefined) {
+            return 'No saved account is selected. Use one if the repository requires authentication.';
+        }
+
+        return undefined;
+    }
+
+    if (selectedTab.value === 'github' && githubAccounts.value.length === 0) {
+        return 'Connect a GitHub.com account to browse repositories from GitHub.com.';
+    }
+
+    if (selectedTab.value === 'enterprise' && githubEnterpriseAccounts.value.length === 0) {
+        return 'Connect a GitHub Enterprise-compatible account to browse enterprise repositories.';
+    }
+
+    return undefined;
+});
 
 async function loadCloneDefaults() {
     const defaults = await repos.getCloneRepoDefaults();
@@ -295,6 +318,10 @@ watch(selectedBrowserAccountId, () => {
                 <option :value="undefined">No saved account</option>
                 <option v-for="account in cloneCapableAccounts" :key="account.id" :value="account.id">{{ account.label }}{{ account.host ? ` (${account.host})` : '' }}</option>
             </select>
+
+            <Alert v-if="missingAccountMessage" severity="warning" class="col-span-2 mt-2">
+                {{ missingAccountMessage }}
+            </Alert>
         </div>
 
         <EtSplitter v-else class="flex-1 overflow-auto" base-side="left" default-width="180px" min-width="150px" max-width="50%" local-storage-key="cloneRepositorySidebarWidth">
@@ -334,6 +361,9 @@ watch(selectedBrowserAccountId, () => {
                 <section class="flex min-h-0 flex-col px-2 pt-2 overflow-auto h-full">
                     <Alert v-if="tasks.listCloneableRepos.errorMessage" severity="danger" class="mb-4">
                         {{ tasks.listCloneableRepos.errorMessage }}
+                    </Alert>
+                    <Alert v-else-if="missingAccountMessage" severity="warning" class="mb-4">
+                        {{ missingAccountMessage }}
                     </Alert>
 
                     <div v-if="tasks.listCloneableRepos.isRunning()" class="flex h-full items-center justify-center px-8 text-center opacity-80 gap-2">
