@@ -4,6 +4,7 @@ import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppCreateRepositoryModal from './components/AppCreateRepositoryModal.vue';
 import AppErrorBanner from './components/AppErrorBanner.vue';
+import AppIntegratedTerminalModal from './components/AppIntegratedTerminalModal.vue';
 import AppMergeConflictModal from './components/AppMergeConflictModal.vue';
 import AppPullBlockedByLocalChangesModal from './components/AppPullBlockedByLocalChangesModal.vue';
 import AppSuccessToast from './components/AppSuccessToast.vue';
@@ -49,6 +50,7 @@ onBeforeUnmount(() => {
     <template v-if="!!tasks.abortMerge">
         <AppCloneRepositoryModal />
         <AppCreateRepositoryModal />
+        <AppIntegratedTerminalModal />
         <AppMergeConflictModal />
         <AppPullBlockedByLocalChangesModal />
         <AppSuccessToast />

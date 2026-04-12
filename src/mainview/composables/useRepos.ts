@@ -42,6 +42,8 @@ export function _useRepositories() {
         },
         isCreateRepoModalOpen: false,
         isCloneRepoModalOpen: false,
+        integratedTerminalRepoId: undefined as number | undefined,
+        integratedTerminalRepoName: undefined as string | undefined,
         isPullBlockedByLocalChangesModalOpen: false,
         pullBlockedRepoId: undefined as number | undefined,
         pullBlockedConflictingFiles: [] as string[],
@@ -257,6 +259,23 @@ export function _useRepositories() {
         },
         async openRepoInTerminal(repoId: number) {
             await tasks.openRepoInTerminal.run({ repoId }, String(repoId));
+        },
+        async assignRepoTerminal(repoId: number, terminalPath: string | undefined) {
+            const nextBootstrap = await tasks.assignRepoTerminal.run({ repoId, terminalPath });
+            await applyMutation(nextBootstrap);
+        },
+        openRepoInIntegratedTerminal(repoId: number) {
+            const repo = this.repos.find((entry) => entry.id === repoId);
+            if (!repo) {
+                return;
+            }
+
+            this.integratedTerminalRepoId = repo.id;
+            this.integratedTerminalRepoName = repo.name;
+        },
+        closeIntegratedTerminal() {
+            this.integratedTerminalRepoId = undefined;
+            this.integratedTerminalRepoName = undefined;
         },
         async runRepoRemoteOperation(repoId: number, operation: RemoteOperation) {
             const nextResult = await tasks.runRemoteOperation.run({ repoId, operation }, operation + '-' + String(repoId));

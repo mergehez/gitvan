@@ -54,6 +54,8 @@ configureAppHost({
 const defaultEditorSettings: EditorSettings = {
     editors: [],
     defaultEditorPath: undefined,
+    terminals: [],
+    defaultTerminalPath: undefined,
     diffFontSize: 12,
     diffViewMode: 'full-file',
     showWhitespaceChanges: false,
@@ -228,6 +230,9 @@ async function resetRealAppState(resetSandboxes = false) {
         onNativeCommand() {
             return () => undefined;
         },
+        onIntegratedTerminalEvent() {
+            return () => undefined;
+        },
     };
 }
 
@@ -255,7 +260,7 @@ function mountRealApp() {
     });
 }
 
-function mountRealSettingsWindow(initialPanel?: 'repositories' | 'accounts' | 'editors') {
+function mountRealSettingsWindow(initialPanel?: 'repositories' | 'accounts' | 'editors' | 'terminals') {
     const settings = useSettings();
     settings.selectedSettingsPanel = initialPanel ?? 'editors';
     settings.isSettingsModalOpen = true;
@@ -422,7 +427,7 @@ describe('App real navigation', () => {
         await unmountRealApp(wrapper);
     });
 
-    it('navigates between repositories, editors, and accounts in the settings window', async () => {
+    it('navigates between repositories, editors, terminals, and accounts in the settings window', async () => {
         const wrapper = mountRealSettingsWindow('repositories');
         await flushPromises();
         await waitForAssertion(() => expect(wrapper.text()).toContain('Settings'));
@@ -434,6 +439,12 @@ describe('App real navigation', () => {
 
         expect(wrapper.text()).toContain('Add editor');
         expect(wrapper.text()).toContain('Open in Editor');
+
+        await findButtonByText(wrapper, 'Terminals').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.text()).toContain('Add terminal');
+        expect(wrapper.text()).toContain('Integrated Terminal');
 
         await findButtonByText(wrapper, 'Accounts').trigger('click');
         await flushPromises();

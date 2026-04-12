@@ -3,7 +3,8 @@ import { app } from '../backend/services/app.js';
 import { git } from '../backend/services/git.js';
 import type { RemoteOperation } from '../shared/gitClient.js';
 import { showConfirmationDialog } from './dialogs.js';
-import { openFileInEditor, pickEditorApplication } from './extEditors.js';
+import { openFileInEditor, pickEditorApplication, pickTerminalApplication } from './extEditors.js';
+import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
 import { openDirectoryInTerminal } from './systemShell.js';
 
 type Ctx = {
@@ -25,6 +26,7 @@ export const gitClientRequestHandlers = {
     getEditorSettings: _mapNo(() => app.getEditorSettings()),
     confirmAction: _mapWindow(showConfirmationDialog),
     pickEditorApplication: _mapWindow(pickEditorApplication),
+    pickTerminalApplication: _mapWindow(pickTerminalApplication),
     updateEditorSettings: _mapPs(app.updateEditorSettings),
     getBootstrap: _mapNo(app.getBootstrap),
     getCloneRepoDefaults: _mapNo(app.getCloneRepoDefaults),
@@ -56,6 +58,7 @@ export const gitClientRequestHandlers = {
     startOAuthDeviceFlow: _mapPs(app.startOAuthAccountDeviceFlow),
     pollOAuthDeviceFlow: _mapPs(app.pollOAuthAccountDeviceFlow),
     assignRepoAccount: _mapPs(app.assignAccountToRepo),
+    assignRepoTerminal: _mapPs(app.assignTerminalToRepo),
     getChanges: _mapPs(app.getChanges),
     getStashes: _mapPs(app.getStashes),
     getStashDetail: _mapPs(app.getStashDetail),
@@ -161,6 +164,22 @@ export const gitClientRequestHandlers = {
     },
     openRepoInTerminal: async (_ctx: Ctx, ps: { repoId: number }) => {
         await openDirectoryInTerminal(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
+    },
+    createIntegratedTerminalSession: async (ctx: Ctx, ps: { repoId: number; cols?: number; rows?: number; terminalPath?: string }) => {
+        if (!ctx.window) {
+            throw new Error('A window is required to create an integrated terminal session.');
+        }
+
+        return createIntegratedTerminalSession(ctx.window, app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }), ps.terminalPath, ps);
+    },
+    writeIntegratedTerminalSession: async (_ctx: Ctx, ps: { sessionId: string; data: string }) => {
+        writeIntegratedTerminalSession(ps.sessionId, ps.data);
+    },
+    resizeIntegratedTerminalSession: async (_ctx: Ctx, ps: { sessionId: string; cols: number; rows: number }) => {
+        resizeIntegratedTerminalSession(ps.sessionId, ps.cols, ps.rows);
+    },
+    closeIntegratedTerminalSession: async (_ctx: Ctx, ps: { sessionId: string }) => {
+        closeIntegratedTerminalSession(ps.sessionId);
     },
     copyRepoFilePath: async (_ctx: Ctx, ps: { repoId: number; path: string; mode: 'absolute' | 'relative' }) => {
         clipboard.writeText(ps.mode === 'absolute' ? app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path }) : ps.path);

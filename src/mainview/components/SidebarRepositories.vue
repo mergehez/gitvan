@@ -437,6 +437,14 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         },
         { type: 'separator' as const, id: `repo-separator-system:${repo.id}` },
         {
+            id: `repo-open-integrated-terminal:${repo.id}`,
+            label: 'Open in Integrated Terminal',
+            icon: 'icon-[mdi--console-network-outline]',
+            action: async () => {
+                repos.openRepoInIntegratedTerminal(repo.id);
+            },
+        },
+        {
             id: `repo-open-terminal:${repo.id}`,
             label: 'Open in Terminal',
             icon: 'icon-[mdi--console-line]',
@@ -639,7 +647,7 @@ function fetchGroupRepos(groupId: number) {
                     :onContextMenu="(r, event) => openRepoContextMenu(r.id, event)"
                     :onHeaderContextMenu="(item, event) => openGroupContextMenu(item, event)"
                 >
-                    <template #header-actions="{ item }">
+                    <template #header-actions>
                         <!-- <IconButton
                             severity="raised"
                             smaller

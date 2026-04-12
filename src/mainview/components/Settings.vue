@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useSettings } from '../composables/useSettings';
 import Button from './Button.vue';
+import CenteredModal from './CenteredModal.vue';
 import SettingsAccounts from './SettingsAccounts.vue';
 import SettingsEditors from './SettingsEditors.vue';
 import SettingsRepositories from './SettingsRepositories.vue';
-import { useSettings } from '../composables/useSettings';
-import { computed } from 'vue';
-import CenteredModal from './CenteredModal.vue';
+import SettingsTerminals from './SettingsTerminals.vue';
 
 const settings = useSettings();
 const selected = computed({
@@ -33,6 +34,10 @@ const selected = computed({
                         <p class="text-sm font-medium text-white">Editors</p>
                     </Button>
 
+                    <Button class="justify-start rounded-none" :severity="selected === 'terminals' ? 'light' : 'secondary'" @click="selected = 'terminals'">
+                        <p class="text-sm font-medium text-white">Terminals</p>
+                    </Button>
+
                     <Button class="justify-start rounded-none" :severity="selected === 'accounts' ? 'light' : 'secondary'" @click="selected = 'accounts'">
                         <p class="text-sm font-medium text-white">Accounts</p>
                     </Button>
@@ -42,6 +47,7 @@ const selected = computed({
             <main class="flex min-h-0 flex-col overflow-auto px-4">
                 <SettingsRepositories v-if="selected === 'repositories'" />
                 <SettingsAccounts v-else-if="selected === 'accounts'" />
+                <SettingsTerminals v-else-if="selected === 'terminals'" />
                 <SettingsEditors v-else />
             </main>
         </div>

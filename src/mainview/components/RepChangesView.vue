@@ -146,34 +146,34 @@ const partialDiffActionZones = computed<MonacoEditorActionZone[]>(() => {
         const actions = [
             entry.supportsPartialStage
                 ? {
-                      id: `stage:${hunk.id}`,
-                      label: 'Stage Change',
-                      title: 'Stage only this hunk',
-                      busy: isPartialChangeOperationRunning('stageFileHunks', currentDiff.path, hunk.id),
-                      disabled: hunkBusy,
-                      onClick: () => void stagePartialHunk(hunk.id),
-                  }
+                    id: `stage:${hunk.id}`,
+                    label: 'Stage Change',
+                    title: 'Stage only this hunk',
+                    busy: isPartialChangeOperationRunning('stageFileHunks', currentDiff.path, hunk.id),
+                    disabled: hunkBusy,
+                    onClick: () => void stagePartialHunk(hunk.id),
+                }
                 : undefined,
             entry.supportsPartialUnstage
                 ? {
-                      id: `unstage:${hunk.id}`,
-                      label: 'Unstage Change',
-                      title: 'Unstage only this hunk',
-                      busy: isPartialChangeOperationRunning('unstageFileHunks', currentDiff.path, hunk.id),
-                      disabled: hunkBusy,
-                      onClick: () => void unstagePartialHunk(hunk.id),
-                  }
+                    id: `unstage:${hunk.id}`,
+                    label: 'Unstage Change',
+                    title: 'Unstage only this hunk',
+                    busy: isPartialChangeOperationRunning('unstageFileHunks', currentDiff.path, hunk.id),
+                    disabled: hunkBusy,
+                    onClick: () => void unstagePartialHunk(hunk.id),
+                }
                 : undefined,
             entry.supportsPartialDiscard
                 ? {
-                      id: `discard:${hunk.id}`,
-                      label: 'Discard Change',
-                      title: 'Discard only this hunk',
-                      busy: isPartialChangeOperationRunning('discardFileHunks', currentDiff.path, hunk.id),
-                      disabled: hunkBusy,
-                      tone: 'danger' as const,
-                      onClick: () => void discardPartialHunk(hunk.id),
-                  }
+                    id: `discard:${hunk.id}`,
+                    label: 'Discard Change',
+                    title: 'Discard only this hunk',
+                    busy: isPartialChangeOperationRunning('discardFileHunks', currentDiff.path, hunk.id),
+                    disabled: hunkBusy,
+                    tone: 'danger' as const,
+                    onClick: () => void discardPartialHunk(hunk.id),
+                }
                 : undefined,
         ].filter((action) => action !== undefined);
 
@@ -185,7 +185,7 @@ const partialDiffActionZones = computed<MonacoEditorActionZone[]>(() => {
             originalStartLineNumber: Math.max(1, hunk.oldStart || hunk.newStart),
             originalEndLineNumber: Math.max(1, (hunk.oldStart || hunk.newStart) + Math.max(hunk.oldLines, 1) - 1),
             label: partialHunkLabel(hunk, index),
-            meta: partialHunkSummary(hunk),
+            meta: partialHunkSummary(),
             actions,
         };
     });
@@ -220,7 +220,7 @@ function partialHunkLabel(hunk: FileDiffHunk, index: number) {
     return `#${index + 1} -${hunk.removedLines} +${hunk.addedLines}`;
 }
 
-function partialHunkSummary(hunk: FileDiffHunk) {
+function partialHunkSummary() {
     return ``;
     // return `Old ${hunk.oldStart}:${hunk.oldLines}  New ${hunk.newStart}:${hunk.newLines}`;
 }
@@ -271,11 +271,11 @@ function buildIgnoreOptions(path: string): ChangeFileContextMenuIgnoreOption[] {
         },
         ...(extension
             ? [
-                  {
-                      value: `*.${extension}`,
-                      mode: 'pattern' as const,
-                  },
-              ]
+                {
+                    value: `*.${extension}`,
+                    mode: 'pattern' as const,
+                },
+            ]
             : []),
         ...segments.slice(0, -1).map((_, index) => {
             const folderPath = segments.slice(0, index + 1).join('/');
@@ -404,19 +404,19 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     }[isStaged ? 'unstage-files' : 'stage-files'][countLabel];
     const primaryActionLabel = primaryAction
         ? {
-              'discard-changes': {
-                  singular: 'Discard Changes',
-                  plural: 'Discard Changes',
-              },
-              'delete-file': {
-                  singular: 'Delete File',
-                  plural: 'Delete Files',
-              },
-              'revert-deletion': {
-                  singular: 'Revert Deletion',
-                  plural: 'Revert Deletions',
-              },
-          }[primaryAction][countLabel]
+            'discard-changes': {
+                singular: 'Discard Changes',
+                plural: 'Discard Changes',
+            },
+            'delete-file': {
+                singular: 'Delete File',
+                plural: 'Delete Files',
+            },
+            'revert-deletion': {
+                singular: 'Revert Deletion',
+                plural: 'Revert Deletions',
+            },
+        }[primaryAction][countLabel]
         : undefined;
 
     const entries: ContextMenuEntry[] = [];
@@ -621,8 +621,7 @@ onUnmounted(() => {
         default-width="200px"
         min-width="180px"
         max-width="50%"
-        local-storage-key="changesSidebarWidth"
-    >
+        local-storage-key="changesSidebarWidth">
         <template #left>
             <aside class="flex h-full flex-col border-b border-white/10 xl:border-r xl:border-b-0">
                 <div class="flex items-center justify-between py-2 font-semibold tracking-[0.04em] text-default gap-1 pl-1">
@@ -635,8 +634,7 @@ onUnmounted(() => {
                         :disabled="!repo.canFetch()"
                         v-tooltip="'Fetch'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:fetch-${repo.id}`)"
-                        @click="repos.runRepoRemoteOperation(repo.id, 'fetch')"
-                    >
+                        @click="repos.runRepoRemoteOperation(repo.id, 'fetch')">
                         <span class="icon icon-[mingcute--refresh-3-line] text-sm"></span> {{ 'Fetch' }}
                     </Button>
                     <Button
@@ -646,8 +644,7 @@ onUnmounted(() => {
                         :disabled="!repo.canPull()"
                         v-tooltip="'Pull'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:pull-${repo.id}`)"
-                        @click="repos.runRepoRemoteOperation(repo.id, 'pull')"
-                    >
+                        @click="repos.runRepoRemoteOperation(repo.id, 'pull')">
                         <span class="icon icon-[fluent--arrow-down-12-filled] text-sm"></span> {{ 'Pull' }}
                     </Button>
                     <Button
@@ -657,8 +654,7 @@ onUnmounted(() => {
                         :disabled="!repo.canPush()"
                         v-tooltip="'Push'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:push-${repo.id}`)"
-                        @click="repos.runRepoRemoteOperation(repo.id, 'push')"
-                    >
+                        @click="repos.runRepoRemoteOperation(repo.id, 'push')">
                         <span class="icon icon-[fluent--arrow-up-12-filled] text-sm"></span> {{ 'Push' }}
                     </Button>
                     <Button
@@ -668,8 +664,7 @@ onUnmounted(() => {
                         :disabled="!repo.canCommit()"
                         v-tooltip="repo.commitForm.amend ? 'Amend' : 'Commit'"
                         v-loading="tasks.isOperationRunning('commitRepo')"
-                        @click="repo.commitRepository()"
-                    >
+                        @click="repo.commitRepository()">
                         <span class="icon icon-[mingcute--check-fill] text-sm"></span> {{ repo.commitForm.amend ? 'Amend' : 'Commit' }}
                     </Button>
                 </div>
@@ -677,8 +672,7 @@ onUnmounted(() => {
                 <div class="pl-1 pb-3">
                     <div
                         v-if="repo.commitForm.amend"
-                        class="mb-2 flex items-center justify-between rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200"
-                    >
+                        class="mb-2 flex items-center justify-between rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200">
                         <span>Amending the latest unpushed commit</span>
                         <Button severity="light" smaller @click="repo.cancelAmendCommit()">Cancel</Button>
                     </div>
@@ -688,14 +682,12 @@ onUnmounted(() => {
                             :disabled="!repo.changes?.staged.length && !repo.commitForm.amend"
                             :placeholder="repo.commitForm.amend ? 'Amend message' : repo.suggestedCommitSummary() || 'Message (⌘Enter to commit on main)'"
                             @keydown.enter.meta="onInputEnter"
-                            class="flex-1 min-h-8 resize-none rounded border border-x6 bg-x0 px-2.5 py-1.5 text-xs text-white placeholder:opacity-70 focus:border-white/20"
-                        />
+                            class="flex-1 min-h-8 resize-none rounded border border-x6 bg-x0 px-2.5 py-1.5 text-xs text-white placeholder:opacity-70 focus:border-white/20" />
                         <IconButton
                             severity="secondary"
                             @click="showDescription = !showDescription"
                             v-tooltip="showDescription ? 'Hide Description' : 'Show Description'"
-                            :icon="showDescription ? 'icon-[mdi--chevron-up]' : 'icon-[mdi--chevron-down]'"
-                        />
+                            :icon="showDescription ? 'icon-[mdi--chevron-up]' : 'icon-[mdi--chevron-down]'" />
                     </div>
                     <textarea
                         v-if="showDescription"
@@ -703,8 +695,7 @@ onUnmounted(() => {
                         rows="4"
                         :disabled="!repo.changes?.staged.length && !repo.commitForm.amend"
                         placeholder="Optional description"
-                        class="mt-2 w-full resize-none rounded border border-x6 bg-x0 px-2.5 py-1.5 text-xs text-white placeholder:opacity-70 focus:border-white/20"
-                    >
+                        class="mt-2 w-full resize-none rounded border border-x6 bg-x0 px-2.5 py-1.5 text-xs text-white placeholder:opacity-70 focus:border-white/20">
                     </textarea>
                     <Button severity="primary" class="mt-1 w-full" small :disabled="!repo.canCommit()" @click="repo.commitRepository()">
                         <span class="icon icon-[mdi--check] mr-1.5 text-xs"></span>
@@ -721,8 +712,7 @@ onUnmounted(() => {
                             empty-text="No files"
                             :selection="visibleSelectionForKind(item.isStaged ? 'staged' : 'unstaged')"
                             :onContextMenu="(t, event) => onOpenChangeContextMenu(t as ChangeTreeEntry, event)"
-                            :onSelect="(t, event) => onSelectChangeEntry(t as ChangeTreeEntry, event)"
-                        >
+                            :onSelect="(t, event) => onSelectChangeEntry(t as ChangeTreeEntry, event)">
                             <template #header-actions="{ item }">
                                 <IconButton
                                     v-if="item.isStaged"
@@ -730,8 +720,7 @@ onUnmounted(() => {
                                     v-tooltip="'Amend latest commit'"
                                     :disabled="repo.commitForm.amend"
                                     @click="repo.beginAmendSelectedCommit()"
-                                    icon="icon-[mdi--pencil] text-xs"
-                                />
+                                    icon="icon-[mdi--pencil] text-xs" />
                                 <IconButton
                                     v-else
                                     severity="raised"
@@ -739,16 +728,14 @@ onUnmounted(() => {
                                     v-tooltip="'Discard all changes'"
                                     v-loading="tasks.isOperationRunning('discardAllChanges')"
                                     @click="repo.discardAllChanges()"
-                                    icon="icon-[codicon--discard] text-xs"
-                                />
+                                    icon="icon-[codicon--discard] text-xs" />
                                 <IconButton
                                     severity="raised"
                                     v-show="item.children.length > 0"
                                     v-tooltip="item.isStaged ? 'Unstage all files' : 'Stage all files'"
                                     v-loading="tasks.isOperationRunning(item.isStaged ? 'unstageAllFiles' : 'stageAllFiles')"
                                     @click="item.isStaged ? repo.unstageAllFiles() : repo.stageAllFiles()"
-                                    :icon="item.isStaged ? 'icon-[mdi--minus]' : 'icon-[mdi--plus]'"
-                                />
+                                    :icon="item.isStaged ? 'icon-[mdi--minus]' : 'icon-[mdi--plus]'" />
                             </template>
                             <template #item-actions="{ item }">
                                 <IconButton
@@ -757,15 +744,13 @@ onUnmounted(() => {
                                     v-tooltip="'Discard change'"
                                     v-loading="isFileOperationRunning('discardFile', item.path!)"
                                     @click.stop="repo.discardFile(item.path!)"
-                                    icon="icon-[codicon--discard]"
-                                />
+                                    icon="icon-[codicon--discard]" />
                                 <IconButton
                                     class="focus:opacity-100 p-px text-xs"
                                     v-tooltip="item.isStaged ? 'Unstage file' : 'Stage file'"
                                     v-loading="item.isStaged ? isFileOperationRunning('unstageFile', item.path!) : isFileOperationRunning('stageFile', item.path!)"
                                     @click.stop="item.isStaged ? repo.unstageFile(item.path!) : repo.stageFile(item.path!)"
-                                    :icon="item.isStaged ? 'icon-[mdi--minus]' : 'icon-[mdi--plus]'"
-                                />
+                                    :icon="item.isStaged ? 'icon-[mdi--minus]' : 'icon-[mdi--plus]'" />
                             </template>
                         </ChangesFileTree>
                     </div>
@@ -803,16 +788,14 @@ onUnmounted(() => {
                                 severity="light"
                                 smaller
                                 v-loading="isStashOperationRunning('restoreStash', repo.currStash.ref)"
-                                @click="repo.restoreRepositoryStash(repo.currStash.ref)"
-                            >
+                                @click="repo.restoreRepositoryStash(repo.currStash.ref)">
                                 Restore
                             </Button>
                             <Button
                                 severity="light"
                                 smaller
                                 v-loading="isStashOperationRunning('discardStash', repo.currStash.ref)"
-                                @click="repo.discardRepositoryStash(repo.currStash.ref)"
-                            >
+                                @click="repo.discardRepositoryStash(repo.currStash.ref)">
                                 Discard
                             </Button>
                         </div>
@@ -825,8 +808,7 @@ onUnmounted(() => {
                         default-width="250px"
                         min-width="200px"
                         max-width="50%"
-                        local-storage-key="changesStashFilesSidebarWidth"
-                    >
+                        local-storage-key="changesStashFilesSidebarWidth">
                         <template #left>
                             <ChangesFileTree
                                 class="w-full shrink-0"
@@ -834,8 +816,7 @@ onUnmounted(() => {
                                 empty-text="No files"
                                 :selection="repo.currStashFilePath ?? undefined"
                                 no-actions
-                                :onSelect="(t) => t.path && repo.selectRepositoryStashFile(t.path)"
-                            >
+                                :onSelect="(t) => t.path && repo.selectRepositoryStashFile(t.path)">
                             </ChangesFileTree>
                         </template>
                         <template #right>
@@ -857,8 +838,7 @@ onUnmounted(() => {
                                 severity="secondary"
                                 smaller
                                 v-tooltip="'Resolve conflict markers inline'"
-                                @click="mergeState.openInlineMergeEditor(repo.curDiff.path)"
-                            >
+                                @click="mergeState.openInlineMergeEditor(repo.curDiff.path)">
                                 Resolve Conflicts
                             </Button>
                         </template>

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
@@ -93,12 +94,30 @@ const defaultOAuthProviderSettings: OAuthProviderSettings = {
 const defaultEditorSettings: EditorSettings = {
     editors: [],
     defaultEditorPath: undefined,
+    terminals: [],
+    defaultTerminalPath: undefined,
     diffFontSize: 12,
     diffViewMode: 'full-file',
     showWhitespaceChanges: false,
     activeView: 'changes',
     showBranches: false,
 };
+
+function getDefaultTerminalEntries(): EditorSettings['terminals'] {
+    if (process.platform === 'darwin') {
+        return [{ path: '/bin/zsh', label: 'zsh', locked: true }].filter((terminal) => existsSync(terminal.path));
+    }
+
+    if (process.platform === 'win32') {
+        const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+        return [
+            { path: process.env.ComSpec || join(systemRoot, 'System32', 'cmd.exe'), label: 'cmd', locked: true },
+            { path: join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), label: 'PowerShell', locked: true },
+        ];
+    }
+
+    return [{ path: '/bin/sh', label: 'sh', locked: true }].filter((terminal) => existsSync(terminal.path));
+}
 
 function normalizeOAuthProviderSettings(value: unknown): OAuthProviderSettings {
     if (!value || typeof value !== 'object') {
@@ -122,6 +141,8 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
     const raw = value as {
         editors?: Array<{ path?: string; label?: string }>;
         defaultEditorPath?: string | undefined;
+        terminals?: Array<{ path?: string; label?: string }>;
+        defaultTerminalPath?: string | undefined;
         diffFontSize?: number;
         diffViewMode?: EditorSettings['diffViewMode'];
         showWhitespaceChanges?: boolean;
@@ -138,6 +159,17 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         }))
         .filter((editor, index, collection) => collection.findIndex((candidate) => candidate.path === editor.path) === index);
 
+    const terminals = (raw.terminals ?? [])
+        .filter((terminal): terminal is { path: string; label?: string } => typeof terminal?.path === 'string' && terminal.path.length > 0)
+        .map((terminal) => ({
+            path: terminal.path,
+            label: terminal.label?.trim() || terminal.path.split('/').pop() || terminal.path,
+            locked: getDefaultTerminalEntries().some((entry) => entry.path === terminal.path),
+        }))
+        .filter((terminal, index, collection) => collection.findIndex((candidate) => candidate.path === terminal.path) === index);
+
+    const resolvedTerminals = terminals.length > 0 ? terminals : getDefaultTerminalEntries();
+
     const legacyLastEditorPath = typeof raw.lastEditorPath === 'string' && raw.lastEditorPath.length > 0 ? raw.lastEditorPath : undefined;
 
     if (legacyLastEditorPath && !editors.some((editor) => editor.path === legacyLastEditorPath)) {
@@ -149,10 +181,17 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
 
     const requestedDefaultPath = typeof raw.defaultEditorPath === 'string' && raw.defaultEditorPath.length > 0 ? raw.defaultEditorPath : legacyLastEditorPath;
     const defaultEditorPath = requestedDefaultPath && editors.some((editor) => editor.path === requestedDefaultPath) ? requestedDefaultPath : undefined;
+    const requestedDefaultTerminalPath = typeof raw.defaultTerminalPath === 'string' && raw.defaultTerminalPath.length > 0 ? raw.defaultTerminalPath : undefined;
+    const defaultTerminalPath =
+        requestedDefaultTerminalPath && resolvedTerminals.some((terminal) => terminal.path === requestedDefaultTerminalPath)
+            ? requestedDefaultTerminalPath
+            : resolvedTerminals[0]?.path;
 
     return {
         editors,
         defaultEditorPath,
+        terminals: resolvedTerminals,
+        defaultTerminalPath,
         diffFontSize: ((): number => {
             const value: unknown = raw.diffFontSize;
             if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -366,6 +405,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
                 groupName: row.group_name,
                 accountId: row.account_id,
                 accountLabel: row.account_label,
+                terminalPath: row.terminal_path,
                 addedAt: row.added_at,
                 lastOpenedAt: row.last_opened_at,
                 status,
@@ -404,7 +444,9 @@ export const app = {
         return buildBootstrap();
     },
     getEditorSettings: (): EditorSettings => {
-        return normalizeEditorSettings(db.getSetting<unknown>('editorSettings', defaultEditorSettings));
+        const nextSettings = normalizeEditorSettings(db.getSetting<unknown>('editorSettings', defaultEditorSettings));
+        db.setSetting('editorSettings', nextSettings);
+        return nextSettings;
     },
     updateEditorSettings: (ps: { settings: EditorSettings }): EditorSettings => {
         const nextSettings = normalizeEditorSettings(ps.settings);
@@ -903,6 +945,17 @@ export const app = {
         }
 
         db.assignRepoAccount(ps.repoId, ps.accountId);
+        return buildBootstrap();
+    },
+    assignTerminalToRepo: async (ps: { repoId: number; terminalPath: string | undefined }) => {
+        db.getRepo(ps.repoId)!;
+
+        const settings = app.getEditorSettings();
+        if (ps.terminalPath !== undefined && !settings.terminals.some((terminal) => terminal.path === ps.terminalPath)) {
+            throw new Error('The selected terminal could not be found.');
+        }
+
+        db.assignRepoTerminal(ps.repoId, ps.terminalPath);
         return buildBootstrap();
     },
     getChanges: async (ps: { repoId: number }): Promise<RepoChangesData> => {

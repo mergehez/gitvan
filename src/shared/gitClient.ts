@@ -1,12 +1,30 @@
 export type NavigationView = 'changes' | 'explorer' | 'history';
 // export type NavigationView = 'changes' | 'history' | 'branches';
 
-export type SettingsPanel = 'repositories' | 'accounts' | 'editors';
+export type SettingsPanel = 'repositories' | 'accounts' | 'editors' | 'terminals';
 
 export type NativeCommand = {
     kind: 'open-settings';
     panel?: SettingsPanel;
 };
+
+export type IntegratedTerminalSession = {
+    sessionId: string;
+    cwd: string;
+    shellPath: string;
+};
+
+export type IntegratedTerminalEvent =
+    | {
+          sessionId: string;
+          kind: 'data';
+          data: string;
+      }
+    | {
+          sessionId: string;
+          kind: 'exit';
+          exitCode: number;
+      };
 
 export type RemoteOperation = 'fetch' | 'pull' | 'push';
 
@@ -140,6 +158,7 @@ export type Repo = {
     groupName: string | undefined;
     accountId: number | undefined;
     accountLabel: string | undefined;
+    terminalPath: string | undefined;
     addedAt: string;
     lastOpenedAt: string | undefined;
     status: RepoSidebarStatus;
@@ -326,6 +345,12 @@ export type EditorApp = {
     label: string;
 };
 
+export type TerminalApp = {
+    path: string;
+    label: string;
+    locked: boolean;
+};
+
 export type CommitFormState = {
     summary: string;
     description: string;
@@ -335,6 +360,8 @@ export type CommitFormState = {
 export type EditorSettings = {
     editors: EditorApp[];
     defaultEditorPath: string | undefined;
+    terminals: TerminalApp[];
+    defaultTerminalPath: string | undefined;
     diffFontSize: number;
     diffViewMode: DiffViewMode;
     showWhitespaceChanges: boolean;

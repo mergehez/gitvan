@@ -3,6 +3,7 @@ export const apiMethods = [
     'getEditorSettings',
     'confirmAction',
     'pickEditorApplication',
+    'pickTerminalApplication',
     'updateEditorSettings',
     'getBootstrap',
     'getCloneRepoDefaults',
@@ -34,6 +35,7 @@ export const apiMethods = [
     'startOAuthDeviceFlow',
     'pollOAuthDeviceFlow',
     'assignRepoAccount',
+    'assignRepoTerminal',
     'getChanges',
     'getStashes',
     'getStashDetail',
@@ -83,7 +85,11 @@ export const apiMethods = [
     'copyRepoPath',
     'revealRepoInFinder',
     'openRepoInTerminal',
+    'createIntegratedTerminalSession',
+    'writeIntegratedTerminalSession',
+    'resizeIntegratedTerminalSession',
+    'closeIntegratedTerminalSession',
     'copyRepoFilePath',
     'revealRepoFileInFinder',
-    'openRepoFileWithDefaultProgram',
+    'openRepoFileWithDefaultProgram'
 ] as const;

@@ -34,6 +34,7 @@ function createRepository(id: number, name: string, groupName: string | undefine
         groupName,
         accountId: undefined,
         accountLabel: undefined,
+        terminalPath: undefined,
         addedAt: '2026-03-27T00:00:00.000Z',
         lastOpenedAt: '2026-03-27T00:00:00.000Z',
         status: {

@@ -1,27 +1,25 @@
+import { BrowserWindow, dialog, app as electronApp } from 'electron';
 import { spawn } from 'node:child_process';
-import { app as electronApp, BrowserWindow, dialog } from 'electron';
 import { existsSync } from 'node:fs';
-import type { EditorApp } from '../shared/gitClient.js';
 import { app } from '../backend/services/app.js';
+import type { TerminalApp } from '../shared/gitClient.js';
 
 type OpenInEditorMode = 'default-or-pick' | 'pick' | 'default';
 
-export async function pickEditorApplication(window: BrowserWindow | undefined) {
+async function pickApplication(
+    window: BrowserWindow | undefined,
+    options: { title: string; buttonLabel: string; defaultPath: string; filters?: Array<{ name: string; extensions: string[] }> },
+): Promise<{ path: string; label: string } | undefined> {
     if (!window) {
         return undefined;
     }
 
     const result = await dialog.showOpenDialog(window, {
-        title: 'Open in Editor',
-        buttonLabel: 'Open with Selected App',
-        defaultPath: process.platform === 'darwin' ? '/Applications' : electronApp.getPath('home'),
+        title: options.title,
+        buttonLabel: options.buttonLabel,
+        defaultPath: options.defaultPath,
         properties: ['openFile'],
-        filters:
-            process.platform === 'darwin'
-                ? [{ name: 'Applications', extensions: ['app'] }]
-                : process.platform === 'win32'
-                  ? [{ name: 'Applications', extensions: ['exe'] }]
-                  : undefined,
+        filters: options.filters,
     });
 
     const path = result.canceled ? undefined : (result.filePaths[0] ?? undefined);
@@ -35,7 +33,32 @@ export async function pickEditorApplication(window: BrowserWindow | undefined) {
         label = label.slice(0, -4);
     }
 
-    return { path, label } satisfies EditorApp;
+    return { path, label };
+}
+
+export async function pickEditorApplication(window: BrowserWindow | undefined) {
+    return await pickApplication(window, {
+        title: 'Open in Editor',
+        buttonLabel: 'Open with Selected App',
+        defaultPath: process.platform === 'darwin' ? '/Applications' : electronApp.getPath('home'),
+        filters:
+            process.platform === 'darwin'
+                ? [{ name: 'Applications', extensions: ['app'] }]
+                : process.platform === 'win32'
+                  ? [{ name: 'Applications', extensions: ['exe'] }]
+                  : undefined,
+    });
+}
+
+export async function pickTerminalApplication(window: BrowserWindow | undefined) {
+    const selection = await pickApplication(window, {
+        title: 'Select Terminal Executable',
+        buttonLabel: 'Use Selected Terminal',
+        defaultPath: process.platform === 'darwin' ? '/bin' : process.platform === 'win32' ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32` : electronApp.getPath('home'),
+        filters: process.platform === 'win32' ? [{ name: 'Executables', extensions: ['exe', 'cmd', 'bat'] }] : undefined,
+    });
+
+    return selection ? ({ ...selection, locked: false } satisfies TerminalApp) : undefined;
 }
 
 export async function openFileInEditor(window: BrowserWindow | undefined, ps: { repoId: number; path: string; mode?: OpenInEditorMode; editorPath?: string }) {

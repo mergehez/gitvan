@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { EditorApp, EditorSettings, OAuthProviderSettings, SettingsPanel } from '../../shared/gitClient';
+import type { EditorApp, EditorSettings, OAuthProviderSettings, SettingsPanel, TerminalApp } from '../../shared/gitClient';
 import { confirmAction } from '../lib/utils';
 import { tasks } from './useTasks';
 import { toast } from './useToast';
@@ -9,6 +9,8 @@ export function _useSettings() {
         state: {
             editors: [],
             defaultEditorPath: undefined,
+            terminals: [],
+            defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
             showWhitespaceChanges: false,
@@ -39,6 +41,9 @@ export function _useSettings() {
         async pickEditorApplication() {
             return await tasks.pickEditorApplication.run(undefined);
         },
+        async pickTerminalApplication() {
+            return await tasks.pickTerminalApplication.run(undefined);
+        },
         async updateEditorSettings(nextSettings: EditorSettings) {
             const plainSettings = ((): EditorSettings => {
                 const settings: EditorSettings = nextSettings;
@@ -48,6 +53,12 @@ export function _useSettings() {
                         label: editor.label.replace(/\.app$|\.exe$/i, ''),
                     })),
                     defaultEditorPath: settings.defaultEditorPath,
+                    terminals: settings.terminals.map((terminal) => ({
+                        path: terminal.path,
+                        label: terminal.label.replace(/\.app$|\.exe$/i, ''),
+                        locked: terminal.locked === true,
+                    })),
+                    defaultTerminalPath: settings.defaultTerminalPath,
                     diffFontSize: settings.diffFontSize,
                     diffViewMode: settings.diffViewMode,
                     showWhitespaceChanges: settings.showWhitespaceChanges,
@@ -82,6 +93,24 @@ export function _useSettings() {
                     this.state.defaultEditorPath && nextEditors.some((existing) => existing.path === this.state.defaultEditorPath) ? this.state.defaultEditorPath : editor.path,
             });
         },
+        async addTerminal(terminal: TerminalApp) {
+            const nextTerminals = [
+                ...this.state.terminals.filter((existing) => existing.path !== terminal.path),
+                {
+                    path: terminal.path,
+                    label: terminal.label,
+                    locked: terminal.locked === true,
+                },
+            ].sort((left, right) => left.label.localeCompare(right.label));
+
+            await this._patchEditorSettings({
+                terminals: nextTerminals,
+                defaultTerminalPath:
+                    this.state.defaultTerminalPath && nextTerminals.some((existing) => existing.path === this.state.defaultTerminalPath)
+                        ? this.state.defaultTerminalPath
+                        : terminal.path,
+            });
+        },
         async removeEditor(path: string) {
             const editor = this.state.editors.find((entry) => entry.path === path);
             const confirmed = await confirmAction({
@@ -102,8 +131,35 @@ export function _useSettings() {
                 defaultEditorPath: this.state.defaultEditorPath === path ? nextEditors[0]?.path : this.state.defaultEditorPath,
             });
         },
+        async removeTerminal(path: string) {
+            const terminal = this.state.terminals.find((entry) => entry.path === path);
+            if (terminal?.locked) {
+                return;
+            }
+
+            const confirmed = await confirmAction({
+                title: 'Remove terminal',
+                message: `Remove ${terminal?.label ?? 'this terminal'}?`,
+                detail: 'This removes the saved terminal entry from Gitvan settings.',
+                confirmLabel: 'Remove terminal',
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            const nextTerminals = this.state.terminals.filter((terminalEntry) => terminalEntry.path !== path);
+
+            await this._patchEditorSettings({
+                terminals: nextTerminals,
+                defaultTerminalPath: this.state.defaultTerminalPath === path ? nextTerminals[0]?.path : this.state.defaultTerminalPath,
+            });
+        },
         async setDefaultEditor(path: string | undefined) {
             await this._patchEditorSettings({ defaultEditorPath: path });
+        },
+        async setDefaultTerminal(path: string | undefined) {
+            await this._patchEditorSettings({ defaultTerminalPath: path });
         },
         async setDiffFontSize(fontSize: number) {
             await this._patchEditorSettings({ diffFontSize: fontSize });

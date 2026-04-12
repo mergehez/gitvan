@@ -102,4 +102,50 @@
             padding: 0.25rem 0.5rem;
         }
     }
+
+    select,
+    ::picker(select) {
+        appearance: base-select;
+    }
+
+    select {
+        transition: 0.2s;
+    }
+
+    ::picker(select) {
+        border: 1px solid var(--color-x6);
+        border-top: none;
+    }
+
+    select:open::picker-icon {
+        rotate: 180deg;
+    }
+
+    ::picker(select) {
+        background: var(--color-x3);
+        border-radius: 0 0 8px 8px;
+        padding: 2px;
+    }
+
+    select option {
+        border: none;
+        border-radius: 5px;
+        background: var(--color-x3);
+        outline: none;
+        transition: 0.1s;
+        padding-inline: 5px;
+    }
+
+    select::picker-icon {
+        transition: 0.1s rotate;
+    }
+
+    option:hover,
+    option:focus {
+        background: #596981;
+    }
+
+    option:checked {
+        background: #1357bf;
+    }
 }

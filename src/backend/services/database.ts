@@ -14,6 +14,7 @@ export type RepoRow = {
     group_name: string | undefined;
     account_id: number | undefined;
     account_label: string | undefined;
+    terminal_path: string | undefined;
     added_at: string;
     last_opened_at: string | undefined;
 };
@@ -210,6 +211,7 @@ export function useDb() {
                     path TEXT NOT NULL UNIQUE,
                     sequence INTEGER NOT NULL DEFAULT 0,
                     account_id INTEGER,
+                    terminal_path TEXT,
                     added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     last_opened_at TEXT,
                     FOREIGN KEY (account_id) REFERENCES accounts(id)
@@ -222,6 +224,7 @@ export function useDb() {
             ensureColumn('groups', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
             ensureColumn('repositories', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
             ensureColumn('repositories', 'group_id', 'INTEGER REFERENCES groups(id)');
+            ensureColumn('repositories', 'terminal_path', 'TEXT');
 
             const accountCount = db.prepare('SELECT COUNT(*) AS count FROM accounts').get<{ count: number } | undefined>();
 
@@ -280,6 +283,7 @@ export function useDb() {
                         groups.name AS group_name,
                         repositories.account_id,
                         accounts.label AS account_label,
+                        repositories.terminal_path,
                         repositories.added_at,
                         repositories.last_opened_at
                     FROM repositories
@@ -477,6 +481,9 @@ export function useDb() {
         },
         assignRepoAccount(id: number, accountId: number | undefined) {
             db.prepare('UPDATE repositories SET account_id = ? WHERE id = ?').run(accountId ?? null, id);
+        },
+        assignRepoTerminal(id: number, terminalPath: string | undefined) {
+            db.prepare('UPDATE repositories SET terminal_path = ? WHERE id = ?').run(terminalPath ?? null, id);
         },
         updateRepoName(id: number, name: string) {
             const normalizedName = name.trim();

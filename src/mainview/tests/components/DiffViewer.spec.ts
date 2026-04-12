@@ -20,6 +20,8 @@ function createMockSettings() {
         state: {
             editors: [],
             defaultEditorPath: undefined,
+            terminals: [],
+            defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
             showWhitespaceChanges: false,

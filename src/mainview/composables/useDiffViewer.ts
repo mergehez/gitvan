@@ -24,7 +24,7 @@ function hasOnlyWhitespaceChanges(original: string, modified: string) {
         return false;
     }
 
-    return original.replace(/\s+/g, '') === modified.replace(/\s+/g, '');
+    return original.replace(/[\s,]+/g, '') === modified.replace(/[\s,]+/g, '');
 }
 
 export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) {

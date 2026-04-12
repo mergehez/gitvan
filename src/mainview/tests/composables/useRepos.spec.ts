@@ -32,6 +32,8 @@ const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, moc
             state: {
                 editors: [{ path: `/Applications/${testEditor}`, label: testEditor.replace('.app', '') }],
                 defaultEditorPath: `/Applications/${testEditor}`,
+                terminals: [{ path: '/bin/zsh', label: 'zsh', locked: true }],
+                defaultTerminalPath: '/bin/zsh',
                 diffFontSize: 12,
                 diffViewMode: 'full-file',
                 showWhitespaceChanges: false,
@@ -110,6 +112,7 @@ function createRepo(): Repo {
         groupName: 'Work',
         accountId: undefined,
         accountLabel: undefined,
+        terminalPath: undefined,
         addedAt: '2026-03-27T00:00:00.000Z',
         lastOpenedAt: '2026-03-27T00:00:00.000Z',
         status: {

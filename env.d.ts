@@ -1,11 +1,12 @@
 /// <reference types="vite/client" />
 
 import type { GitClientRequestMap } from './src/electron/rpc';
-import type { NativeCommand } from './src/shared/gitClient';
+import type { IntegratedTerminalEvent, NativeCommand } from './src/shared/gitClient';
 
 type GitClientBridge = {
     invoke<K extends keyof GitClientRequestMap>(name: K, params: GitClientRequestMap[K]['params']): Promise<GitClientRequestMap[K]['response']>;
     onNativeCommand(listener: (command: NativeCommand) => void): () => void;
+    onIntegratedTerminalEvent(listener: (event: IntegratedTerminalEvent) => void): () => void;
 };
 
 declare module '*.vue' {

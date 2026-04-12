@@ -1,14 +1,17 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 type CommandAttempt = {
     command: string;
     args: string[];
 };
 
-function runCommand({ command, args }: CommandAttempt) {
+function runCommand({ command, args }: CommandAttempt, directoryPath: string) {
     return new Promise<void>((resolve, reject) => {
         const child = spawn(command, args, {
             stdio: 'ignore',
+            cwd: directoryPath,
+            detached: process.platform !== 'win32',
         });
 
         child.on('error', reject);
@@ -20,11 +23,29 @@ function runCommand({ command, args }: CommandAttempt) {
 
             resolve();
         });
+
+        if (process.platform !== 'win32') {
+            child.unref();
+        }
     });
 }
 
-export async function openDirectoryInTerminal(directoryPath: string) {
+export async function openDirectoryInTerminal(directoryPath: string, applicationPath?: string) {
     const attempts: CommandAttempt[] = (() => {
+        const configuredApplicationPath = applicationPath && existsSync(applicationPath) ? applicationPath : undefined;
+
+        if (configuredApplicationPath) {
+            if (process.platform === 'darwin') {
+                return [{ command: 'open', args: ['-a', configuredApplicationPath, directoryPath] }];
+            }
+
+            if (process.platform === 'win32') {
+                return [{ command: 'cmd.exe', args: ['/c', 'start', '', '/D', directoryPath, configuredApplicationPath] }];
+            }
+
+            return [{ command: configuredApplicationPath, args: [] }];
+        }
+
         if (process.platform === 'darwin') {
             return [{ command: 'open', args: ['-a', 'Terminal', directoryPath] }];
         }
@@ -50,7 +71,7 @@ export async function openDirectoryInTerminal(directoryPath: string) {
 
     for (const attempt of attempts) {
         try {
-            await runCommand(attempt);
+            await runCommand(attempt, directoryPath);
             return;
         } catch (error) {
             lastError = error;

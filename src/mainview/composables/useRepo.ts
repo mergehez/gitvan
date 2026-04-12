@@ -75,6 +75,7 @@ const _useRepository = (repo: Repo) => {
             state.groupName = nv.groupName;
             state.accountId = nv.accountId;
             state.accountLabel = nv.accountLabel;
+            state.terminalPath = nv.terminalPath;
             state.addedAt = nv.addedAt;
             state.lastOpenedAt = nv.lastOpenedAt;
             state.status = nv.status;

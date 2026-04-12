@@ -1,10 +1,10 @@
 import { mount } from '@vue/test-utils';
-import { defineComponent, reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, reactive } from 'vue';
 import type { BranchesData, Repo } from '../../../shared/gitClient';
+import RepBranchesView from '../../components/RepBranchesView.vue';
 import type { useRepos } from '../../composables/useRepos';
 import type { tasks as tasksType } from '../../composables/useTasks';
-import RepBranchesView from '../../components/RepBranchesView.vue';
 
 type ReposState = ReturnType<typeof useRepos>;
 type TasksState = typeof tasksType;
@@ -88,6 +88,7 @@ function createRepo(): BranchesViewRepoMock {
         groupName: undefined,
         accountId: undefined,
         accountLabel: undefined,
+        terminalPath: undefined,
         addedAt: '2026-04-01T00:00:00.000Z',
         lastOpenedAt: undefined,
         status: {

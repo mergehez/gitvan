@@ -31,6 +31,7 @@ type RepositorySidebarReposMock = Pick<
     | 'deleteRepoGroup'
     | 'copyRepoPath'
     | 'openRepoInTerminal'
+    | 'openRepoInIntegratedTerminal'
     | 'pickRepo'
     | 'publishRepoBranch'
     | 'refreshRepositories'
@@ -50,6 +51,8 @@ let mockRepos: RepositorySidebarReposMock;
 const settingsState = {
     editors: [{ path: '/Applications/Visual Studio Code.app', label: 'Visual Studio Code' }],
     defaultEditorPath: '/Applications/Visual Studio Code.app',
+    terminals: [{ path: '/bin/zsh', label: 'zsh', locked: true }],
+    defaultTerminalPath: '/bin/zsh',
     diffFontSize: 12,
     diffViewMode: 'full-file',
     showWhitespaceChanges: false,
@@ -91,6 +94,7 @@ function createRepository(id: number, name: string, groupName: string | undefine
         groupName,
         accountId: undefined,
         accountLabel: undefined,
+        terminalPath: undefined,
         addedAt: '2026-03-27T00:00:00.000Z',
         lastOpenedAt: '2026-03-27T00:00:00.000Z',
         status: {
@@ -138,6 +142,7 @@ function createMockRepos() {
         copyRepoPath: vi.fn(() => Promise.resolve()),
         deleteRepoGroup: vi.fn(),
         openRepoInTerminal: vi.fn(() => Promise.resolve()),
+        openRepoInIntegratedTerminal: vi.fn(),
         pickRepo: vi.fn(),
         publishRepoBranch: vi.fn(),
         refreshRepositories: vi.fn(),
@@ -399,6 +404,22 @@ describe('RepositorySidebar', () => {
         await wrapper.get('[data-testid="repo-item-2"]').trigger('contextmenu');
 
         expect(mockRepos.selectRepo).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+    });
+
+    it('opens the integrated terminal from the repository context menu', async () => {
+        const wrapper = mountSidebar();
+
+        await wrapper.get('[data-testid="repo-item-1"]').trigger('contextmenu');
+
+        const integratedTerminalMenuButton = Array.from(document.body.querySelectorAll('button')).find((entry) => entry.textContent?.trim() === 'Open in Integrated Terminal');
+
+        expect(integratedTerminalMenuButton).toBeTruthy();
+
+        integratedTerminalMenuButton!.click();
+
+        expect(mockRepos.openRepoInIntegratedTerminal).toHaveBeenCalledWith(1);
 
         wrapper.unmount();
     });

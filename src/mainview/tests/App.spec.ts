@@ -56,6 +56,7 @@ function createRepository(id: number, name: string): Repo {
         groupName: 'Work',
         accountId: undefined,
         accountLabel: undefined,
+        terminalPath: undefined,
         addedAt: '2026-03-27T00:00:00.000Z',
         lastOpenedAt: '2026-03-27T00:00:00.000Z',
         status: {
@@ -80,6 +81,8 @@ function createMockSettings(activeView: NavigationView = 'changes') {
         state: reactive({
             editors: [],
             defaultEditorPath: undefined,
+            terminals: [],
+            defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
             showWhitespaceChanges: false,
@@ -226,6 +229,7 @@ function mountApp() {
                 AppCloneRepositoryModal: stubComponent('AppCloneRepositoryModal'),
                 AppCreateRepositoryModal: stubComponent('AppCreateRepositoryModal'),
                 AppErrorBanner: stubComponent('AppErrorBanner'),
+                AppIntegratedTerminalModal: stubComponent('AppIntegratedTerminalModal'),
                 AppMergeConflictModal: stubComponent('AppMergeConflictModal'),
                 AppPullBlockedByLocalChangesModal: stubComponent('AppPullBlockedByLocalChangesModal'),
                 AppSuccessToast: stubComponent('AppSuccessToast'),
@@ -247,6 +251,7 @@ describe('App', () => {
         nativeCommandListener = undefined;
         window.gitClient = {
             invoke: vi.fn(),
+            onIntegratedTerminalEvent: vi.fn(() => () => {}),
             onNativeCommand: vi.fn((listener: (command: NativeCommand) => void) => {
                 nativeCommandListener = listener;
                 return () => {
@@ -266,6 +271,7 @@ describe('App', () => {
         expect(wrapper.get('[data-testid="AppMergeConflictModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppCloneRepositoryModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppCreateRepositoryModal"]')).toBeTruthy();
+        expect(wrapper.get('[data-testid="AppIntegratedTerminalModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppSuccessToast"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppPullBlockedByLocalChangesModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="Settings"]')).toBeTruthy();
