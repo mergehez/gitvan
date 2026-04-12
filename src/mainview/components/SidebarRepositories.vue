@@ -5,7 +5,6 @@ import { useRepos } from '../composables/useRepos.ts';
 import { useSettings } from '../composables/useSettings.ts';
 import { tasks } from '../composables/useTasks.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
-import Alert from './Alert.vue';
 import Button from './Button.vue';
 import CenteredInputModal from './CenteredInputModal.vue';
 import FileTree, { FileTreeItem } from './FileTree.vue';
@@ -255,129 +254,114 @@ function fetchGroupRepos(groupId: number) {
                 :disabled="isButtonBusyBlocked"
                 v-tooltip.bottom="'Repository Settings'"
                 @click="settings.openSettingsWindow('repositories')"
-                icon="icon-[mdi--cog-outline]"
-            />
+                icon="icon-[mdi--cog-outline]" />
 
             <IconButton
                 severity="secondary"
                 :disabled="isButtonBusyBlocked"
                 v-tooltip.bottom="'Add Repository Group'"
                 @click="openNewGroupModal = true"
-                icon="icon-[mdi--folder-plus-outline]"
-            />
+                icon="icon-[mdi--folder-plus-outline]" />
 
             <IconButton
                 severity="secondary"
                 :disabled="isButtonBusyBlocked"
-                v-tooltip.bottom="'Refresh Repositories'"
+                v-tooltip.bottom.html="'Refresh Repositories<br/>(Sync Gitvan state with filesystem)'"
                 @click="repos.refreshRepositories()"
-                icon="icon-[ic--refresh]"
-            />
+                icon="icon-[ic--refresh]" />
 
             <IconButton
                 severity="secondary"
                 :disabled="isButtonBusyBlocked"
-                v-tooltip.bottom="'Fetch All Repositories in All Groups'"
+                v-tooltip.bottom.html="'Fetch All Repositories in All Groups'"
                 @click="fetchGroupRepos(-1)"
-                icon="icon-[fluent--cloud-sync-16-regular] "
-            />
+                icon="icon-[fluent--cloud-sync-16-regular] " />
         </div>
 
-        <div class="flex-1 flex flex-col gap-2">
-            <FileTree
-                v-for="treeItem in treeItems"
-                :key="treeItem.id"
-                :item="treeItem"
-                empty-text="No repositories"
-                :selection="repos.selectedRepoId"
-                :onSelect="(r) => repos.selectRepo(r.id)"
-                :onContextMenu="(r) => openRepoContextMenu(r.id)"
-            >
-                <template #header-actions="{ item }">
-                    <IconButton
-                        v-if="!item.children.length"
-                        severity="raised"
-                        smaller
-                        v-tooltip.bottom="`Delete group ${item.title}`"
-                        @click.stop="repos.deleteRepoGroup(item.id)"
-                        icon="icon-[mingcute--delete-2-fill]"
-                    />
-                    <IconButton
-                        severity="raised"
-                        :disabled="isButtonBusyBlocked"
-                        smaller
-                        v-tooltip.bottom="'Fetch Repositories in Group'"
-                        @click="fetchGroupRepos(item.id)"
-                        icon="icon-[fluent--cloud-sync-16-regular] "
-                    />
-                    <IconButton
-                        severity="raised"
-                        smaller
-                        v-tooltip.bottom="`Add repository to group ${item.title}`"
-                        @click.stop="addExistingRepo(item.id)"
-                        icon="icon-[mdi--plus]"
-                    />
-                </template>
-                <template #item-leftIcon="{ item }">
-                    <span
-                        class="icon text-sm"
-                        :class="tasks.isOperationRunning(`runRemoteOperation:fetch-${item.id}`) ? 'icon-[mdi--cloud-refresh] animate-spin' : 'icon-[mdi--source-branch]'"
-                    ></span>
-                </template>
-                <template #item-title="{ item }">
-                    <p class="text-xs tracking-tight">{{ item.title }}</p>
-                </template>
-                <template #item-rightIcon="{ item }">
-                    <div class="flex items-center gap-1">
+        <div class="flex-1 flex flex-col gap-2 overflow-y-auto  scrollbar-thin">
+            <div>
+                <FileTree
+                    v-for="treeItem in treeItems"
+                    :key="treeItem.id"
+                    :item="treeItem"
+                    empty-text="No repositories"
+                    :selection="repos.selectedRepoId"
+                    :onSelect="(r) => repos.selectRepo(r.id)"
+                    :onContextMenu="(r) => openRepoContextMenu(r.id)">
+                    <template #header-actions="{ item }">
                         <IconButton
-                            v-if="canPublishBranch(item)"
+                            v-if="!item.children.length"
                             severity="raised"
                             smaller
-                            :disabled="isButtonBusyBlocked || !canPublishNow(item)"
-                            v-tooltip.right="publishLabel(item)"
-                            @click.stop="repos.publishRepoBranch(item.id)"
-                            v-loading="tasks.isOperationRunning(`publishBranch:${item.id}`)"
-                            icon="icon-[mdi--plus-thick] text-amber-300 text-xs"
-                        />
+                            v-tooltip.bottom="`Delete group ${item.title}`"
+                            @click.stop="repos.deleteRepoGroup(item.id)"
+                            icon="icon-[mingcute--delete-2-fill]" />
                         <IconButton
-                            v-if="repos.canPull(item, true)"
                             severity="raised"
-                            smaller
                             :disabled="isButtonBusyBlocked"
-                            :title="pullLabel(item)"
-                            v-tooltip.right="pullLabel(item)"
-                            @click.stop="repos.runRepoRemoteOperation(item.id, 'pull')"
-                            v-loading="tasks.isOperationRunning(`runRemoteOperation:pull-${item.id}`)"
-                            icon="icon-[fa--arrow-down] text-emerald-300 text-xs"
-                        />
+                            smaller
+                            v-tooltip.bottom="'Fetch Repositories in Group'"
+                            @click="fetchGroupRepos(item.id)"
+                            icon="icon-[fluent--cloud-sync-16-regular] " />
                         <IconButton
-                            v-if="repos.canPush(item, true)"
                             severity="raised"
                             smaller
-                            :disabled="isButtonBusyBlocked"
-                            :title="pushLabel(item)"
-                            v-tooltip.right="pushLabel(item)"
-                            @click.stop="repos.runRepoRemoteOperation(item.id, 'push')"
-                            v-loading="tasks.isOperationRunning(`runRemoteOperation:push-${item.id}`)"
-                            icon="icon-[fa--arrow-up] text-sky-300 text-xs"
-                        />
-                        <span class="h-2 w-2 shrink-0 rounded-full" :class="statusIconClass(item)" :title="statusLabel(item)" v-tooltip.right="statusLabel(item)" />
-                    </div>
-                </template>
-            </FileTree>
+                            v-tooltip.bottom="`Add repository to group ${item.title}`"
+                            @click.stop="addExistingRepo(item.id)"
+                            icon="icon-[mdi--plus]" />
+                    </template>
+                    <template #item-leftIcon="{ item }">
+                        <span
+                            class="icon text-sm"
+                            :class="tasks.isOperationRunning(`runRemoteOperation:fetch-${item.id}`) ? 'icon-[mingcute--loading-fill] animate-spin' : 'icon-[mdi--source-branch]'"></span>
+                    </template>
+                    <template #item-title="{ item }">
+                        <p class="text-xs tracking-tight">{{ item.title }}</p>
+                    </template>
+                    <template #item-rightIcon="{ item }">
+                        <div class="flex items-center gap-1">
+                            <IconButton
+                                v-if="canPublishBranch(item)"
+                                severity="raised"
+                                smaller
+                                :disabled="isButtonBusyBlocked || !canPublishNow(item)"
+                                v-tooltip.right="publishLabel(item)"
+                                @click.stop="repos.publishRepoBranch(item.id)"
+                                v-loading="tasks.isOperationRunning(`publishBranch:${item.id}`)"
+                                icon="icon-[mdi--plus-thick] text-amber-300 text-xs" />
+                            <IconButton
+                                v-if="repos.canPull(item, true)"
+                                severity="raised"
+                                smaller
+                                :disabled="isButtonBusyBlocked"
+                                :title="pullLabel(item)"
+                                v-tooltip.right="pullLabel(item)"
+                                @click.stop="repos.runRepoRemoteOperation(item.id, 'pull')"
+                                v-loading="tasks.isOperationRunning(`runRemoteOperation:pull-${item.id}`)"
+                                icon="icon-[fa--arrow-down] text-emerald-300 text-xs" />
+                            <IconButton
+                                v-if="repos.canPush(item, true)"
+                                severity="raised"
+                                smaller
+                                :disabled="isButtonBusyBlocked"
+                                :title="pushLabel(item)"
+                                v-tooltip.right="pushLabel(item)"
+                                @click.stop="repos.runRepoRemoteOperation(item.id, 'push')"
+                                v-loading="tasks.isOperationRunning(`runRemoteOperation:push-${item.id}`)"
+                                icon="icon-[fa--arrow-up] text-sky-300 text-xs" />
+                            <span class="h-2 w-2 shrink-0 rounded-full" :class="statusIconClass(item)" :title="statusLabel(item)" v-tooltip.right="statusLabel(item)" />
+                        </div>
+                    </template>
+                </FileTree>
+            </div>
         </div>
         <div class="mt-4 px-2">
-            <Alert severity="secondary" class="mb-2 py-1 justify-center rounded px-2 flex items-center gap-2" v-if="tasks.isAnyLongRunningOperation()">
-                <span class="icon icon-[mingcute--loading-fill] text-blue-500 text-2xl animate-spin"></span>
-                <span class="text-xs">Running: {{ tasks.getLongRunningOperation || '...' }}</span>
-            </Alert>
             <Button
                 severity="secondary"
                 class="w-full justify-center"
                 :disabled="isButtonBusyBlocked"
                 v-loading="tasks.isOperationRunning('resetSandboxRepos')"
-                @click="repos.resetSandboxRepos()"
-            >
+                @click="repos.resetSandboxRepos()">
                 <span class="icon icon-[mdi--flask-outline] mr-1.5 text-sm"></span>
                 <span>Reset Sandboxes</span>
             </Button>
@@ -391,8 +375,7 @@ function fetchGroupRepos(groupId: number) {
                     top: `${addMenuPosition.top}px`,
                     left: `${addMenuPosition.left}px`,
                 }"
-                @click.stop
-            >
+                @click.stop>
                 <Button severity="secondary" class="justify-start gap-1.5" small @click="openCloneDialog">
                     <span class="icon icon-[mdi--download-network-outline] text-sm opacity-60"></span>
                     <span class="opacity-90 text-xs">Clone Repository...</span>
@@ -418,8 +401,7 @@ function fetchGroupRepos(groupId: number) {
         :can-submit="canSubmitRepoRename"
         :is-loading="isRenameRepoRunning"
         :submit="submitRepoRename"
-        :close="closeRenameRepoModal"
-    />
+        :close="closeRenameRepoModal" />
 
     <CenteredInputModal
         v-model:open="openNewGroupModal"
@@ -429,6 +411,5 @@ function fetchGroupRepos(groupId: number) {
         submit-label="Create"
         :can-submit="!!newGroupName.trim()"
         :is-loading="tasks.isOperationRunning('createRepoGroup')"
-        :submit="createGroup"
-    />
+        :submit="createGroup" />
 </template>

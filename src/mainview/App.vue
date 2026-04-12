@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue';
+import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppCreateRepositoryModal from './components/AppCreateRepositoryModal.vue';
 import AppErrorBanner from './components/AppErrorBanner.vue';
@@ -102,4 +103,10 @@ onBeforeUnmount(() => {
         <span class="icon icon-[mingcute--loading-2-line] text-4xl animate-spin mr-2"></span>
         Loading...
     </div>
+
+
+    <Alert severity="info" class="fixed bottom-4 right-4 z-10 mb-2 py-1 justify-center rounded px-2 flex items-center gap-2" v-if="tasks.isAnyLongRunningOperation()">
+        <span class="icon icon-[mingcute--loading-fill] text-blue-500 text-2xl animate-spin"></span>
+        <span class="text-xs">Running: {{ tasks.getLongRunningOperation || '...' }}</span>
+    </Alert>
 </template>
