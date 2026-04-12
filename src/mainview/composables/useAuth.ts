@@ -114,6 +114,11 @@ export function _useAccounts() {
             _coreState.applyBootstrap(nextBootstrap);
             toast.showSuccessToast('Account created.');
         },
+        async reorderAccount(accountId: number, toIndex: number) {
+            const nextBootstrap = await tasks.reorderAccount.run({ accountId, toIndex });
+
+            _coreState.applyBootstrap(nextBootstrap);
+        },
         async updateAccount(params: {
             accountId: number;
             label: string;

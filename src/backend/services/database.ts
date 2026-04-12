@@ -105,18 +105,27 @@ export function useDb() {
         });
     }
 
-    function getNextSequence(tableName: 'groups' | 'repositories') {
+    function normalizeAccountSequences() {
+        const rows = db.prepare('SELECT id FROM accounts ORDER BY sequence ASC, is_default DESC, created_at ASC, id ASC').all<{ id: number }>();
+        const updateSequence = db.prepare('UPDATE accounts SET sequence = ? WHERE id = ?');
+
+        rows.forEach((row, index) => {
+            updateSequence.run(index + 1, row.id);
+        });
+    }
+
+    function getNextSequence(tableName: 'accounts' | 'groups' | 'repositories') {
         const row = db.prepare(`SELECT COALESCE(MAX(sequence), 0) AS sequence FROM ${tableName}`).get<{ sequence: number }>();
         return toNumber(row!.sequence) + 1;
     }
 
-    function moveSequence(tableName: 'groups' | 'repositories', id: number, direction: 'up' | 'down') {
-        const orderColumn = tableName === 'groups' ? 'created_at' : 'added_at';
+    function moveSequence(tableName: 'accounts' | 'groups' | 'repositories', id: number, direction: 'up' | 'down') {
+        const orderColumn = tableName === 'groups' ? 'created_at' : tableName === 'repositories' ? 'added_at' : 'created_at';
         const rows = db.prepare(`SELECT id FROM ${tableName} ORDER BY sequence ASC, ${orderColumn} ASC, id ASC`).all<{ id: number }>();
         const currentIndex = rows.findIndex((row) => row.id === id);
 
         if (currentIndex === -1) {
-            throw new Error(`The selected ${tableName === 'groups' ? 'group' : 'repository'} could not be found.`);
+            throw new Error(`The selected ${tableName === 'groups' ? 'group' : tableName === 'repositories' ? 'repository' : 'account'} could not be found.`);
         }
 
         const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
@@ -131,21 +140,26 @@ export function useDb() {
         applySequenceOrder(tableName, orderedIds);
     }
 
-    function applySequenceOrder(tableName: 'groups' | 'repositories', orderedIds: number[]) {
-        const updateSequence = tableName === 'groups' ? db.prepare('UPDATE groups SET sequence = ? WHERE id = ?') : db.prepare('UPDATE repositories SET sequence = ? WHERE id = ?');
+    function applySequenceOrder(tableName: 'accounts' | 'groups' | 'repositories', orderedIds: number[]) {
+        const updateSequence =
+            tableName === 'groups'
+                ? db.prepare('UPDATE groups SET sequence = ? WHERE id = ?')
+                : tableName === 'repositories'
+                  ? db.prepare('UPDATE repositories SET sequence = ? WHERE id = ?')
+                  : db.prepare('UPDATE accounts SET sequence = ? WHERE id = ?');
 
         orderedIds.forEach((entryId, index) => {
             updateSequence.run(index + 1, entryId);
         });
     }
 
-    function reorderSequence(tableName: 'groups' | 'repositories', id: number, toIndex: number) {
-        const orderColumn = tableName === 'groups' ? 'created_at' : 'added_at';
+    function reorderSequence(tableName: 'accounts' | 'groups' | 'repositories', id: number, toIndex: number) {
+        const orderColumn = tableName === 'groups' ? 'created_at' : tableName === 'repositories' ? 'added_at' : 'created_at';
         const rows = db.prepare(`SELECT id FROM ${tableName} ORDER BY sequence ASC, ${orderColumn} ASC, id ASC`).all<{ id: number }>();
         const currentIndex = rows.findIndex((row) => row.id === id);
 
         if (currentIndex === -1) {
-            throw new Error(`The selected ${tableName === 'groups' ? 'group' : 'repository'} could not be found.`);
+            throw new Error(`The selected ${tableName === 'groups' ? 'group' : tableName === 'repositories' ? 'repository' : 'account'} could not be found.`);
         }
 
         const clampedIndex = Math.max(0, Math.min(toIndex, rows.length - 1));
@@ -180,6 +194,7 @@ export function useDb() {
                     auth_kind TEXT NOT NULL,
                     username TEXT,
                     host TEXT,
+                    sequence INTEGER NOT NULL DEFAULT 0,
                     is_default INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
@@ -203,6 +218,7 @@ export function useDb() {
 
             ensureColumn('accounts', 'username', 'TEXT');
             ensureColumn('accounts', 'host', 'TEXT');
+            ensureColumn('accounts', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
             ensureColumn('groups', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
             ensureColumn('repositories', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
             ensureColumn('repositories', 'group_id', 'INTEGER REFERENCES groups(id)');
@@ -220,6 +236,7 @@ export function useDb() {
                 );
             }
 
+            normalizeAccountSequences();
             normalizeGroupSequences();
             normalizeRepoSequences();
         },
@@ -301,7 +318,7 @@ export function useDb() {
         },
         listAccounts() {
             return db
-                .prepare('SELECT id, label, provider, auth_kind, username, host, is_default, created_at FROM accounts ORDER BY is_default DESC, created_at ASC')
+                .prepare('SELECT id, label, provider, auth_kind, username, host, is_default, created_at FROM accounts ORDER BY sequence ASC, created_at ASC, id ASC')
                 .all<AccountRow>()
                 .map((account) => {
                     const summary: AccountSummary = {
@@ -428,8 +445,8 @@ export function useDb() {
             }
 
             const result = db
-                .prepare('INSERT INTO accounts(label, provider, auth_kind, username, host, is_default) VALUES(?, ?, ?, ?, ?, ?)')
-                .run(normalizedLabel, provider, authKind, username ?? null, host ?? null, setAsDefault ? 1 : 0);
+                .prepare('INSERT INTO accounts(label, provider, auth_kind, username, host, sequence, is_default) VALUES(?, ?, ?, ?, ?, ?, ?)')
+                .run(normalizedLabel, provider, authKind, username ?? null, host ?? null, getNextSequence('accounts'), setAsDefault ? 1 : 0);
 
             return toNumber(result.lastInsertRowid);
         },
@@ -451,6 +468,9 @@ export function useDb() {
                 setAsDefault ? 1 : 0,
                 id,
             );
+        },
+        reorderAccount(id: number, toIndex: number) {
+            reorderSequence('accounts', id, toIndex);
         },
         getAccountAuthById(id: number) {
             return db.prepare('SELECT id, label, provider, auth_kind, username, host, is_default, created_at FROM accounts WHERE id = ?').get<AccountAuthRow>(id);

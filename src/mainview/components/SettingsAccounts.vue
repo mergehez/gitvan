@@ -4,6 +4,7 @@ import { useAuth } from '../composables/useAuth';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
 import Button from './Button.vue';
+import DraggableList from './DraggableList.vue';
 import IconButton from './IconButton.vue';
 
 const auth = useAuth();
@@ -84,6 +85,15 @@ const canSaveSelectedAccount = computed(() => {
     }
 
     return true;
+});
+const accountsForList = computed(() => {
+    return auth.accounts.map((account) => ({
+        id: account.id,
+        title: account.label,
+        provider: account.provider,
+        authKind: account.authKind,
+        isDefault: account.isDefault,
+    }));
 });
 
 function resetCreateAccountForm() {
@@ -222,6 +232,14 @@ async function createAccount() {
         resetCreateAccountForm();
     }
 }
+
+async function reorderAccounts({ item, fromIndex, toIndex }: { item: { id: number }; fromIndex: number; toIndex: number }) {
+    if (tasks.isBusy || fromIndex === toIndex) {
+        return;
+    }
+
+    await auth.reorderAccount(item.id, toIndex);
+}
 </script>
 
 <template>
@@ -233,20 +251,28 @@ async function createAccount() {
             </div>
 
             <p v-if="auth.accounts.length === 0" class="px-3 py-2 text-sm text-x7">No accounts created yet.</p>
-            <div v-else class="min-h-0 overflow-auto flex flex-col border border-x3">
-                <Button
-                    v-for="account in auth.accounts"
-                    :key="account.id"
-                    class="justify-start rounded-none"
-                    @click="selAccountId = `account:${account.id}`"
-                    :severity="selAccountId === `account:${account.id}` ? 'light' : 'secondary'"
-                >
-                    <div class="flex flex-col items-start">
-                        <p class="text-sm font-medium text-white">{{ account.label }}</p>
-                        <p class="mt-1 text-xs tracking-[0.12em] opacity-30">{{ account.provider }} · {{ account.authKind }}</p>
+            <DraggableList
+                v-else
+                class="min-h-0 overflow-auto border border-x3"
+                :items="accountsForList"
+                :selection="selectedAccount?.id"
+                item-class="border-b border-white/10 last:border-0"
+                :disabled="tasks.isBusy"
+                :onSelect="(account) => (selAccountId = `account:${account.id}`)"
+                :onReorder="reorderAccounts"
+            >
+                <template #item-title="{ item }">
+                    <div class="flex min-w-0 flex-col items-start">
+                        <p class="truncate text-sm font-medium text-white">{{ item.title }}</p>
+                        <p class="mt-1 text-xs tracking-[0.12em] opacity-30">{{ item.provider }} · {{ item.authKind }}</p>
                     </div>
-                </Button>
-            </div>
+                </template>
+                <template #item-rightIcon="{ item }">
+                    <span v-if="item.isDefault" class="rounded-full border border-sky-400/40 bg-sky-500/10 px-2 py-0.5 text-2xs uppercase tracking-[0.16em] text-sky-200">
+                        Default
+                    </span>
+                </template>
+            </DraggableList>
         </aside>
 
         <main class="overflow-auto p-6">

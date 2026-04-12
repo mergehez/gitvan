@@ -29,6 +29,7 @@ export const apiMethods = [
     'createAccount',
     'updateAccount',
     'deleteAccount',
+    'reorderAccount',
     'getOAuthProviderSettings',
     'updateOAuthProviderSettings',
     'startOAuthDeviceFlow',

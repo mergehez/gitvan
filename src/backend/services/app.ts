@@ -344,7 +344,7 @@ async function resolveRepoRemoteAuth(repoId: number): Promise<RepoRemoteAuth | u
 function rethrowRemoteAuthError(error: unknown, auth: RepoRemoteAuth | undefined): never {
     if (auth && error instanceof GitCommandError && /repository .* not found/i.test(error.stderr)) {
         throw new Error(
-            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.'
+            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.',
         );
     }
 
@@ -372,7 +372,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
             };
 
             return r;
-        })
+        }),
     );
 
     let selectedRepoId = db.getSelectedRepoId();
@@ -500,7 +500,7 @@ export const app = {
                             updatedAt: typeof record.updated_at === 'string' && record.updated_at.trim() ? record.updated_at.trim() : undefined,
                         };
                     })
-                    .filter((entry): entry is CloneableRepo => entry !== undefined)
+                    .filter((entry): entry is CloneableRepo => entry !== undefined),
             );
 
             if (pageItems.length < 100) {
@@ -845,6 +845,14 @@ export const app = {
         await deleteAccountSecret(ps.accountId);
         return buildBootstrap();
     },
+    reorderAccountRecord: async (ps: { accountId: number; toIndex: number }) => {
+        if (!db.accountExists(ps.accountId)) {
+            throw new Error('The selected account could not be found.');
+        }
+
+        db.reorderAccount(ps.accountId, ps.toIndex);
+        return buildBootstrap();
+    },
     startOAuthAccountDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
         const settings = app.getOAuthProviderSettings();
         const result = await startOAuthDeviceSession(settings, {
@@ -871,7 +879,7 @@ export const app = {
             'oauth',
             completedResult.account.username,
             completedResult.account.host,
-            completedResult.account.setAsDefault
+            completedResult.account.setAsDefault,
         );
 
         try {
