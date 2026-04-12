@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import CenteredModal from './CenteredModal.vue';
+import { nextTick, ref, watch } from 'vue';
 import Button from './Button.vue';
+import CenteredModal from './CenteredModal.vue';
 
 const open = defineModel<boolean>('open', { required: true });
 const value = defineModel<string>('value', { required: true });
@@ -14,6 +15,18 @@ const props = defineProps<{
     close?: () => void;
     submitLabel?: string;
 }>();
+
+const inputRef = ref<HTMLInputElement>();
+
+watch(open, async (isOpen) => {
+    if (!isOpen) {
+        return;
+    }
+
+    await nextTick();
+    inputRef.value?.focus();
+    inputRef.value?.select();
+});
 
 function onClose() {
     if (props.close) {
@@ -30,6 +43,7 @@ function onClose() {
             <div class="space-y-2">
                 <label class="text-sm font-medium text-white" for="rename-repository-name">{{ inputLabel }}</label>
                 <input
+                    ref="inputRef"
                     id="rename-repository-name"
                     v-model="value"
                     type="text"
