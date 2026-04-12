@@ -13,10 +13,19 @@ export type DiffViewerState = {
     modified: string;
     pathForLanguage: string;
     previewMessage: string | undefined;
+    onlyWhitespaceChanges: boolean;
     metaItems: DiffViewerMetaItem[];
     originalSrc: string | undefined;
     modifiedSrc: string | undefined;
 };
+
+function hasOnlyWhitespaceChanges(original: string, modified: string) {
+    if (original === modified) {
+        return false;
+    }
+
+    return original.replace(/\s+/g, '') === modified.replace(/\s+/g, '');
+}
 
 export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) {
     return computed<DiffViewerState | undefined>(() => {
@@ -54,6 +63,7 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
             modified: currentDiff.entry.modified,
             pathForLanguage: currentDiff.path,
             previewMessage: currentDiff.entry.previewMessage,
+            onlyWhitespaceChanges: !currentDiff.entry.previewMessage && !nonCodePreview && hasOnlyWhitespaceChanges(currentDiff.entry.original, currentDiff.entry.modified),
             metaItems: metaItems,
             originalSrc: nonCodePreview?.originalSrc,
             modifiedSrc: nonCodePreview?.modifiedSrc,

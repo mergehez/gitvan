@@ -37,6 +37,7 @@ const panes = computed<PreviewPane[]>(() => {
 });
 const hasPreviewImages = computed(() => Boolean(props.state?.originalSrc || props.state?.modifiedSrc));
 const rendersTextDiff = computed(() => !props.state?.previewMessage && !hasPreviewImages.value);
+const showsWhitespaceOnlyIndicator = computed(() => !settings.state.showWhitespaceChanges && rendersTextDiff.value && props.state?.onlyWhitespaceChanges);
 const horizontalImages = ref(false);
 </script>
 
@@ -45,6 +46,7 @@ const horizontalImages = ref(false);
         <div class="flex items-center gap-1 border-b border-x5 px-2 py-1.5 text-xs font-medium">
             <div class="truncate flex-1 text-white">{{ state?.title }}</div>
             <slot name="before-header-actions"></slot>
+            <Alert v-if="showsWhitespaceOnlyIndicator" severity="secondary" class="rounded px-2 py-px tracking-tight text-white/75"> space-only-diff </Alert>
             <div v-if="state?.metaItems?.length" class="flex flex-wrap items-center gap-1 text-xs text-white/65">
                 <Alert severity="secondary" v-for="item in state.metaItems" :key="item.id" class="rounded px-2 py-px tracking-tight" v-html="item.text"> </Alert>
             </div>
