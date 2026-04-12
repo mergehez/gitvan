@@ -2,8 +2,9 @@ import { BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import { app } from '../backend/services/app.js';
 import { git } from '../backend/services/git.js';
 import type { RemoteOperation } from '../shared/gitClient.js';
-import { showAccountAssignmentMenu, showChangeFileContextMenu, showConfirmationDialog, showRepoContextMenu } from './dialogs.js';
+import { showConfirmationDialog } from './dialogs.js';
 import { openFileInEditor, pickEditorApplication } from './extEditors.js';
+import { openDirectoryInTerminal } from './systemShell.js';
 
 type Ctx = {
     window: BrowserWindow | undefined;
@@ -25,7 +26,6 @@ export const gitClientRequestHandlers = {
     confirmAction: _mapWindow(showConfirmationDialog),
     pickEditorApplication: _mapWindow(pickEditorApplication),
     updateEditorSettings: _mapPs(app.updateEditorSettings),
-    showAccountAssignmentMenu: _mapWindow(showAccountAssignmentMenu),
     getBootstrap: _mapNo(app.getBootstrap),
     getCloneRepoDefaults: _mapNo(app.getCloneRepoDefaults),
     pickCloneRepoDirectory: _mapNo(app.pickCloneRepoDirectory),
@@ -50,6 +50,7 @@ export const gitClientRequestHandlers = {
     createAccount: _mapPs(app.createAccountRecord),
     updateAccount: _mapPs(app.updateAccountRecord),
     deleteAccount: _mapPs(app.deleteAccountRecord),
+    reorderAccount: _mapPs(app.reorderAccountRecord),
     getOAuthProviderSettings: _mapNo(app.getOAuthProviderSettings),
     updateOAuthProviderSettings: _mapPs(app.updateOAuthProviderSettings),
     startOAuthDeviceFlow: _mapPs(app.startOAuthAccountDeviceFlow),
@@ -62,7 +63,6 @@ export const gitClientRequestHandlers = {
     getMergeConflictState: _mapPs(app.getMergeConflictState),
     getMergeConflictFileDetails: _mapPs(app.getMergeConflictFileDetails),
     getFileDiff: _mapPs(app.getDiff),
-    showChangeFileContextMenu: _mapWindow(showChangeFileContextMenu),
     openFileInEditor: _mapWindow(openFileInEditor),
     stageFile: _mapPs(app.stageFile),
     stageRepoFiles: _mapPs(app.stageRepoFiles),
@@ -97,7 +97,6 @@ export const gitClientRequestHandlers = {
     createBranch: _mapPs(app.createBranch),
     createRemoteBranch: _mapPs(app.createRemoteBranch),
     publishBranch: _mapPs(app.publishBranch),
-    showRepoContextMenu: _mapWindow(showRepoContextMenu),
     runRemoteOperation: async (_: Ctx, ps: { repoId: number; operation: RemoteOperation }) => {
         try {
             return {
@@ -146,6 +145,19 @@ export const gitClientRequestHandlers = {
 
             throw error;
         }
+    },
+    copyRepoPath: async (_ctx: Ctx, ps: { repoId: number }) => {
+        clipboard.writeText(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
+    },
+    revealRepoInFinder: async (_ctx: Ctx, ps: { repoId: number }) => {
+        const result = await shell.openPath(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
+
+        if (result) {
+            throw new Error(result);
+        }
+    },
+    openRepoInTerminal: async (_ctx: Ctx, ps: { repoId: number }) => {
+        await openDirectoryInTerminal(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
     },
     copyRepoFilePath: async (_ctx: Ctx, ps: { repoId: number; path: string; mode: 'absolute' | 'relative' }) => {
         clipboard.writeText(ps.mode === 'absolute' ? app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path }) : ps.path);

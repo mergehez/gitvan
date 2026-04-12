@@ -1,17 +1,22 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { Repo } from '../../../shared/gitClient';
+import type { EditorSettings, Repo } from '../../../shared/gitClient';
+import ContextMenu from '../../components/ContextMenu.vue';
 import SidebarRepositories from '../../components/SidebarRepositories.vue';
+import { useAuth } from '../../composables/useAuth';
+import { useContextMenu } from '../../composables/useContextMenu';
 import { useRepo, type RepositoryState } from '../../composables/useRepo';
 import { useRepos } from '../../composables/useRepos';
 import { useSettings } from '../../composables/useSettings';
 import { tasks } from '../../composables/useTasks';
 
+type AuthState = ReturnType<typeof useAuth>;
 type SettingsState = ReturnType<typeof useSettings>;
 type ReposState = ReturnType<typeof useRepos>;
 type TasksState = typeof tasks;
-type RepositorySidebarSettingsMock = Pick<SettingsState, 'openSettingsWindow'>;
+type RepositorySidebarAuthMock = Pick<AuthState, 'accounts' | 'assignAccountToRepo'>;
+type RepositorySidebarSettingsMock = Pick<SettingsState, 'openSettingsWindow' | 'state'>;
 type RepositorySidebarReposMock = Pick<
     ReposState,
     | 'repos'
@@ -19,22 +24,42 @@ type RepositorySidebarReposMock = Pick<
     | 'selectedRepoId'
     | 'isCreateRepoModalOpen'
     | 'isCloneRepoModalOpen'
+    | 'canFetch'
     | 'canPull'
     | 'canPush'
     | 'createRepoGroup'
     | 'deleteRepoGroup'
-    | 'openRepoContextMenu'
+    | 'copyRepoPath'
+    | 'openRepoInTerminal'
     | 'pickRepo'
     | 'publishRepoBranch'
     | 'refreshRepositories'
+    | 'removeRepo'
+    | 'revealRepoInFinder'
     | 'renameRepo'
     | 'resetSandboxRepos'
     | 'runRepoRemoteOperation'
     | 'selectRepo'
+    | 'updateRepoGroup'
 >;
 
+let mockAuth: RepositorySidebarAuthMock;
 let mockSettings: RepositorySidebarSettingsMock;
 let mockRepos: RepositorySidebarReposMock;
+
+const settingsState = {
+    editors: [{ path: '/Applications/Visual Studio Code.app', label: 'Visual Studio Code' }],
+    defaultEditorPath: '/Applications/Visual Studio Code.app',
+    diffFontSize: 12,
+    diffViewMode: 'full-file',
+    showWhitespaceChanges: false,
+    activeView: 'changes',
+    showBranches: false,
+} satisfies EditorSettings;
+
+vi.mock('../../composables/useAuth.ts', () => ({
+    useAuth: () => mockAuth as unknown as AuthState,
+}));
 
 vi.mock('../../composables/useSettings.ts', () => ({
     useSettings: () => mockSettings as unknown as SettingsState,
@@ -88,7 +113,15 @@ function createRepository(id: number, name: string, groupName: string | undefine
 function createMockSettings() {
     return {
         openSettingsWindow: vi.fn(() => Promise.resolve()),
+        state: settingsState,
     } satisfies RepositorySidebarSettingsMock;
+}
+
+function createMockAuth() {
+    return reactive({
+        accounts: [],
+        assignAccountToRepo: vi.fn(() => Promise.resolve()),
+    } satisfies RepositorySidebarAuthMock);
 }
 
 function createMockRepos() {
@@ -98,21 +131,18 @@ function createMockRepos() {
         selectedRepoId: 1,
         isCreateRepoModalOpen: false,
         isCloneRepoModalOpen: false,
+        canFetch: vi.fn(() => true),
         canPull: vi.fn(() => false),
         canPush: vi.fn(() => false),
         createRepoGroup: vi.fn(),
+        copyRepoPath: vi.fn(() => Promise.resolve()),
         deleteRepoGroup: vi.fn(),
-        openRepoContextMenu: vi.fn(async function (this: RepositorySidebarReposMock, repoId: number, onRename?: (repo: RepositoryState) => void) {
-            const repo = this.repos.find((entry) => entry.id === repoId);
-            if (!repo) {
-                return;
-            }
-
-            onRename?.(repo);
-        }),
+        openRepoInTerminal: vi.fn(() => Promise.resolve()),
         pickRepo: vi.fn(),
         publishRepoBranch: vi.fn(),
         refreshRepositories: vi.fn(),
+        removeRepo: vi.fn(() => Promise.resolve()),
+        revealRepoInFinder: vi.fn(() => Promise.resolve()),
         renameRepo: vi.fn(async function (this: RepositorySidebarReposMock, repoId: number, name: string) {
             const repo = this.repos.find((entry) => entry.id === repoId);
             if (repo) {
@@ -124,6 +154,7 @@ function createMockRepos() {
         resetSandboxRepos: vi.fn(),
         runRepoRemoteOperation: vi.fn(),
         selectRepo: vi.fn(),
+        updateRepoGroup: vi.fn(() => Promise.resolve()),
     } satisfies RepositorySidebarReposMock);
 }
 
@@ -190,7 +221,7 @@ const fileTreeStub = defineComponent({
                 :key="entry.id"
                 type="button"
                 :data-testid="'repo-item-' + entry.id"
-                @contextmenu.prevent="onContextMenu && onContextMenu(entry)">
+                @contextmenu.prevent="onContextMenu && onContextMenu(entry, $event)">
                 {{ entry.title }}
             </button>
         </section>
@@ -235,9 +266,37 @@ const centeredInputModalStub = defineComponent({
     `,
 });
 
+const sidebarHost = defineComponent({
+    name: 'RepositorySidebarHost',
+    components: {
+        ContextMenu,
+        SidebarRepositories,
+    },
+    setup() {
+        const contextMenu = useContextMenu();
+        return {
+            contextMenu,
+        };
+    },
+    template: `
+        <div>
+            <SidebarRepositories />
+            <ContextMenu
+                :open="contextMenu.open"
+                :items="contextMenu.items"
+                :x="contextMenu.x"
+                :y="contextMenu.y"
+                @close="contextMenu.closeMenu" />
+        </div>
+    `,
+});
+
 function mountSidebar() {
-    return mount(SidebarRepositories, {
-        attachTo: document.body,
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    return mount(sidebarHost, {
+        attachTo: container,
         global: {
             stubs: {
                 Button: buttonStub,
@@ -262,6 +321,8 @@ function getTeleportedMenuButtons() {
 
 describe('RepositorySidebar', () => {
     beforeEach(() => {
+        useContextMenu().closeMenu();
+        mockAuth = createMockAuth();
         mockSettings = createMockSettings();
         mockRepos = createMockRepos();
     });
@@ -272,6 +333,8 @@ describe('RepositorySidebar', () => {
         await wrapper.get('[data-testid="settings-button"]').trigger('click');
 
         expect(mockSettings.openSettingsWindow).toHaveBeenCalledWith('repositories');
+
+        wrapper.unmount();
     });
 
     it('routes add menu actions to create and clone handlers', async () => {
@@ -306,7 +369,14 @@ describe('RepositorySidebar', () => {
 
         await wrapper.get('[data-testid="repo-item-1"]').trigger('contextmenu');
 
-        expect(mockRepos.openRepoContextMenu).toHaveBeenCalledWith(1, expect.any(Function));
+        expect(mockRepos.selectRepo).not.toHaveBeenCalled();
+
+        const renameMenuButton = Array.from(document.body.querySelectorAll('button')).find((entry) => entry.textContent?.trim() === 'Rename...');
+
+        expect(renameMenuButton).toBeTruthy();
+        renameMenuButton!.click();
+        await wrapper.vm.$nextTick();
+
         expect(wrapper.get('[data-testid="rename-modal"]').text()).toContain('Rename Repository');
 
         const renameInput = wrapper.get('#rename-repository-name');
@@ -319,6 +389,16 @@ describe('RepositorySidebar', () => {
         await renameButton!.trigger('click');
 
         expect(mockRepos.renameRepo).toHaveBeenCalledWith(1, 'Alpha Prime');
+
+        wrapper.unmount();
+    });
+
+    it('does not select a repository when opening its context menu', async () => {
+        const wrapper = mountSidebar();
+
+        await wrapper.get('[data-testid="repo-item-2"]').trigger('contextmenu');
+
+        expect(mockRepos.selectRepo).not.toHaveBeenCalled();
 
         wrapper.unmount();
     });

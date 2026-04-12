@@ -30,6 +30,8 @@ type FlattenedItem = {
 const props = defineProps<{
     item: FileTreeItem<TData, TRoot>;
     selection?: any | any[];
+    outlineSelection?: any | any[];
+    headerOutlined?: boolean;
     emptyText?: string;
     itemClass?: string;
     noActions?: boolean;
@@ -38,7 +40,17 @@ const props = defineProps<{
     rightIcon?: (item: Item) => `icon-\[${string}` | '' | undefined;
     onSelect: (item: Item, event?: MouseEvent) => void;
     onContextMenu?: (item: Item, event?: MouseEvent) => void;
+    onHeaderContextMenu?: (item: FileTreeItem<TData, TRoot>, event?: MouseEvent) => void;
 }>();
+
+function onHeaderContextMenu(event: MouseEvent) {
+    if (!props.onHeaderContextMenu) {
+        return;
+    }
+
+    event.preventDefault();
+    props.onHeaderContextMenu(props.item, event);
+}
 
 function onContextMenu(event: MouseEvent, item: Item) {
     if (!props.onContextMenu) {
@@ -50,6 +62,10 @@ function onContextMenu(event: MouseEvent, item: Item) {
 
 function isSelected(entry: Item) {
     return Array.isArray(props.selection) ? props.selection.includes(entry.id) : props.selection === entry.id;
+}
+
+function isOutlined(entry: Item) {
+    return Array.isArray(props.outlineSelection) ? props.outlineSelection.includes(entry.id) : props.outlineSelection === entry.id;
 }
 
 const collapsed = ref(false);
@@ -109,7 +125,12 @@ function onEntryClick(event: MouseEvent, entry: Item) {
 
 <template>
     <section class="min-h-0 overflow-auto scrollbar-thin">
-        <div v-if="item.title" class="flex items-center justify-between px-1 py-1 text-xs font-semibold tracking-[0.02em] text-default">
+        <div
+            v-if="item.title"
+            class="flex items-center justify-between px-1 py-1 text-xs font-semibold tracking-[0.02em] text-default"
+            :class="props.headerOutlined ? 'outline-1 -outline-offset-1 outline-white/35 bg-white/6' : undefined"
+            @contextmenu="onHeaderContextMenu"
+        >
             <div class="flex items-center uppercase gap-1 flex-1">
                 <IconButton severity="raised" smaller @click="collapsed = !collapsed" class="opacity-70" :icon="collapsed ? 'icon-[mdi--plus]' : 'icon-[mdi--minus]'" />
                 <p class="cursor-pointer flex-1" @click="collapsed = !collapsed">{{ item.title }}</p>
@@ -129,7 +150,12 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                 v-for="entryState in visibleChildren"
                 :key="`${entryState.item.id}`"
                 class="group flex min-h-6 items-center gap-1 px-2 py-0.5 text-left transition relative"
-                :class="[isSelected(entryState.item) ? 'bg-white/10 outline-1 -outline-offset-1 outline-white/8' : 'hover:bg-white/6', itemClass]">
+                :class="[
+                    isSelected(entryState.item) ? 'bg-white/10' : 'hover:bg-white/6',
+                    isOutlined(entryState.item) ? 'outline-1 -outline-offset-1 outline-white/35' : undefined,
+                    itemClass,
+                ]"
+            >
                 <button
                     type="button"
                     :data-testid="`file-tree-item-${entryState.item.id}`"
@@ -138,11 +164,13 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                     class="flex min-w-0 w-full flex-1 items-center gap-1.5 text-left overflow-hidden"
                     :style="{ paddingLeft: `${entryState.depth * 0.875}rem` }"
                     @click="(event) => onEntryClick(event as MouseEvent, entryState.item)"
-                    @contextmenu="(e) => onContextMenu(e, entryState.item)">
+                    @contextmenu="(e) => onContextMenu(e, entryState.item)"
+                >
                     <span
                         v-if="entryState.isGroup"
                         class="icon shrink-0 text-sm opacity-60"
-                        :class="entryState.isCollapsed ? 'icon-[mdi--chevron-right]' : 'icon-[mdi--chevron-down]'"></span>
+                        :class="entryState.isCollapsed ? 'icon-[mdi--chevron-right]' : 'icon-[mdi--chevron-down]'"
+                    ></span>
                     <span v-else class="block w-3 shrink-0"></span>
                     <slot name="item-leftIcon" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed">
                         <span v-if="props.leftIcon && props.leftIcon(entryState.item)" :class="twMerge('icon text-sm', props.leftIcon(entryState.item))"></span>

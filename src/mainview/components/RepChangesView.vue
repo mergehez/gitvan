@@ -1,22 +1,46 @@
 <script setup lang="ts">
-import DiffViewer from './DiffViewer.vue';
-import ChangesFileTree from './ChangesFileTree.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { tasks } from '../composables/useTasks';
-import Button from './Button.vue';
-import FileTree, { FileTreeItem } from './FileTree.vue';
-import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption, type ChangeFileContextMenuOptions } from '../../shared/gitClient';
-import Alert from './Alert.vue';
-import EtSplitter from './EtSplitter.vue';
+import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/gitClient';
+import { useContextMenu } from '../composables/useContextMenu';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
+import { useSettings } from '../composables/useSettings';
+import { tasks } from '../composables/useTasks';
+import Alert from './Alert.vue';
+import Button from './Button.vue';
+import ChangesFileTree from './ChangesFileTree.vue';
+import type { ContextMenuEntry } from './contextMenuTypes';
+import DiffViewer from './DiffViewer.vue';
+import EtSplitter from './EtSplitter.vue';
+import FileTree, { FileTreeItem } from './FileTree.vue';
 import IconButton from './IconButton.vue';
-import { gitClientRpc } from '../lib/gitClient';
 
+const contextMenu = useContextMenu();
 const repos = useRepos();
+const settings = useSettings();
 const repo = computed(() => repos.getSelectedRepo()!);
 const mergeState = useMergeHelper();
+const openWithEditors = computed(() => {
+    const defaultEditorPath = settings.state.defaultEditorPath;
+
+    return settings.state.editors
+        .map((editor) => ({
+            path: editor.path,
+            label: editor.label,
+        }))
+        .sort((left, right) => {
+            if (left.path === defaultEditorPath) {
+                return -1;
+            }
+
+            if (right.path === defaultEditorPath) {
+                return 1;
+            }
+
+            return left.label.localeCompare(right.label, undefined, { sensitivity: 'accent' });
+        });
+});
 
 const showDescription = ref(false);
 const selectedStagedIds = ref<string[]>([]);
@@ -129,7 +153,7 @@ function buildIgnoreOptions(path: string): ChangeFileContextMenuIgnoreOption[] {
     const extensionIndex = fileName.lastIndexOf('.');
     const extension = extensionIndex > 0 && extensionIndex < fileName.length - 1 ? fileName.slice(extensionIndex + 1) : undefined;
 
-    return [
+    const items = [
         {
             value: path,
             mode: 'file' as const,
@@ -155,6 +179,10 @@ function buildIgnoreOptions(path: string): ChangeFileContextMenuIgnoreOption[] {
             };
         }),
     ];
+    // Deduplicate options with later ones taking precedence
+    return items.filter((option, index) => {
+        return !items.slice(index + 1).some((other) => other.value === option.value);
+    });
 }
 
 function entryKind(item: ChangeTreeEntry) {
@@ -234,12 +262,11 @@ function selectedEntriesForItem(item: ChangeTreeEntry, event?: MouseEvent) {
     return entriesForKind(kind).filter((entry) => selectedSet.has(entry.id));
 }
 
-function buildChangeContextMenuOptions(items: ChangeTreeEntry[]): ChangeFileContextMenuOptions {
+function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEntry[] {
     const firstItem = items[0]!;
     const isStaged = firstItem.isStaged;
     const statuses = new Set(items.map((item) => item.status));
     const hasSingleSelection = items.length === 1;
-    const canIgnoreFile = hasSingleSelection && !isStaged && firstItem.status !== 'deleted';
     const onlyStatus = statuses.size === 1 ? items[0]!.status : undefined;
     const primaryAction = (() => {
         if (onlyStatus === 'deleted') {
@@ -257,17 +284,126 @@ function buildChangeContextMenuOptions(items: ChangeTreeEntry[]): ChangeFileCont
         return undefined;
     })();
     const deletedOnly = hasSingleSelection && onlyStatus === 'deleted';
+    const countLabel = items.length === 1 ? 'singular' : 'plural';
+    const stageActionLabel = {
+        'stage-files': {
+            singular: 'Stage File',
+            plural: 'Stage Files',
+        },
+        'unstage-files': {
+            singular: 'Unstage File',
+            plural: 'Unstage Files',
+        },
+    }[isStaged ? 'unstage-files' : 'stage-files'][countLabel];
+    const primaryActionLabel = primaryAction
+        ? {
+              'discard-changes': {
+                  singular: 'Discard Changes',
+                  plural: 'Discard Changes',
+              },
+              'delete-file': {
+                  singular: 'Delete File',
+                  plural: 'Delete Files',
+              },
+              'revert-deletion': {
+                  singular: 'Revert Deletion',
+                  plural: 'Revert Deletions',
+              },
+          }[primaryAction][countLabel]
+        : undefined;
 
-    return {
-        selectionCount: items.length,
-        primaryAction,
-        stageAction: isStaged ? 'unstage-files' : 'stage-files',
-        canIgnore: canIgnoreFile,
-        ignoreOptions: canIgnoreFile ? buildIgnoreOptions(firstItem.path) : [],
-        showCopyPaths: hasSingleSelection,
-        showRevealInFinder: hasSingleSelection && !deletedOnly,
-        showOpenWithDefaultProgram: hasSingleSelection && !deletedOnly,
-    };
+    const entries: ContextMenuEntry[] = [];
+
+    if (primaryAction && primaryActionLabel) {
+        entries.push({
+            id: `change-primary:${firstItem.id}`,
+            label: primaryActionLabel,
+            action: async () => {
+                await runChangeContextAction(items, { kind: primaryAction });
+            },
+        });
+    }
+
+    entries.push({
+        id: `change-stage:${firstItem.id}`,
+        label: stageActionLabel,
+        action: async () => {
+            await runChangeContextAction(items, { kind: isStaged ? 'unstage-files' : 'stage-files' });
+        },
+    });
+
+    if (hasSingleSelection && !isStaged && firstItem.status !== 'deleted') {
+        entries.push({ type: 'separator', id: `change-separator-ignore:${firstItem.id}` });
+        entries.push({
+            id: `change-ignore:${firstItem.id}`,
+            label: 'Ignore...',
+            children: buildIgnoreOptions(firstItem.path).map((option) => ({
+                id: `change-ignore:${firstItem.id}:${option.mode}:${option.value}`,
+                label: option.value,
+                action: async () => {
+                    await runChangeContextAction(items, {
+                        kind: 'ignore-path',
+                        value: option.value,
+                        mode: option.mode,
+                    });
+                },
+            })),
+        });
+    }
+
+    if (hasSingleSelection) {
+        entries.push({ type: 'separator', id: `change-separator-file:${firstItem.id}` });
+        entries.push({
+            id: `change-copy-path:${firstItem.id}`,
+            label: 'Copy File Path',
+            action: async () => {
+                await runChangeContextAction(items, { kind: 'copy-file-path' });
+            },
+        });
+        entries.push({
+            id: `change-copy-relative-path:${firstItem.id}`,
+            label: 'Copy Relative File Path',
+            action: async () => {
+                await runChangeContextAction(items, { kind: 'copy-relative-file-path' });
+            },
+        });
+
+        if (!deletedOnly) {
+            entries.push({
+                id: `change-reveal:${firstItem.id}`,
+                label: navigator.userAgent.includes('Mac') ? 'Reveal in Finder' : 'Reveal in File Manager',
+                action: async () => {
+                    await runChangeContextAction(items, { kind: 'reveal-in-finder' });
+                },
+            });
+            entries.push({
+                id: `change-open-with:${firstItem.id}`,
+                label: 'Open with...',
+                children: [
+                    ...openWithEditors.value.map((editor) => ({
+                        id: `change-open-with-editor:${firstItem.id}:${editor.path}`,
+                        label: editor.label,
+                        action: async () => {
+                            await runChangeContextAction(items, {
+                                kind: 'open-with-editor',
+                                editorPath: editor.path,
+                            });
+                        },
+                    })),
+                    ...(openWithEditors.value.length > 0 ? ([{ type: 'separator' as const, id: `change-open-with-separator:${firstItem.id}` }] as ContextMenuEntry[]) : []),
+                    {
+                        id: `change-open-with-picker:${firstItem.id}`,
+                        label: 'Pick Program',
+                        action: async () => {
+                            await runChangeContextAction(items, { kind: 'open-with' });
+                        },
+                    },
+                ],
+            });
+        }
+    }
+
+    return entries;
 }
 
 async function runChangeContextAction(items: ChangeTreeEntry[], action: ChangeFileContextMenuAction) {
@@ -319,6 +455,16 @@ async function runChangeContextAction(items: ChangeTreeEntry[], action: ChangeFi
         return;
     }
 
+    if (action.kind === 'open-with') {
+        await tasks.openFileInEditor.run({ repoId: repo.value.id, path: firstItem.path, mode: 'pick' }, `change:${firstItem.path}:pick-editor`);
+        return;
+    }
+
+    if (typeof action === 'object' && action.kind === 'open-with-editor') {
+        await tasks.openFileInEditor.run({ repoId: repo.value.id, path: firstItem.path, editorPath: action.editorPath }, `change:${firstItem.path}:editor:${action.editorPath}`);
+        return;
+    }
+
     await repo.value.openFileWithDefaultProgram(firstItem.path);
 }
 
@@ -326,13 +472,11 @@ async function onOpenChangeContextMenu(item: ChangeTreeEntry, event?: MouseEvent
     const selectedItems = selectedEntriesForItem(item, event);
     await onSelectChangeFile(item.path, item.isStaged ? 'staged' : 'unstaged');
 
-    const action = await gitClientRpc.request.showChangeFileContextMenu(buildChangeContextMenuOptions(selectedItems));
-
-    if (!action) {
+    if (!event) {
         return;
     }
 
-    await runChangeContextAction(selectedItems, action);
+    contextMenu.openAtEvent(event, buildChangeContextMenuEntries(selectedItems));
 }
 
 async function onSelectChangeEntry(item: ChangeTreeEntry, event?: MouseEvent) {
@@ -500,13 +644,6 @@ onUnmounted(() => {
                                 />
                             </template>
                             <template #item-actions="{ item }">
-                                <IconButton
-                                    class="focus:opacity-100 p-px text-xs"
-                                    v-tooltip="'Open in Editor'"
-                                    v-loading="isFileOperationRunning('openFileInEditor', item.path!)"
-                                    @click.stop="repo.openFileInEditor(item.path!)"
-                                    icon="icon-[mdi--application-edit-outline]"
-                                />
                                 <IconButton
                                     v-if="!item.isStaged"
                                     class="focus:opacity-100 p-px text-xs"

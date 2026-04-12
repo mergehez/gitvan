@@ -52,8 +52,8 @@ const repositoryStats = computed(() => {
 
 const showHealth = ref(false);
 
-function promptAccountAssignment() {
-    void auth.promptRepoAccountAssignment(repo.value);
+function promptAccountAssignment(event: MouseEvent) {
+    void auth.promptRepoAccountAssignment(repo.value, event);
 }
 
 const mergeConflictButtonLabel = computed(() => {
@@ -79,7 +79,8 @@ const navItems = computed<Array<{ label: string; value: NavigationView; subtitle
             v-for="item in navItems"
             :key="item.value"
             :severity="settings.state.activeView === item.value ? 'success' : 'secondary'"
-            @click="settings.setActiveView(item.value)">
+            @click="settings.setActiveView(item.value)"
+        >
             {{ item.label }}<span v-if="item.subtitle" class="text-sm opacity-70 pl-1">{{ item.subtitle }}</span>
         </Button>
 
@@ -91,7 +92,8 @@ const navItems = computed<Array<{ label: string; value: NavigationView; subtitle
             small
             title="Open Merge Conflict Resolver"
             class="mr-2"
-            @click="mergeState.openMergeConflictModal()">
+            @click="mergeState.openMergeConflictModal()"
+        >
             {{ mergeConflictButtonLabel }}
         </Button>
 

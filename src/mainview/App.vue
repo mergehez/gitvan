@@ -7,6 +7,7 @@ import AppErrorBanner from './components/AppErrorBanner.vue';
 import AppMergeConflictModal from './components/AppMergeConflictModal.vue';
 import AppPullBlockedByLocalChangesModal from './components/AppPullBlockedByLocalChangesModal.vue';
 import AppSuccessToast from './components/AppSuccessToast.vue';
+import ContextMenu from './components/ContextMenu.vue';
 import EtSplitter from './components/EtSplitter.vue';
 import GitClientHeader from './components/GitClientHeader.vue';
 import RepChangesView from './components/RepChangesView.vue';
@@ -16,6 +17,7 @@ import Settings from './components/Settings.vue';
 import SidebarBranches from './components/SidebarBranches.vue';
 import SidebarRepositories from './components/SidebarRepositories.vue';
 import { initializeStates } from './composables/initializeStates';
+import { useContextMenu } from './composables/useContextMenu';
 import { useRepos } from './composables/useRepos';
 import { useSettings } from './composables/useSettings';
 import { tasks } from './composables/useTasks';
@@ -24,6 +26,7 @@ initializeStates();
 
 const settings = useSettings();
 const repos = useRepos();
+const contextMenu = useContextMenu();
 const selectedRepo = computed(() => repos.getSelectedRepo());
 
 let disposeNativeCommandListener: (() => void) | undefined = undefined;
@@ -55,7 +58,8 @@ onBeforeUnmount(() => {
             default-width="200px"
             min-width="180px"
             max-width="50%"
-            local-storage-key="repositorySidebarWidth">
+            local-storage-key="repositorySidebarWidth"
+        >
             <template #left>
                 <SidebarRepositories />
             </template>
@@ -75,7 +79,8 @@ onBeforeUnmount(() => {
                                 max-width="50%"
                                 right-class="bg-x0 opacity-80"
                                 dragger-class="bg-x0 opacity-80"
-                                local-storage-key="branchesSidebarWidth">
+                                local-storage-key="branchesSidebarWidth"
+                            >
                                 <template #left>
                                     <SidebarBranches />
                                 </template>
@@ -104,9 +109,10 @@ onBeforeUnmount(() => {
         Loading...
     </div>
 
-
     <Alert severity="info" class="fixed bottom-4 right-4 z-10 mb-2 py-1 justify-center rounded px-2 flex items-center gap-2" v-if="tasks.isAnyLongRunningOperation()">
         <span class="icon icon-[mingcute--loading-fill] text-blue-500 text-2xl animate-spin"></span>
         <span class="text-xs">Running: {{ tasks.getLongRunningOperation || '...' }}</span>
     </Alert>
+
+    <ContextMenu :open="contextMenu.open" :items="contextMenu.items" :x="contextMenu.x" :y="contextMenu.y" @close="contextMenu.closeMenu" />
 </template>

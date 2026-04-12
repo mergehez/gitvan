@@ -1,8 +1,9 @@
 import { reactive } from 'vue';
 import type { OAuthDeviceStartResult, OAuthProvider } from '../../shared/gitClient';
-import { gitClientRpc } from '../lib/gitClient';
+import type { ContextMenuEntry } from '../components/contextMenuTypes';
 import { confirmAction } from '../lib/utils';
 import { _coreState } from './coreState';
+import { useContextMenu } from './useContextMenu';
 import { RepositoryState } from './useRepo';
 import { tasks } from './useTasks';
 import { toast } from './useToast';
@@ -19,6 +20,7 @@ export type CreateAccountParams = {
 
 export function _useAccounts() {
     let oauthPollingHandle: number | undefined = undefined;
+    const contextMenu = useContextMenu();
 
     function clearOAuthPolling() {
         if (oauthPollingHandle !== undefined) {
@@ -70,27 +72,35 @@ export function _useAccounts() {
                 throw error;
             }
         },
-        async promptRepoAccountAssignment(selectedRepo: RepositoryState) {
-            const result = await gitClientRpc.request.showAccountAssignmentMenu({
-                accounts: this.accounts.map((account) => ({
-                    id: account.id,
-                    label: account.label,
-                    provider: account.provider,
-                    authKind: account.authKind,
-                    username: account.username,
-                    host: account.host,
-                    hasSecret: account.hasSecret,
-                    isDefault: account.isDefault,
-                    createdAt: account.createdAt,
+        async promptRepoAccountAssignment(selectedRepo: RepositoryState, event?: MouseEvent) {
+            const items: ContextMenuEntry[] = [
+                {
+                    id: `assign-account:none:${selectedRepo.id}`,
+                    label: 'Unassigned',
+                    checked: selectedRepo.accountId === undefined,
+                    disabled: selectedRepo.accountId === undefined,
+                    action: async () => {
+                        await this.assignAccountToRepo(selectedRepo.id, undefined);
+                    },
+                },
+                ...(this.accounts.length > 0 ? ([{ type: 'separator' as const, id: `assign-account-separator:${selectedRepo.id}` }] as ContextMenuEntry[]) : []),
+                ...this.accounts.map((account) => ({
+                    id: `assign-account:${selectedRepo.id}:${account.id}`,
+                    label: `${account.label}${account.host && account.host !== 'github.com' ? ` (${account.host})` : ''}`,
+                    checked: selectedRepo.accountId === account.id,
+                    disabled: selectedRepo.accountId === account.id,
+                    action: async () => {
+                        await this.assignAccountToRepo(selectedRepo.id, account.id);
+                    },
                 })),
-                currentAccountId: selectedRepo.accountId,
-            });
+            ];
 
-            if (result === undefined) {
+            if (event) {
+                contextMenu.openAtEvent(event, items);
                 return;
             }
 
-            await this.assignRepoAccount(result === 0 ? undefined : result);
+            contextMenu.openAtViewportCenter(items);
         },
         async createAccount(params: CreateAccountParams) {
             if (params.authKind === 'oauth') {
@@ -155,8 +165,11 @@ export function _useAccounts() {
                 return;
             }
 
+            await this.assignAccountToRepo(_coreState.selectedRepoId, accountId);
+        },
+        async assignAccountToRepo(repoId: number, accountId: number | undefined) {
             const nextBootstrap = await tasks.assignRepoAccount.run({
-                repoId: _coreState.selectedRepoId!,
+                repoId,
                 accountId,
             });
 

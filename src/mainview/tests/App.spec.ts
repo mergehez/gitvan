@@ -33,6 +33,10 @@ vi.mock('../composables/initializeStates', () => ({
 
 vi.mock('../composables/useTasks', () => ({
     tasks: {
+        isBusy: false,
+        isOperationRunning: vi.fn(() => false),
+        isAnyLongRunningOperation: vi.fn(() => false),
+        getLongRunningOperation: null,
         abortMerge: {
             run: vi.fn(async () => ({ repos: [], groups: [], accounts: [], selectedRepoId: undefined })),
             isRunning: vi.fn(() => false),

@@ -1,10 +1,12 @@
 import { reactive, watch } from 'vue';
-import type { CloneRepoDefaults, RemoteOperation, Repo, RepoContextMenuAction } from '../../shared/gitClient.ts';
+import type { CloneRepoDefaults, RemoteOperation, Repo } from '../../shared/gitClient.ts';
+import type { ContextMenuEntry } from '../components/contextMenuTypes';
 import { gitClientRpc } from '../lib/gitClient.ts';
 import { isButtonBusyStateSilenced, runWithButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import { confirmAction } from '../lib/utils.ts';
 import { _coreState } from './coreState.ts';
 import { applyMutation } from './initializeStates.ts';
+import { useContextMenu } from './useContextMenu.ts';
 import { useRepo } from './useRepo.ts';
 import { useSettings } from './useSettings.ts';
 import { tasks } from './useTasks.ts';
@@ -15,6 +17,7 @@ type RetryPullAfterStashResult = Awaited<ReturnType<typeof tasks.retryPullAfterS
 
 export function _useRepositories() {
     const settings = useSettings();
+    const contextMenu = useContextMenu();
 
     watch(
         [() => _coreState.stateCounter],
@@ -245,6 +248,16 @@ export function _useRepositories() {
             await applyMutation(nextBootstrap);
             toast.showSuccessToast(successMessage);
         },
+        async copyRepoPath(repoId: number) {
+            await tasks.copyRepoPath.run({ repoId }, String(repoId));
+            toast.showSuccessToast('Repository path copied.');
+        },
+        async revealRepoInFinder(repoId: number) {
+            await tasks.revealRepoInFinder.run({ repoId }, String(repoId));
+        },
+        async openRepoInTerminal(repoId: number) {
+            await tasks.openRepoInTerminal.run({ repoId }, String(repoId));
+        },
         async runRepoRemoteOperation(repoId: number, operation: RemoteOperation) {
             const nextResult = await tasks.runRemoteOperation.run({ repoId, operation }, operation + '-' + String(repoId));
             await this.handleRemoteOperationResult(repoId, operation, nextResult);
@@ -264,7 +277,7 @@ export function _useRepositories() {
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('Branch published.');
         },
-        async openRepoContextMenu(repoId: number, onRename?: (repo: Repo) => void) {
+        async openRepoContextMenu(repoId: number, onRename?: (repo: Repo) => void, event?: MouseEvent) {
             const repo = this.repos.find((r) => r.id === repoId);
             if (!repo) {
                 return;
@@ -278,56 +291,89 @@ export function _useRepositories() {
                 }))
                 .toSorted((a, b) => (a.path === defaultEditorPath ? -1 : b.path === defaultEditorPath ? 1 : a.label.localeCompare(b.label, undefined, { sensitivity: 'accent' })));
 
-            const action = await gitClientRpc.request.showRepoContextMenu({
-                canPublish: !repo.status.error && !repo.status.hasUpstream && repo.status.publishableCommits > 0,
-                canPull: !repo.status.error && repo.status.behind > 0,
-                canPush: !repo.status.error && repo.status.ahead > 0,
-                hasRemote: repo.status.hasRemote,
-                openWithEditors,
-            });
+            const items: ContextMenuEntry[] = [
+                {
+                    id: `repo-fetch:${repo.id}`,
+                    label: 'Fetch',
+                    disabled: !this.canFetch(repo),
+                    action: async () => {
+                        await this.runRepoRemoteOperation(repo.id, 'fetch');
+                    },
+                },
+                {
+                    id: `repo-pull:${repo.id}`,
+                    label: 'Pull',
+                    disabled: !this.canPull(repo),
+                    action: async () => {
+                        await this.runRepoRemoteOperation(repo.id, 'pull');
+                    },
+                },
+                {
+                    id: `repo-push:${repo.id}`,
+                    label: 'Push',
+                    disabled: !this.canPush(repo),
+                    action: async () => {
+                        await this.runRepoRemoteOperation(repo.id, 'push');
+                    },
+                },
+                ...(!repo.status.error && !repo.status.hasUpstream && repo.status.publishableCommits > 0
+                    ? [
+                          {
+                              id: `repo-publish:${repo.id}`,
+                              label: repo.status.hasRemote ? 'Publish Branch' : 'Publish Branch (No Remote Configured)',
+                              disabled: !repo.status.hasRemote,
+                              action: async () => {
+                                  await this.publishRepoBranch(repo.id);
+                              },
+                          } satisfies ContextMenuEntry,
+                      ]
+                    : []),
+                { type: 'separator' as const, id: `repo-separator-open:${repo.id}` },
+                {
+                    id: `repo-open-with:${repo.id}`,
+                    label: 'Open with...',
+                    children: [
+                        ...openWithEditors.map((editor) => ({
+                            id: `repo-open-with-editor:${repo.id}:${editor.path}`,
+                            label: editor.label,
+                            action: async () => {
+                                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', editorPath: editor.path }, `repo:${repo.id}:editor:${editor.path}`);
+                            },
+                        })),
+                        ...(openWithEditors.length > 0 ? ([{ type: 'separator' as const, id: `repo-open-with-separator:${repo.id}` }] as ContextMenuEntry[]) : []),
+                        {
+                            id: `repo-open-with-picker:${repo.id}`,
+                            label: 'Pick Program',
+                            action: async () => {
+                                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', mode: 'pick' }, `repo:${repo.id}:pick-editor`);
+                            },
+                        },
+                    ],
+                },
+                { type: 'separator' as const, id: `repo-separator-edit:${repo.id}` },
+                {
+                    id: `repo-rename:${repo.id}`,
+                    label: 'Rename',
+                    action: async () => {
+                        onRename?.(repo);
+                    },
+                },
+                {
+                    id: `repo-delete:${repo.id}`,
+                    label: 'Delete',
+                    danger: true,
+                    action: async () => {
+                        await this.removeRepo(repo.id);
+                    },
+                },
+            ];
 
-            if (!action) {
+            if (event) {
+                contextMenu.openAtEvent(event, items);
                 return;
             }
 
-            await (async (repoId: number, action: RepoContextMenuAction) => {
-                if (action === 'fetch') {
-                    await this.runRepoRemoteOperation(repoId, 'fetch');
-                    return;
-                }
-
-                if (action === 'pull') {
-                    await this.runRepoRemoteOperation(repoId, 'pull');
-                    return;
-                }
-
-                if (action === 'push') {
-                    await this.runRepoRemoteOperation(repoId, 'push');
-                    return;
-                }
-
-                if (action === 'publish') {
-                    await this.publishRepoBranch(repoId);
-                    return;
-                }
-
-                if (action === 'open-with') {
-                    await tasks.openFileInEditor.run({ repoId, path: '', mode: 'pick' }, `repo:${repoId}:pick-editor`);
-                    return;
-                }
-
-                if (typeof action === 'object' && action.kind === 'open-with-editor') {
-                    await tasks.openFileInEditor.run({ repoId, path: '', editorPath: action.editorPath }, `repo:${repoId}:editor:${action.editorPath}`);
-                    return;
-                }
-
-                if (action === 'rename') {
-                    onRename?.(repo);
-                    return;
-                }
-
-                await this.removeRepo(repoId);
-            })(repoId, action);
+            contextMenu.openAtViewportCenter(items);
         },
     });
 

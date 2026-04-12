@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppBootstrapApi, EditorSettings, Repo, RepoContextMenuAction } from '../../../shared/gitClient';
+import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/gitClient';
+import type { ContextMenuEntry, ContextMenuItem } from '../../components/contextMenuTypes';
 import { _useRepositories } from '../../composables/useRepos';
 
-const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, mockCoreState } = vi.hoisted(() => {
+const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, mockCoreState, mockContextMenu } = vi.hoisted(() => {
     const testEditor = 'Visual Studio Code.app';
 
     return {
         testEditor,
         mockRequest: {
-            showRepoContextMenu: vi.fn(),
             getCloneRepoDefaults: vi.fn(),
             pickCloneRepoDirectory: vi.fn(),
         },
@@ -45,6 +45,12 @@ const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, moc
             repoGroups: [],
             selectedRepoId: undefined as number | undefined,
             applyBootstrap: vi.fn(),
+        },
+        mockContextMenu: {
+            openAtEvent: vi.fn(),
+            openAtPosition: vi.fn(),
+            openAtViewportCenter: vi.fn(),
+            closeMenu: vi.fn(),
         },
     };
 });
@@ -90,6 +96,10 @@ vi.mock('../../composables/useSettings.ts', () => ({
     useSettings: () => mockSettings,
 }));
 
+vi.mock('../../composables/useContextMenu.ts', () => ({
+    useContextMenu: () => mockContextMenu,
+}));
+
 function createRepo(): Repo {
     return {
         id: 1,
@@ -119,45 +129,71 @@ function createRepo(): Repo {
     };
 }
 
+function isMenuItem(entry: ContextMenuEntry | undefined): entry is ContextMenuItem {
+    return Boolean(entry && 'id' in entry);
+}
+
 describe('useRepos repo context menu', () => {
     beforeEach(() => {
         mockCoreState.repos = [createRepo()];
         mockCoreState.selectedRepoId = 1;
-        mockRequest.showRepoContextMenu.mockReset();
         mockTasks.openFileInEditor.run.mockClear();
+        mockContextMenu.openAtViewportCenter.mockClear();
     });
 
-    it('passes the default editor label into the repo context menu', async () => {
-        mockRequest.showRepoContextMenu.mockResolvedValue(undefined);
+    it('builds repo context-menu entries with configured editors', async () => {
         const repos = _useRepositories();
 
         await repos.openRepoContextMenu(1);
 
-        expect(mockRequest.showRepoContextMenu).toHaveBeenCalledWith(
-            expect.objectContaining({
-                openWithEditors: [{ path: `/Applications/${testEditor}`, label: testEditor.replace('.app', '') }],
-            }),
+        expect(mockContextMenu.openAtViewportCenter).toHaveBeenCalledTimes(1);
+
+        const items = mockContextMenu.openAtViewportCenter.mock.calls[0]?.[0] as ContextMenuEntry[];
+        const openWithEntry = items.find((item) => 'id' in item && item.id === 'repo-open-with:1');
+
+        expect(openWithEntry && 'children' in openWithEntry ? openWithEntry.children : undefined).toEqual(
+            expect.arrayContaining([expect.objectContaining({ label: testEditor.replace('.app', '') })]),
         );
     });
 
     it('opens the repository root through the picker for open-with', async () => {
-        const action: RepoContextMenuAction = 'open-with';
-        mockRequest.showRepoContextMenu.mockResolvedValue(action);
         const repos = _useRepositories();
 
         await repos.openRepoContextMenu(1);
+
+        const items = mockContextMenu.openAtViewportCenter.mock.calls[0]?.[0] as ContextMenuEntry[];
+        const openWithEntry = items.find((item) => 'id' in item && item.id === 'repo-open-with:1');
+        const pickProgramEntry = isMenuItem(openWithEntry)
+            ? openWithEntry.children?.find((item: ContextMenuEntry) => isMenuItem(item) && item.id === 'repo-open-with-picker:1')
+            : undefined;
+
+        expect(isMenuItem(pickProgramEntry) ? pickProgramEntry.action : undefined).toBeTruthy();
+        if (!isMenuItem(pickProgramEntry) || !pickProgramEntry.action) {
+            throw new Error('Expected repo-open-with-picker:1 menu item to be present.');
+        }
+
+        await pickProgramEntry.action();
 
         expect(mockTasks.openFileInEditor.run).toHaveBeenCalledWith({ repoId: 1, path: '', mode: 'pick' }, 'repo:1:pick-editor');
     });
 
     it('opens the repository root in a selected configured editor', async () => {
-        mockRequest.showRepoContextMenu.mockResolvedValue({
-            kind: 'open-with-editor',
-            editorPath: `/Applications/${testEditor}`,
-        });
         const repos = _useRepositories();
 
         await repos.openRepoContextMenu(1);
+
+        const items = mockContextMenu.openAtViewportCenter.mock.calls[0]?.[0] as ContextMenuEntry[];
+        const openWithEntry = items.find((item) => 'id' in item && item.id === 'repo-open-with:1');
+        const editorEntry = isMenuItem(openWithEntry)
+            ? openWithEntry.children?.find((item: ContextMenuEntry) => isMenuItem(item) && item.id === `repo-open-with-editor:1:/Applications/${testEditor}`)
+            : undefined;
+
+        expect(isMenuItem(editorEntry) ? editorEntry.action : undefined).toBeTruthy();
+        if (!isMenuItem(editorEntry) || !editorEntry.action) {
+            throw new Error(`Expected repo-open-with-editor entry for ${testEditor} to be present.`);
+        }
+
+        await editorEntry.action();
 
         expect(mockTasks.openFileInEditor.run).toHaveBeenCalledWith(
             { repoId: 1, path: '', editorPath: `/Applications/${testEditor}` },

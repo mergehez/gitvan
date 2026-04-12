@@ -10,27 +10,6 @@ export type NativeCommand = {
 
 export type RemoteOperation = 'fetch' | 'pull' | 'push';
 
-export type RepoContextMenuAction =
-    | 'fetch'
-    | 'pull'
-    | 'push'
-    | 'publish'
-    | 'open-with'
-    | 'rename'
-    | 'delete'
-    | {
-          kind: 'open-with-editor';
-          editorPath: string;
-      };
-
-export type RepoContextMenuOptions = {
-    canPublish: boolean;
-    canPull: boolean;
-    canPush: boolean;
-    hasRemote: boolean;
-    openWithEditors: EditorApp[];
-};
-
 export type IgnoreRepoPathMode = 'file' | 'directory' | 'pattern';
 
 export type ChangeFileContextMenuIgnoreOption = {
@@ -50,6 +29,7 @@ export type ChangeFileContextMenuOptions = {
     showCopyPaths: boolean;
     showRevealInFinder: boolean;
     showOpenWithDefaultProgram: boolean;
+    openWithEditors: EditorApp[];
 };
 
 export type ChangeFileContextMenuAction =
@@ -62,7 +42,12 @@ export type ChangeFileContextMenuAction =
     | { kind: 'copy-file-path' }
     | { kind: 'copy-relative-file-path' }
     | { kind: 'reveal-in-finder' }
-    | { kind: 'open-with-default-program' };
+    | { kind: 'open-with-default-program' }
+    | { kind: 'open-with' }
+    | {
+          kind: 'open-with-editor';
+          editorPath: string;
+      };
 
 export type ChangeStatus = 'clean' | 'modified' | 'added' | 'deleted' | 'renamed' | 'copied' | 'untracked' | 'unmerged' | 'type-changed';
 
