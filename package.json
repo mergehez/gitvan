@@ -8,10 +8,10 @@
     },
     "type": "module",
     "scripts": {
-        "b": "bun install && electrobun build",
+        "build": "bun install && vp build && electrobun build",
         "test:ui": "vitest run",
         "release:audit": "bash ./scripts/release-audit.sh",
-        "release:validate": "vitest run --exclude tests/App.real.spec.ts && bun run b",
+        "release:validate": "vitest run --exclude tests/App.real.spec.ts && bun run build",
         "release:mac": "bun run ./scripts/build.ts",
         "dev": "concurrently \"vp dev --port 5173\" \"vp build && electrobun dev --watch\"",
         "build:canary": "electrobun build --env=canary",
