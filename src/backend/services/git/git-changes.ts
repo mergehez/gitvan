@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type { FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/gitClient.js';
 import { runGit } from './git-common.js';
 import {

@@ -83,7 +83,7 @@ export const historyGit = {
             output
                 .split('\n')
                 .map((line) => line.trim())
-                .filter(Boolean),
+                .filter(Boolean)
         );
     },
     async getRepoHistory(repoPath: string): Promise<HistoryData> {
@@ -239,7 +239,7 @@ export const historyGit = {
             ? buildImagePreview(
                   filePath,
                   await readGitRevisionFileBuffer(repoPath, `${parentRevision}:${originalPath}`),
-                  await readGitRevisionFileBuffer(repoPath, `${commitSha}:${filePath}`),
+                  await readGitRevisionFileBuffer(repoPath, `${commitSha}:${filePath}`)
               )
             : undefined;
 

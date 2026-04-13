@@ -23,7 +23,7 @@ const props = withDefaults(
     }>(),
     {
         emptyText: 'No items available.',
-    },
+    }
 );
 
 const draggingIndex = ref<number | null>(null);

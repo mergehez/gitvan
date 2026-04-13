@@ -64,6 +64,7 @@ export function _useAccounts() {
                     setAsDefault: params.setAsDefault,
                 });
 
+                await tasks.openExternalUrl.run({ url: result.verificationUriComplete ?? result.verificationUri });
                 this.oauthDeviceFlow = result;
                 await this._pollOAuthDeviceFlow(result.sessionId, result.intervalSeconds, provider);
             } catch (error) {

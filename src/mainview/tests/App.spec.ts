@@ -248,6 +248,7 @@ function mountApp() {
 
 describe('App', () => {
     beforeEach(() => {
+        document.title = 'Initial Title';
         nativeCommandListener = undefined;
         window.gitClient = {
             invoke: vi.fn(),
@@ -298,6 +299,16 @@ describe('App', () => {
 
         expect(wrapper.get('[data-testid="selected-repository-name"]').text()).toBe('Beta');
         expect(wrapper.get('[data-testid="RepChangesView"]').text()).toContain('Beta');
+    });
+
+    it('updates the document title when the selected repository changes', async () => {
+        const wrapper = mountApp();
+
+        expect(document.title).toBe('Alpha - main - Gitvan');
+
+        await wrapper.get('[data-testid="select-repository-2"]').trigger('click');
+
+        expect(document.title).toBe('Beta - main - Gitvan');
     });
 
     it('switches between changes, explorer, and history in the right panel', async () => {

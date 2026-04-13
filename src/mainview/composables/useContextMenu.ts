@@ -36,7 +36,7 @@ function openAtEvent(event: MouseEvent | undefined, items: ContextMenuEntry[]) {
             x: event.clientX,
             y: event.clientY,
         },
-        items,
+        items
     );
 }
 
@@ -46,7 +46,7 @@ function openAtViewportCenter(items: ContextMenuEntry[]) {
             x: Math.round(window.innerWidth / 2),
             y: Math.round(window.innerHeight / 2),
         },
-        items,
+        items
     );
 }
 

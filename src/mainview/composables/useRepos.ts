@@ -1,8 +1,10 @@
 import { reactive, watch } from 'vue';
 import type { CloneRepoDefaults, RemoteOperation, Repo } from '../../shared/gitClient.ts';
 import type { ContextMenuEntry } from '../components/contextMenuTypes';
+import { buildOpenWithEntries } from '../lib/buildOpenWithEntries.ts';
 import { gitClientRpc } from '../lib/gitClient.ts';
 import { isButtonBusyStateSilenced, runWithButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
+import { writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
 import { _coreState } from './coreState.ts';
 import { applyMutation } from './initializeStates.ts';
@@ -27,7 +29,7 @@ export function _useRepositories() {
                 repo.update(_coreState.repos.find((r) => r.id === repo.id) ?? repo);
             });
         },
-        { deep: true },
+        { deep: true }
     );
     const state = reactive({
         repos: _coreState.repos.map((repo) => useRepo(repo)),
@@ -65,8 +67,21 @@ export function _useRepositories() {
         async getCloneRepoDefaults(): Promise<CloneRepoDefaults> {
             return await gitClientRpc.request.getCloneRepoDefaults(undefined);
         },
-        async pickCloneRepoDirectory() {
-            return await gitClientRpc.request.pickCloneRepoDirectory(undefined);
+        async pickDirectory(options?: { title?: string; buttonLabel?: string; defaultPath?: string }) {
+            return await gitClientRpc.request.pickDirectory(options);
+        },
+        async pickCloneRepoDirectory(defaultPath?: string) {
+            const selectedPath = await this.pickDirectory({
+                title: 'Choose Local Path',
+                buttonLabel: 'Use Selected Folder',
+                defaultPath,
+            });
+
+            if (!selectedPath) {
+                return undefined;
+            }
+
+            return selectedPath;
         },
         async cloneTrackedRepo(params: { accountId: number | undefined; cloneUrl: string; parentDirectory: string; repoName?: string | undefined; groupId?: number | undefined }) {
             const nextBootstrap = await tasks.cloneTrackedRepo.run(params);
@@ -100,7 +115,16 @@ export function _useRepositories() {
             toast.showSuccessToast('Sandboxes reset and re-added.');
         },
         async pickRepo(targetGroupId?: number) {
-            const nextBootstrap = await tasks.pickRepo.run({ targetGroupId });
+            const selectedPath = await this.pickDirectory({
+                title: 'Add Existing Repository',
+                buttonLabel: 'Add Selected Repository',
+            });
+
+            if (!selectedPath) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.addTrackedRepoFromPath.run({ path: selectedPath, targetGroupId });
 
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('Repository added.');
@@ -204,7 +228,7 @@ export function _useRepositories() {
                           fetch: 'Fetch completed.',
                           pull: 'Pull completed.',
                           push: 'Push completed.',
-                      }[operation],
+                      }[operation]
             );
         },
         async renameRepo(repoId: number, name: string) {
@@ -251,14 +275,29 @@ export function _useRepositories() {
             toast.showSuccessToast(successMessage);
         },
         async copyRepoPath(repoId: number) {
-            await tasks.copyRepoPath.run({ repoId }, String(repoId));
+            const repo = this.repos.find((entry) => entry.id === repoId);
+            if (!repo) {
+                return;
+            }
+
+            await writeClipboardText(repo.path);
             toast.showSuccessToast('Repository path copied.');
         },
         async revealRepoInFinder(repoId: number) {
-            await tasks.revealRepoInFinder.run({ repoId }, String(repoId));
+            const repo = this.repos.find((entry) => entry.id === repoId);
+            if (!repo) {
+                return;
+            }
+
+            await tasks.revealPathInFileManager.run({ path: repo.path, mode: 'open-directory' }, String(repoId));
         },
         async openRepoInTerminal(repoId: number) {
-            await tasks.openRepoInTerminal.run({ repoId }, String(repoId));
+            const repo = this.repos.find((entry) => entry.id === repoId);
+            if (!repo) {
+                return;
+            }
+
+            await tasks.openDirectoryInTerminal.run({ directoryPath: repo.path }, String(repoId));
         },
         async assignRepoTerminal(repoId: number, terminalPath: string | undefined) {
             const nextBootstrap = await tasks.assignRepoTerminal.run({ repoId, terminalPath });
@@ -302,13 +341,7 @@ export function _useRepositories() {
                 return;
             }
 
-            const defaultEditorPath = settings.state.defaultEditorPath;
-            const openWithEditors = settings.state.editors
-                .map((editor) => ({
-                    path: editor.path,
-                    label: editor.label,
-                }))
-                .toSorted((a, b) => (a.path === defaultEditorPath ? -1 : b.path === defaultEditorPath ? 1 : a.label.localeCompare(b.label, undefined, { sensitivity: 'accent' })));
+            const openWithEditors = settings.getOpenWithEditors();
 
             const items: ContextMenuEntry[] = [
                 {
@@ -351,23 +384,16 @@ export function _useRepositories() {
                 {
                     id: `repo-open-with:${repo.id}`,
                     label: 'Open with...',
-                    children: [
-                        ...openWithEditors.map((editor) => ({
-                            id: `repo-open-with-editor:${repo.id}:${editor.path}`,
-                            label: editor.label,
-                            action: async () => {
-                                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', editorPath: editor.path }, `repo:${repo.id}:editor:${editor.path}`);
-                            },
-                        })),
-                        ...(openWithEditors.length > 0 ? ([{ type: 'separator' as const, id: `repo-open-with-separator:${repo.id}` }] as ContextMenuEntry[]) : []),
-                        {
-                            id: `repo-open-with-picker:${repo.id}`,
-                            label: 'Pick Program',
-                            action: async () => {
-                                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', mode: 'pick' }, `repo:${repo.id}:pick-editor`);
-                            },
+                    children: buildOpenWithEntries({
+                        keyPrefix: `repo-open-with:${repo.id}`,
+                        editors: openWithEditors,
+                        onOpenWithEditor: async (editorPath) => {
+                            await settings.openRepoPathInEditor({ repoId: repo.id, path: '', editorPath }, `repo:${repo.id}:editor:${editorPath}`);
                         },
-                    ],
+                        onPickProgram: async () => {
+                            await settings.openRepoPathInEditor({ repoId: repo.id, path: '', mode: 'pick' }, `repo:${repo.id}:pick-editor`);
+                        },
+                    }),
                 },
                 { type: 'separator' as const, id: `repo-separator-edit:${repo.id}` },
                 {

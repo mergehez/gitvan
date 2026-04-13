@@ -57,7 +57,7 @@ function useOptions(binding: Bindings): ComputedOptions {
             size === 'sm' ? 'tooltip-sm' : size === 'xs' ? 'tooltip-xs' : undefined,
             customClass,
             shouldNowrap ? 'tooltip-nowrap' : undefined,
-            useHtml ? 'tooltip-html' : undefined,
+            useHtml ? 'tooltip-html' : undefined
         ),
         textClass: textClass ? twMerge('tooltip-text', textClass) : 'tooltip-text',
         arrowClass:

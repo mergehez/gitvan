@@ -68,7 +68,7 @@ watch(
 
         mergeResolutionContent.value = nextEditor.result;
     },
-    { immediate: true },
+    { immediate: true }
 );
 </script>
 

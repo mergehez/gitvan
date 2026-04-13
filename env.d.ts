@@ -1,13 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { GitClientRequestMap } from './src/electron/rpc';
-import type { IntegratedTerminalEvent, NativeCommand } from './src/shared/gitClient';
-
-type GitClientBridge = {
-    invoke<K extends keyof GitClientRequestMap>(name: K, params: GitClientRequestMap[K]['params']): Promise<GitClientRequestMap[K]['response']>;
-    onNativeCommand(listener: (command: NativeCommand) => void): () => void;
-    onIntegratedTerminalEvent(listener: (event: IntegratedTerminalEvent) => void): () => void;
-};
+import type { GitClientBridge, GitClientRequestMap } from './src/electrobun';
 
 declare module '*.vue' {
     import type { DefineComponent } from 'vue';
@@ -17,7 +10,9 @@ declare module '*.vue' {
 
 declare global {
     interface Window {
-        gitClient: GitClientBridge;
+        gitClient: GitClientBridge<GitClientRequestMap>;
+        __electrobunWindowId?: number;
+        __electrobunWebviewId?: number;
     }
 }
 

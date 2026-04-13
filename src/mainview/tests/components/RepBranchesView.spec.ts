@@ -34,7 +34,7 @@ vi.mock('../../composables/useTasks', () => ({
             get(_target, propertyKey) {
                 return mockTasks[propertyKey as keyof typeof mockTasks];
             },
-        },
+        }
     ),
 }));
 

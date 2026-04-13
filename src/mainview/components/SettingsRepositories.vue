@@ -102,7 +102,7 @@ watch(
             selectedGroup.value = nextGroups[0] ? `group:${nextGroups[0].id}` : 'create';
         }
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(
@@ -110,7 +110,7 @@ watch(
     () => {
         resetDraftFromSelection();
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(
@@ -121,7 +121,7 @@ watch(
         }
 
         resetDraftFromSelection();
-    },
+    }
 );
 
 function openCreateGroup() {

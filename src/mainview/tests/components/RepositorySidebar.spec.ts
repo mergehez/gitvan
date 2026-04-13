@@ -16,7 +16,7 @@ type SettingsState = ReturnType<typeof useSettings>;
 type ReposState = ReturnType<typeof useRepos>;
 type TasksState = typeof tasks;
 type RepositorySidebarAuthMock = Pick<AuthState, 'accounts' | 'assignAccountToRepo'>;
-type RepositorySidebarSettingsMock = Pick<SettingsState, 'openSettingsWindow' | 'state'>;
+type RepositorySidebarSettingsMock = Pick<SettingsState, 'openSettingsWindow' | 'openRepoPathInEditor' | 'getOpenWithEditors' | 'state'>;
 type RepositorySidebarReposMock = Pick<
     ReposState,
     | 'repos'
@@ -117,6 +117,8 @@ function createRepository(id: number, name: string, groupName: string | undefine
 function createMockSettings() {
     return {
         openSettingsWindow: vi.fn(() => Promise.resolve()),
+        openRepoPathInEditor: vi.fn(() => Promise.resolve()),
+        getOpenWithEditors: vi.fn(() => [...settingsState.editors]),
         state: settingsState,
     } satisfies RepositorySidebarSettingsMock;
 }

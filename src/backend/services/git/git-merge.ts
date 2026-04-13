@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
 import type { MergeConflictFileDetails, MergeConflictState } from '../../../shared/gitClient.js';
 import { runGit } from './git-common.js';
 import { countConflictMarkers, parseIncomingBranchFromMergeMessage, readGitIndexStageFile, readGitMetadataFile, readWorkingTreeFile } from './git-helpers.js';
@@ -82,7 +83,6 @@ export const mergeGit = {
         await runGit(['add', '--', path], repoPath);
     },
     async saveRepoMergeConflictResolution(repoPath: string, path: string, resolvedContent: string) {
-        const { writeFileSync } = await import('node:fs');
         writeFileSync(join(repoPath, path), resolvedContent, 'utf8');
         await runGit(['add', '--', path], repoPath);
     },
