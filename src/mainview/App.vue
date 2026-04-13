@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
+import AppConfirmationModal from './components/AppConfirmationModal.vue';
 import AppCreateRepositoryModal from './components/AppCreateRepositoryModal.vue';
 import AppErrorBanner from './components/AppErrorBanner.vue';
 import AppIntegratedTerminalModal from './components/AppIntegratedTerminalModal.vue';
@@ -49,6 +50,7 @@ onBeforeUnmount(() => {
 <template>
     <template v-if="!!tasks.abortMerge">
         <AppCloneRepositoryModal />
+        <AppConfirmationModal />
         <AppCreateRepositoryModal />
         <AppIntegratedTerminalModal />
         <AppMergeConflictModal />

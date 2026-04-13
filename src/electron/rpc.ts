@@ -2,7 +2,6 @@ import { BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import { app } from '../backend/services/app.js';
 import { git } from '../backend/services/git.js';
 import type { RemoteOperation } from '../shared/gitClient.js';
-import { showConfirmationDialog } from './dialogs.js';
 import { openFileInEditor, pickEditorApplication, pickTerminalApplication } from './extEditors.js';
 import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
 import { openDirectoryInTerminal } from './systemShell.js';
@@ -24,7 +23,6 @@ function _mapWindow<TMethod extends (window: BrowserWindow | undefined, ...args:
 }
 export const gitClientRequestHandlers = {
     getEditorSettings: _mapNo(() => app.getEditorSettings()),
-    confirmAction: _mapWindow(showConfirmationDialog),
     pickEditorApplication: _mapWindow(pickEditorApplication),
     pickTerminalApplication: _mapWindow(pickTerminalApplication),
     updateEditorSettings: _mapPs(app.updateEditorSettings),

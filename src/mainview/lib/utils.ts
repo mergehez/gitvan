@@ -1,5 +1,5 @@
 import { ChangeStatus } from '../../shared/gitClient';
-import { gitClientRpc } from './gitClient';
+import { confirmation } from '../composables/useConfirmation';
 
 const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp']);
 
@@ -197,5 +197,5 @@ export function formatBytes(bytes: number) {
 }
 
 export async function confirmAction(params: { title: string; message: string; detail?: string; confirmLabel?: string; cancelLabel?: string }) {
-    return await gitClientRpc.request.confirmAction(params);
+    return await confirmation.request(params);
 }
