@@ -45,7 +45,14 @@ bun run test:ui
 Build the app:
 
 ```bash
-bun run b:electrobun
+bun run build
+```
+
+Optional channel builds:
+
+```bash
+bun run build:canary
+bun run build:stable
 ```
 
 Or use the combined validation script:

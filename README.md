@@ -157,8 +157,6 @@ Gitvan does not require a separate backend service for its core desktop workflow
 bun install
 ```
 
-This repo currently keeps `package-lock.json`, but the app runtime and primary dev flow are Bun-based.
-
 ### Start Development Mode
 
 ```bash
@@ -176,8 +174,22 @@ bun run test:ui
 ### Build The App
 
 ```bash
-bun run b:electrobun
+bun run build
 ```
+
+This installs dependencies, builds the renderer with Vite Plus, and then runs the Electrobun app build.
+
+### Build Distribution Variants
+
+```bash
+bun run build:canary
+
+# or
+
+bun run build:stable
+```
+
+These run Electrobun's non-dev packaging flow directly for canary or stable channels.
 
 ### Build A macOS Release
 
@@ -185,7 +197,7 @@ bun run b:electrobun
 bun run release:mac
 ```
 
-The Electrobun build generates the macOS app bundle.
+This runs the release wrapper in `scripts/build.ts`, which prepares the icon assets, runs the stable Electrobun build, verifies the output, and installs the built app into `/Applications` unless you pass `--no-install`.
 
 ## Maintainer Notes
 
