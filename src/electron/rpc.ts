@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, app as electronApp, ipcMain, shell } from 'electron';
+import { join } from 'node:path';
 import { app } from '../backend/services/app.js';
 import { openFileInEditor, pickEditorApplication, pickTerminalApplication } from './extEditors.js';
 import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
@@ -25,7 +26,14 @@ export const gitClientRequestHandlers = {
     pickTerminalApplication: _mapWindow(pickTerminalApplication),
     updateEditorSettings: _mapPs(app.updateEditorSettings),
     getBootstrap: _mapNo(app.getBootstrap),
-    getCloneRepoDefaults: _mapNo(app.getCloneRepoDefaults),
+    getCloneRepoDefaults: async () => {
+        const storedDefaults = app.getCloneRepoDefaults();
+        const fallbackParentDirectory = join(electronApp.getPath('documents'), 'GitHub');
+
+        return {
+            parentDirectory: storedDefaults.parentDirectory || fallbackParentDirectory,
+        };
+    },
     pickDirectory: async (ctx: Ctx, ps?: { title?: string; buttonLabel?: string; defaultPath?: string }) => {
         const options = {
             title: ps?.title,
@@ -61,6 +69,9 @@ export const gitClientRequestHandlers = {
     reorderAccount: _mapPs(app.reorderAccountRecord),
     getOAuthProviderSettings: _mapNo(app.getOAuthProviderSettings),
     updateOAuthProviderSettings: _mapPs(app.updateOAuthProviderSettings),
+    openExternalUrl: async (_ctx: Ctx, ps: { url: string }) => {
+        await shell.openExternal(ps.url);
+    },
     startOAuthDeviceFlow: _mapPs(app.startOAuthAccountDeviceFlow),
     pollOAuthDeviceFlow: _mapPs(app.pollOAuthAccountDeviceFlow),
     assignRepoAccount: _mapPs(app.assignAccountToRepo),

@@ -30,6 +30,7 @@ export const apiMethods = [
     'reorderAccount',
     'getOAuthProviderSettings',
     'updateOAuthProviderSettings',
+    'openExternalUrl',
     'startOAuthDeviceFlow',
     'pollOAuthDeviceFlow',
     'assignRepoAccount',

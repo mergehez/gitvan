@@ -1,7 +1,6 @@
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { configureAppHost } from '../backend/services/app.js';
 import { useDb } from '../backend/services/database.js';
 import type { NativeCommand } from '../shared/gitClient.js';
 import { registerGitClientIpcHandlers } from './rpc.js';
@@ -80,29 +79,6 @@ async function createMainWindow() {
 
     mainWindow.on('closed', () => {
         mainWindow = undefined;
-    });
-
-    configureAppHost({
-        updateWindowTitle(title: string) {
-            mainWindow?.setTitle(title);
-        },
-        async pickDirectory() {
-            if (!mainWindow) {
-                return undefined;
-            }
-
-            const result = await dialog.showOpenDialog(mainWindow, {
-                properties: ['openDirectory'],
-            });
-
-            return result.canceled ? undefined : (result.filePaths[0] ?? undefined);
-        },
-        async openExternalUrl(url: string) {
-            await shell.openExternal(url);
-        },
-        getDefaultCloneParentDirectory() {
-            return join(app.getPath('documents'), 'GitHub');
-        },
     });
 
     if (devServerUrl) {

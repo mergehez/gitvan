@@ -32,13 +32,6 @@ import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
 
-type HostControls = {
-    updateWindowTitle?: (title: string) => void;
-    pickDirectory?: () => Promise<string | undefined>;
-    openExternalUrl?: (url: string) => Promise<void>;
-    getDefaultCloneParentDirectory?: () => string;
-};
-
 const db = useDb();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -237,8 +230,6 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
     };
 }
 
-let hostControls: HostControls = {};
-
 async function runProcess(command: string, args: string[], cwd: string) {
     await new Promise<void>((resolve, reject) => {
         const child = spawn(command, args, {
@@ -264,10 +255,6 @@ async function runProcess(command: string, args: string[], cwd: string) {
             resolve();
         });
     });
-}
-
-export function configureAppHost(nextHostControls: HostControls) {
-    hostControls = nextHostControls;
 }
 
 async function resolveVerifiedManualAccount(params: {
@@ -464,9 +451,6 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
         selectedRepoId,
     };
 
-    const r = bootstrap.repos.find((t) => t.id === bootstrap.selectedRepoId);
-    hostControls.updateWindowTitle?.(r ? `${r.name} - ${r.status.branch ?? 'No branch'} - Gitvan` : 'Gitvan');
-
     return bootstrap;
 }
 export const app = {
@@ -493,21 +477,10 @@ export const app = {
         return nextSettings;
     },
     getCloneRepoDefaults: (): CloneRepoDefaults => {
-        const fallback = hostControls.getDefaultCloneParentDirectory?.() ?? '';
-        const value = db.getSetting<unknown>('cloneParentDirectory', fallback);
+        const value = db.getSetting<unknown>('cloneParentDirectory', '');
         return {
-            parentDirectory: typeof value === 'string' && value.trim() ? value.trim() : fallback,
+            parentDirectory: typeof value === 'string' && value.trim() ? value.trim() : '',
         };
-    },
-    pickCloneRepoDirectory: async () => {
-        const selectedPath = await hostControls.pickDirectory?.();
-
-        if (!selectedPath) {
-            return undefined;
-        }
-
-        setStoredCloneParentDirectory(selectedPath);
-        return selectedPath;
     },
     addTrackedRepoFromPath: async (ps: { path: string; targetGroupId?: number }) => {
         const selectedPath = ps.path.trim();
@@ -597,15 +570,6 @@ export const app = {
         }
 
         return repos.sort((left, right) => left.fullName.localeCompare(right.fullName));
-    },
-    pickRepo: async (ps: { targetGroupId?: number }) => {
-        const selectedPath = await hostControls.pickDirectory?.();
-
-        if (!selectedPath) {
-            return buildBootstrap();
-        }
-
-        return await app.addTrackedRepoFromPath({ path: selectedPath, targetGroupId: ps.targetGroupId });
     },
     cloneTrackedRepo: async (ps: { accountId: number | undefined; cloneUrl: string; parentDirectory: string; repoName?: string | undefined; groupId?: number | undefined }) => {
         function extractRepoNameFromCloneUrl(remoteUrl: string) {
@@ -936,14 +900,11 @@ export const app = {
     },
     startOAuthAccountDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
         const settings = app.getOAuthProviderSettings();
-        const result = await startOAuthDeviceSession(settings, {
+        return await startOAuthDeviceSession(settings, {
             provider: ps.provider,
             label: ps.label,
             setAsDefault: ps.setAsDefault,
         });
-
-        await hostControls.openExternalUrl?.(result.verificationUriComplete ?? result.verificationUri);
-        return result;
     },
     pollOAuthAccountDeviceFlow: async (ps: { sessionId: string }): Promise<OAuthDevicePollResult> => {
         const result = await pollOAuthDeviceSession(ps.sessionId);
