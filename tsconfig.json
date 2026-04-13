@@ -18,7 +18,7 @@
         "noFallthroughCasesInSwitch": true,
         "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
-        "types": ["node", "vite/client"]
+        "types": ["bun", "vite/client"]
     },
     "include": ["src", "env.d.ts", "vite-export-api-methods.ts"],
     "exclude": ["node_modules", "dist", "build", "../../package/dist"]

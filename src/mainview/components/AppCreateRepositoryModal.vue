@@ -30,7 +30,7 @@ async function loadDefaults() {
 }
 
 async function chooseDirectory() {
-    const selectedDirectory = await repos.pickCloneRepoDirectory();
+    const selectedDirectory = await repos.pickCloneRepoDirectory(parentDirectory.value);
     if (selectedDirectory) {
         parentDirectory.value = selectedDirectory;
     }
@@ -59,7 +59,7 @@ watch(
         selectedGroupId.value = undefined;
         void loadDefaults();
     },
-    { immediate: true },
+    { immediate: true }
 );
 </script>
 

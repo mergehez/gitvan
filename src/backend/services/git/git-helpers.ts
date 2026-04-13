@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { isAbsolute, join } from 'path';
 import type { ChangeStatus, CommitFileEntry, FileDiffHunk } from '../../../shared/gitClient.js';
 import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
 
@@ -36,7 +36,7 @@ export function appendGitIgnoreEntry(repoPath: string, entry: string) {
         existingContent
             .split(/\r?\n/u)
             .map((line) => line.trim())
-            .filter(Boolean),
+            .filter(Boolean)
     );
 
     if (existingEntries.has(entry)) {

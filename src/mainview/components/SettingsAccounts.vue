@@ -113,7 +113,7 @@ watch(
         providerSettingsForm.gitlabClientId = settings.gitlabClientId;
         providerSettingsForm.gitlabHost = settings.gitlabHost;
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(
@@ -125,7 +125,7 @@ watch(
         selectedAccountForm.accessToken = '';
         selectedAccountForm.setAsDefault = account?.isDefault ?? false;
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(
@@ -150,7 +150,7 @@ watch(
             createAccountForm.authKind = 'system-git';
             createAccountForm.host = '';
         }
-    },
+    }
 );
 
 watch(
@@ -173,7 +173,7 @@ watch(
             createAccountForm.username = '';
             createAccountForm.accessToken = '';
         }
-    },
+    }
 );
 
 watch(
@@ -182,7 +182,7 @@ watch(
         if (createAccountForm.provider === 'gitlab') {
             createAccountForm.host = host;
         }
-    },
+    }
 );
 
 async function saveProviderSettings() {

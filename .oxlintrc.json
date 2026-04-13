@@ -1,8 +1,12 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["import", "typescript", "unicorn"],
     "rules": {
+        "no-floating-promises": "allow",
         "no-unused-vars": "off",
         "no-empty-file": "off"
+    },
+    "options": {
+        "typeCheck": true,
+        "typeAware": true
     }
 }

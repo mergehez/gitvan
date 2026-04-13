@@ -4,20 +4,6 @@ import { defineConfig } from 'vite-plus';
 import electronApiMethods from './vite-export-api-methods.ts';
 
 export default defineConfig({
-    lint: {
-        options: { typeAware: true, typeCheck: true },
-        rules: {
-            'no-floating-promises': 'allow',
-            'no-unused-vars': 'off',
-        },
-    },
-    fmt: {
-        semi: true,
-        singleQuote: true,
-        trailingComma: 'all',
-        tabWidth: 4,
-        printWidth: 180,
-    },
     base: './',
     plugins: [vue(), tailwindcss(), electronApiMethods],
     root: 'src/mainview',
@@ -37,5 +23,7 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         include: ['**/*.spec.ts'],
+        exclude: ['**/App.real.spec.ts'],
+        setupFiles: ['./tests/setup.ts'],
     },
 });

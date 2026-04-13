@@ -21,7 +21,7 @@ const props = withDefaults(
         defaultWidth: '50%',
         minWidth: '10%',
         maxWidth: '90%',
-    },
+    }
 );
 
 // Initialize width from localStorage if key is provided
@@ -107,7 +107,7 @@ onUnmounted(() => {
                 twMerge(
                     'w-1! z-60 min-h-full bg-surface-200 dark:bg-surface-900 hover:bg-primary-500 cursor-col-resize transition-colors',
                     props.draggerClass,
-                    props.draggerInvisible ? 'opacity-0 hover:opacity-100' : '',
+                    props.draggerInvisible ? 'opacity-0 hover:opacity-100' : ''
                 )
             "
             @mousedown="startResize"

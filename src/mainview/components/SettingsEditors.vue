@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { tasks } from '../composables/useTasks';
 import { useSettings } from '../composables/useSettings';
+import { tasks } from '../composables/useTasks';
 import Button from './Button.vue';
 
 const settings = useSettings();

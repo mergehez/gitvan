@@ -6,6 +6,7 @@ import { useContextMenu } from '../composables/useContextMenu.ts';
 import { useRepos } from '../composables/useRepos.ts';
 import { useSettings } from '../composables/useSettings.ts';
 import { tasks } from '../composables/useTasks.ts';
+import { buildOpenWithEntries } from '../lib/buildOpenWithEntries.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import Button from './Button.vue';
 import CenteredInputModal from './CenteredInputModal.vue';
@@ -24,21 +25,6 @@ const addMenuAnchor = ref<HTMLElement>();
 const addMenuPosition = ref({ top: 0, left: 0 });
 const contextMenuGroupId = ref<number>();
 const contextMenuRepoId = ref<number>();
-const openWithEditors = computed(() => {
-    const defaultEditorPath = settings.state.defaultEditorPath;
-
-    return [...settings.state.editors].sort((left, right) => {
-        if (left.path === defaultEditorPath) {
-            return -1;
-        }
-
-        if (right.path === defaultEditorPath) {
-            return 1;
-        }
-
-        return left.label.localeCompare(right.label, undefined, { sensitivity: 'accent' });
-    });
-});
 const fileManagerLabel = navigator.userAgent.includes('Mac') ? 'Open in Finder' : 'Open in File Manager';
 
 function canPublishBranch(r: Repo) {
@@ -165,7 +151,7 @@ watch(
             closeAddMenu();
             closeContextMenu();
         }
-    },
+    }
 );
 
 watch(
@@ -175,7 +161,7 @@ watch(
             closeAddMenu();
             closeContextMenu();
         }
-    },
+    }
 );
 
 watch(
@@ -185,7 +171,7 @@ watch(
             contextMenuGroupId.value = undefined;
             contextMenuRepoId.value = undefined;
         }
-    },
+    }
 );
 
 watch(isAddMenuOpen, (isOpen) => {
@@ -311,23 +297,16 @@ async function submitRepoRename() {
 }
 
 function buildOpenWithItems(repo: Repo): ContextMenuEntry[] {
-    return [
-        ...openWithEditors.value.map((editor) => ({
-            id: `open-with-editor:${repo.id}:${editor.path}`,
-            label: editor.label,
-            action: async () => {
-                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', editorPath: editor.path }, `repo:${repo.id}:editor:${editor.path}`);
-            },
-        })),
-        ...(openWithEditors.value.length > 0 ? ([{ type: 'separator' as const, id: `open-with-separator:${repo.id}` }] as ContextMenuEntry[]) : []),
-        {
-            id: `open-with-picker:${repo.id}`,
-            label: 'Pick Program',
-            action: async () => {
-                await tasks.openFileInEditor.run({ repoId: repo.id, path: '', mode: 'pick' }, `repo:${repo.id}:pick-editor`);
-            },
+    return buildOpenWithEntries({
+        keyPrefix: `open-with:${repo.id}`,
+        editors: settings.getOpenWithEditors(),
+        onOpenWithEditor: async (editorPath) => {
+            await settings.openRepoPathInEditor({ repoId: repo.id, path: '', editorPath }, `repo:${repo.id}:editor:${editorPath}`);
         },
-    ];
+        onPickProgram: async () => {
+            await settings.openRepoPathInEditor({ repoId: repo.id, path: '', mode: 'pick' }, `repo:${repo.id}:pick-editor`);
+        },
+    });
 }
 
 function buildMoveToGroupItems(repo: Repo): ContextMenuEntry[] {

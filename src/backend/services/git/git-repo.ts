@@ -1,6 +1,6 @@
-import { basename, dirname } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
-import type { BranchSummary, BranchesData, RemoteOperation } from '../../../shared/gitClient.js';
+import { existsSync, mkdirSync } from 'fs';
+import { basename, dirname } from 'path';
+import type { BranchesData, BranchSummary, RemoteOperation } from '../../../shared/gitClient.js';
 import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, GitRemoteAuth, runGit } from './git-common.js';
 import { normalizeBranchName, parseTrackCounts } from './git-helpers.js';
 
@@ -127,7 +127,7 @@ export const repoGit = {
                 'refs/heads',
                 'refs/remotes',
             ],
-            repoPath,
+            repoPath
         );
 
         const branches = output

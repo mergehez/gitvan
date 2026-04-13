@@ -155,11 +155,11 @@ function findActionZoneForLine(lineNumber: number, side: DiffEditorSide) {
     return (props.actionZones ?? []).find((zone) => {
         const startLineNumber = Math.max(
             1,
-            side === 'original' ? (zone.originalStartLineNumber ?? zone.startLineNumber ?? zone.afterLineNumber + 1) : (zone.startLineNumber ?? zone.afterLineNumber + 1),
+            side === 'original' ? (zone.originalStartLineNumber ?? zone.startLineNumber ?? zone.afterLineNumber + 1) : (zone.startLineNumber ?? zone.afterLineNumber + 1)
         );
         const endLineNumber = Math.max(
             startLineNumber,
-            side === 'original' ? (zone.originalEndLineNumber ?? zone.endLineNumber ?? startLineNumber) : (zone.endLineNumber ?? startLineNumber),
+            side === 'original' ? (zone.originalEndLineNumber ?? zone.endLineNumber ?? startLineNumber) : (zone.endLineNumber ?? startLineNumber)
         );
 
         return lineNumber >= startLineNumber && lineNumber <= endLineNumber;
@@ -520,7 +520,7 @@ watch(
     () => {
         void syncEditor();
         void syncDiffEditor();
-    },
+    }
 );
 
 onMounted(() => {

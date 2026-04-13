@@ -76,7 +76,7 @@ export const stashGit = {
             ? buildImagePreview(
                   filePath,
                   await readGitRevisionFileBuffer(repoPath, `${baseRevision}:${originalPath}`),
-                  await readGitRevisionFileBuffer(repoPath, `${stashRef}:${filePath}`),
+                  await readGitRevisionFileBuffer(repoPath, `${stashRef}:${filePath}`)
               )
             : undefined;
 

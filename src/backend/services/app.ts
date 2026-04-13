@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import type {
     AppBootstrapApi,
     BranchesData,
@@ -26,18 +25,12 @@ import type {
     RepoChangesData,
 } from '../../shared/gitClient.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
+import { executeTextCommand } from './bunSubprocess.js';
 import type { RepoRow } from './database.js';
 import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
-
-type HostControls = {
-    updateWindowTitle?: (title: string) => void;
-    pickDirectory?: () => Promise<string | undefined>;
-    openExternalUrl?: (url: string) => Promise<void>;
-    getDefaultCloneParentDirectory?: () => string;
-};
 
 const db = useDb();
 
@@ -102,6 +95,36 @@ const defaultEditorSettings: EditorSettings = {
     activeView: 'changes',
     showBranches: false,
 };
+
+type RemoteOperationResult =
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'completed';
+          stashed: false;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'conflicted';
+          stashed: false;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'blocked-by-local-changes';
+          stashed: false;
+          conflictingFiles: string[];
+      };
+
+type RetryPullAfterStashResult =
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'completed';
+          stashed: true;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'conflicted';
+          stashed: true;
+      };
 
 function getDefaultTerminalEntries(): EditorSettings['terminals'] {
     if (process.platform === 'darwin') {
@@ -207,37 +230,17 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
     };
 }
 
-let hostControls: HostControls = {};
-
 async function runProcess(command: string, args: string[], cwd: string) {
-    await new Promise<void>((resolve, reject) => {
-        const child = spawn(command, args, {
-            cwd,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: process.env,
-        });
-
-        let stderr = '';
-
-        child.stderr.setEncoding('utf8');
-        child.stderr.on('data', (chunk) => {
-            stderr += chunk;
-        });
-
-        child.on('error', reject);
-        child.on('close', (code) => {
-            if ((code ?? 1) !== 0) {
-                reject(new Error(stderr.trim() || `${command} exited with code ${code ?? -1}.`));
-                return;
-            }
-
-            resolve();
-        });
+    const [stdout, stderr, exitCode] = await executeTextCommand({
+        command,
+        args,
+        cwd,
+        env: process.env,
     });
-}
 
-export function configureAppHost(nextHostControls: HostControls) {
-    hostControls = nextHostControls;
+    if (exitCode !== 0) {
+        throw new Error(stderr.trim() || stdout.trim() || `${command} exited with code ${exitCode}.`);
+    }
 }
 
 async function resolveVerifiedManualAccount(params: {
@@ -383,7 +386,7 @@ async function resolveRepoRemoteAuth(repoId: number): Promise<RepoRemoteAuth | u
 function rethrowRemoteAuthError(error: unknown, auth: RepoRemoteAuth | undefined): never {
     if (auth && error instanceof GitCommandError && /repository .* not found/i.test(error.stderr)) {
         throw new Error(
-            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.',
+            'The assigned account authenticated successfully, but it does not have access to this remote repository. Check that the token is authorized for the repo or organization, or assign a different account.'
         );
     }
 
@@ -412,7 +415,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
             };
 
             return r;
-        }),
+        })
     );
 
     let selectedRepoId = db.getSelectedRepoId();
@@ -433,9 +436,6 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
         accounts: db.listAccounts(),
         selectedRepoId,
     };
-
-    const r = bootstrap.repos.find((t) => t.id === bootstrap.selectedRepoId);
-    hostControls.updateWindowTitle?.(r ? `${r.name} - ${r.status.branch ?? 'No branch'} - Gitvan` : 'Gitvan');
 
     return bootstrap;
 }
@@ -463,21 +463,26 @@ export const app = {
         return nextSettings;
     },
     getCloneRepoDefaults: (): CloneRepoDefaults => {
-        const fallback = hostControls.getDefaultCloneParentDirectory?.() ?? '';
-        const value = db.getSetting<unknown>('cloneParentDirectory', fallback);
+        const value = db.getSetting<unknown>('cloneParentDirectory', '');
         return {
-            parentDirectory: typeof value === 'string' && value.trim() ? value.trim() : fallback,
+            parentDirectory: typeof value === 'string' && value.trim() ? value.trim() : '',
         };
     },
-    pickCloneRepoDirectory: async () => {
-        const selectedPath = await hostControls.pickDirectory?.();
+    addTrackedRepoFromPath: async (ps: { path: string; targetGroupId?: number }) => {
+        const selectedPath = ps.path.trim();
 
         if (!selectedPath) {
-            return undefined;
+            return buildBootstrap();
         }
 
-        setStoredCloneParentDirectory(selectedPath);
-        return selectedPath;
+        const repo = await git.resolveGitRepo(selectedPath);
+        const repoId = db.upsertRepo(repo.path, repo.name);
+        if (ps.targetGroupId !== undefined) {
+            db.updateRepoGroup(repoId, ps.targetGroupId);
+        }
+        db.setSelectedRepoId(repoId);
+
+        return buildBootstrap();
     },
     listCloneableRepos: async (ps: { accountId: number }): Promise<CloneableRepo[]> => {
         const account = db.getAccountAuthById(ps.accountId);
@@ -542,7 +547,7 @@ export const app = {
                             updatedAt: typeof record.updated_at === 'string' && record.updated_at.trim() ? record.updated_at.trim() : undefined,
                         };
                     })
-                    .filter((entry): entry is CloneableRepo => entry !== undefined),
+                    .filter((entry): entry is CloneableRepo => entry !== undefined)
             );
 
             if (pageItems.length < 100) {
@@ -551,22 +556,6 @@ export const app = {
         }
 
         return repos.sort((left, right) => left.fullName.localeCompare(right.fullName));
-    },
-    pickRepo: async (ps: { targetGroupId?: number }) => {
-        const selectedPath = await hostControls.pickDirectory?.();
-
-        if (!selectedPath) {
-            return buildBootstrap();
-        }
-
-        const repo = await git.resolveGitRepo(selectedPath);
-        const repoId = db.upsertRepo(repo.path, repo.name);
-        if (ps.targetGroupId !== undefined) {
-            db.updateRepoGroup(repoId, ps.targetGroupId);
-        }
-        db.setSelectedRepoId(repoId);
-
-        return buildBootstrap();
     },
     cloneTrackedRepo: async (ps: { accountId: number | undefined; cloneUrl: string; parentDirectory: string; repoName?: string | undefined; groupId?: number | undefined }) => {
         function extractRepoNameFromCloneUrl(remoteUrl: string) {
@@ -897,14 +886,11 @@ export const app = {
     },
     startOAuthAccountDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
         const settings = app.getOAuthProviderSettings();
-        const result = await startOAuthDeviceSession(settings, {
+        return await startOAuthDeviceSession(settings, {
             provider: ps.provider,
             label: ps.label,
             setAsDefault: ps.setAsDefault,
         });
-
-        await hostControls.openExternalUrl?.(result.verificationUriComplete ?? result.verificationUri);
-        return result;
     },
     pollOAuthAccountDeviceFlow: async (ps: { sessionId: string }): Promise<OAuthDevicePollResult> => {
         const result = await pollOAuthDeviceSession(ps.sessionId);
@@ -921,7 +907,7 @@ export const app = {
             'oauth',
             completedResult.account.username,
             completedResult.account.host,
-            completedResult.account.setAsDefault,
+            completedResult.account.setAsDefault
         );
 
         try {
@@ -1115,16 +1101,37 @@ export const app = {
 
         return buildBootstrap();
     },
-    runRemoteOperation: async (ps: { repoId: number; operation: RemoteOperation }) => {
+    runRemoteOperation: async (ps: { repoId: number; operation: RemoteOperation }): Promise<RemoteOperationResult> => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
             await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, ps.operation, auth);
         } catch (error) {
+            if (ps.operation === 'pull' && git.isPullMergeConflictError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'conflicted',
+                    stashed: false,
+                };
+            }
+
+            if (ps.operation === 'pull' && git.isPullBlockedByLocalChangesError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'blocked-by-local-changes',
+                    stashed: false,
+                    conflictingFiles: git.getPullBlockedByLocalChangesFiles(error),
+                };
+            }
+
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return {
+            bootstrap: await buildBootstrap(),
+            status: 'completed',
+            stashed: false,
+        };
     },
     stashRepo: async (ps: { repoId: number }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1136,6 +1143,31 @@ export const app = {
         }
 
         return buildBootstrap();
+    },
+    retryPullAfterStash: async (ps: { repoId: number }): Promise<RetryPullAfterStashResult> => {
+        await app.stashRepo({ repoId: ps.repoId });
+
+        const auth = await resolveRepoRemoteAuth(ps.repoId);
+
+        try {
+            await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, 'pull', auth);
+        } catch (error) {
+            if (git.isPullMergeConflictError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'conflicted',
+                    stashed: true,
+                };
+            }
+
+            rethrowRemoteAuthError(error, auth);
+        }
+
+        return {
+            bootstrap: await buildBootstrap(),
+            status: 'completed',
+            stashed: true,
+        };
     },
     restoreStash: async (ps: { repoId: number; stashRef: string }) => {
         try {

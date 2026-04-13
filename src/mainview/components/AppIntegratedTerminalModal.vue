@@ -217,7 +217,7 @@ watch(
 
         await nextTick();
         await startTerminalSession(repoId, selectedTerminalPath.value || undefined);
-    },
+    }
 );
 
 onBeforeUnmount(() => {

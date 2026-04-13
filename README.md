@@ -134,9 +134,9 @@ Gitvan does not require a separate backend service for its core desktop workflow
 
 ## Build From Source
 
-> I use npm as the package manager in this repo.
+> I use Bun as the package manager in this repo.
 >
-> Runtime, test, and build commands are run through npm scripts.
+> Runtime, test, and build commands are run through Bun scripts.
 >
 > If you want to use another package manager, do these first:
 >
@@ -147,47 +147,45 @@ Gitvan does not require a separate backend service for its core desktop workflow
 
 ### Prerequisites
 
-- Node.js
+- Bun
 - Git
-- macOS on Apple Silicon for the documented release flow
+- macOS on Apple Silicon for the documented app build flow
 
 ### Install Dependencies
 
 ```bash
-npm install
+bun install
 ```
 
-This repo keeps `package-lock.json` as the lockfile.
+This repo currently keeps `package-lock.json`, but the app runtime and primary dev flow are Bun-based.
 
 ### Start Development Mode
 
 ```bash
-npm run dev
+bun run dev
 ```
 
-This starts the Vite renderer, the Electron TypeScript watcher, and the Electron app together.
+This starts the Vite renderer and the Electrobun app together.
 
 ### Run Tests
 
 ```bash
-npm run test:ui
+bun run test:ui
 ```
 
 ### Build The App
 
 ```bash
-npm run b
+bun run b:electrobun
 ```
 
 ### Build A macOS Release
 
 ```bash
-npm run release:mac
+bun run release:mac
 ```
 
-The macOS release script generates artifacts in `release/mac`.
-
-For signing, `scripts/build.ts` reads local values from environment variables or a local `.env` file. See [.env.example](.env.example) for supported keys. Do not commit your real signing configuration.
+The Electrobun build generates the macOS app bundle.
 
 ## Maintainer Notes
 
@@ -197,17 +195,17 @@ If you are preparing a public build or release, read these docs first:
 - [RELEASING.md](RELEASING.md)
 - [SECURITY.md](SECURITY.md)
 
-Generated outputs such as `release/`, `dist/`, `dist-electron/`, `.vite/`, local databases, and local `.env` files should stay out of source control.
+Generated outputs such as `build/`, `release/`, `dist/`, `.vite/`, local databases, and local `.env` files should stay out of source control.
 
 ## Tech Stack
 
-- Electron
+- Electrobun
 - Vue 3
 - Vite
 - TypeScript
 - Tailwind CSS
 - Monaco Editor
-- SQLite via `node:sqlite`
+- SQLite via `bun:sqlite`
 
 ## Roadmap
 

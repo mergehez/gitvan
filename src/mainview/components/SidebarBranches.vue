@@ -15,7 +15,7 @@ watch(
     () => {
         void repo.value.loadBranches();
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 const localBranches = computed<FileTreeItem<BranchSummary, { selection: string | undefined }>>(() => ({

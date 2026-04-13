@@ -4,6 +4,25 @@ import { confirmAction } from '../lib/utils';
 import { tasks } from './useTasks';
 import { toast } from './useToast';
 
+type OpenInEditorMode = 'default-or-pick' | 'pick' | 'default';
+
+function normalizeApplicationLabel(path: string, label?: string) {
+    const fallbackLabel = path.split(/[/\\]/).pop() || path;
+    return (label?.trim() || fallbackLabel).replace(/\.app$|\.exe$/i, '');
+}
+
+function compareApplications(left: { path: string; label: string }, right: { path: string; label: string }, defaultPath: string | undefined) {
+    if (left.path === defaultPath) {
+        return -1;
+    }
+
+    if (right.path === defaultPath) {
+        return 1;
+    }
+
+    return left.label.localeCompare(right.label, undefined, { sensitivity: 'accent' });
+}
+
 export function _useSettings() {
     return reactive({
         state: {
@@ -38,11 +57,93 @@ export function _useSettings() {
         closeSettingsWindow() {
             this.isSettingsModalOpen = false;
         },
+        getOpenWithEditors() {
+            return this.state.editors
+                .map((editor) => ({
+                    path: editor.path,
+                    label: normalizeApplicationLabel(editor.path, editor.label),
+                }))
+                .toSorted((left, right) => compareApplications(left, right, this.state.defaultEditorPath));
+        },
         async pickEditorApplication() {
-            return await tasks.pickEditorApplication.run(undefined);
+            const editor = await tasks.pickEditorApplication.run(undefined);
+
+            return editor
+                ? {
+                      path: editor.path,
+                      label: normalizeApplicationLabel(editor.path, editor.label),
+                  }
+                : undefined;
         },
         async pickTerminalApplication() {
-            return await tasks.pickTerminalApplication.run(undefined);
+            const terminal = await tasks.pickTerminalApplication.run(undefined);
+
+            return terminal
+                ? {
+                      path: terminal.path,
+                      label: normalizeApplicationLabel(terminal.path, terminal.label),
+                      locked: terminal.locked,
+                  }
+                : undefined;
+        },
+        async openRepoPathInEditor(params: { repoId: number; path: string; mode?: OpenInEditorMode; editorPath?: string }, identifier?: string) {
+            const mode = params.mode ?? 'default-or-pick';
+
+            const pickEditorPath = async () => {
+                const selectedEditor = await this.pickEditorApplication();
+                return selectedEditor?.path;
+            };
+
+            const openWithEditor = async (editorPath: string) => {
+                await tasks.openFileInEditor.run({ repoId: params.repoId, path: params.path, editorPath }, identifier);
+            };
+
+            if (params.editorPath) {
+                await openWithEditor(params.editorPath);
+                return;
+            }
+
+            if (mode === 'pick') {
+                const pickedEditorPath = await pickEditorPath();
+                if (!pickedEditorPath) {
+                    return;
+                }
+
+                await openWithEditor(pickedEditorPath);
+                return;
+            }
+
+            const defaultEditorPath = this.state.defaultEditorPath;
+            if (!defaultEditorPath) {
+                if (mode === 'default') {
+                    return;
+                }
+
+                const pickedEditorPath = await pickEditorPath();
+                if (!pickedEditorPath) {
+                    return;
+                }
+
+                await openWithEditor(pickedEditorPath);
+                return;
+            }
+
+            try {
+                await openWithEditor(defaultEditorPath);
+            } catch (error) {
+                const shouldRetryWithPicker = mode === 'default-or-pick' && error instanceof Error && error.message === 'The selected editor no longer exists on disk.';
+
+                if (!shouldRetryWithPicker) {
+                    throw error;
+                }
+
+                const pickedEditorPath = await pickEditorPath();
+                if (!pickedEditorPath) {
+                    return;
+                }
+
+                await openWithEditor(pickedEditorPath);
+            }
         },
         async updateEditorSettings(nextSettings: EditorSettings) {
             const plainSettings = ((): EditorSettings => {
@@ -50,12 +151,12 @@ export function _useSettings() {
                 return {
                     editors: settings.editors.map((editor) => ({
                         path: editor.path,
-                        label: editor.label.replace(/\.app$|\.exe$/i, ''),
+                        label: normalizeApplicationLabel(editor.path, editor.label),
                     })),
                     defaultEditorPath: settings.defaultEditorPath,
                     terminals: settings.terminals.map((terminal) => ({
                         path: terminal.path,
-                        label: terminal.label.replace(/\.app$|\.exe$/i, ''),
+                        label: normalizeApplicationLabel(terminal.path, terminal.label),
                         locked: terminal.locked === true,
                     })),
                     defaultTerminalPath: settings.defaultTerminalPath,
@@ -83,9 +184,9 @@ export function _useSettings() {
                 ...this.state.editors.filter((existing) => existing.path !== editor.path),
                 {
                     path: editor.path,
-                    label: editor.label,
+                    label: normalizeApplicationLabel(editor.path, editor.label),
                 },
-            ].sort((left, right) => left.label.localeCompare(right.label));
+            ].sort((left, right) => compareApplications(left, right, this.state.defaultEditorPath));
 
             await this._patchEditorSettings({
                 editors: nextEditors,
@@ -98,10 +199,10 @@ export function _useSettings() {
                 ...this.state.terminals.filter((existing) => existing.path !== terminal.path),
                 {
                     path: terminal.path,
-                    label: terminal.label,
+                    label: normalizeApplicationLabel(terminal.path, terminal.label),
                     locked: terminal.locked === true,
                 },
-            ].sort((left, right) => left.label.localeCompare(right.label));
+            ].sort((left, right) => compareApplications(left, right, this.state.defaultTerminalPath));
 
             await this._patchEditorSettings({
                 terminals: nextTerminals,
