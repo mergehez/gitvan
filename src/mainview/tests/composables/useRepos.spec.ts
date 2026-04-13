@@ -155,7 +155,7 @@ describe('useRepos repo context menu', () => {
         const openWithEntry = items.find((item) => 'id' in item && item.id === 'repo-open-with:1');
 
         expect(openWithEntry && 'children' in openWithEntry ? openWithEntry.children : undefined).toEqual(
-            expect.arrayContaining([expect.objectContaining({ label: testEditor.replace('.app', '') })]),
+            expect.arrayContaining([expect.objectContaining({ label: testEditor.replace('.app', '') })])
         );
     });
 
@@ -200,7 +200,7 @@ describe('useRepos repo context menu', () => {
 
         expect(mockTasks.openFileInEditor.run).toHaveBeenCalledWith(
             { repoId: 1, path: '', editorPath: `/Applications/${testEditor}` },
-            `repo:1:editor:/Applications/${testEditor}`,
+            `repo:1:editor:/Applications/${testEditor}`
         );
     });
 });

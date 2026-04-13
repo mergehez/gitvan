@@ -43,7 +43,7 @@ const editorOptions = computed(() =>
     createMonacoOptions({
         readonly: props.readonly,
         fontSize: props.fontSize,
-    }),
+    })
 );
 const conflictBlocks = computed(() => getConflictBlocks());
 const comparedBlock = computed(() => {
@@ -108,7 +108,7 @@ function applyConflictResolution(blockIndex: number, resolution: 'current' | 'in
                 text: nextValue,
             },
         ],
-        () => null,
+        () => null
     );
 
     comparedBlockIndex.value = undefined;
@@ -213,7 +213,7 @@ function applyEditorDecorations(blocks: MergeConflictBlock[]) {
                     currentHeaderLineNumber,
                     model.getLineMaxColumn(currentHeaderLineNumber),
                     currentHeaderLineNumber,
-                    model.getLineMaxColumn(currentHeaderLineNumber),
+                    model.getLineMaxColumn(currentHeaderLineNumber)
                 ),
                 options: {
                     afterContentClassName: 'merge-conflict-inline-hint merge-conflict-inline-hint--mine',
@@ -246,7 +246,7 @@ function applyEditorDecorations(blocks: MergeConflictBlock[]) {
                     incomingHeaderLineNumber,
                     model.getLineMaxColumn(incomingHeaderLineNumber),
                     incomingHeaderLineNumber,
-                    model.getLineMaxColumn(incomingHeaderLineNumber),
+                    model.getLineMaxColumn(incomingHeaderLineNumber)
                 ),
                 options: {
                     afterContentClassName: 'merge-conflict-inline-hint merge-conflict-inline-hint--incoming',
@@ -335,14 +335,14 @@ watch(
         modelRef.value.setValue(nextValue);
         applyingExternalValue.value = false;
         syncEditorChrome();
-    },
+    }
 );
 
 watch(
     () => [props.fontSize, props.readonly],
     () => {
         editorRef.value?.updateOptions(editorOptions.value);
-    },
+    }
 );
 
 watch(finalLanguage, (nextLanguage) => {

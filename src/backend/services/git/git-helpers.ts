@@ -36,7 +36,7 @@ export function appendGitIgnoreEntry(repoPath: string, entry: string) {
         existingContent
             .split(/\r?\n/u)
             .map((line) => line.trim())
-            .filter(Boolean),
+            .filter(Boolean)
     );
 
     if (existingEntries.has(entry)) {

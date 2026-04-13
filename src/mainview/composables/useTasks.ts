@@ -17,7 +17,7 @@ function updateLongRunningOperations() {
 
 export function useAsyncTask2<TMethod extends Api[keyof Api], TParams = Parameters<TMethod>[0], TResult = Awaited<ReturnType<TMethod>>>(
     methodName: string,
-    getMethod: (api: typeof gitClientRpc.request) => TMethod,
+    getMethod: (api: typeof gitClientRpc.request) => TMethod
 ) {
     const method = getMethod(gitClientRpc.request);
 

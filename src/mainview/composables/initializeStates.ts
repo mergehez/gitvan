@@ -26,7 +26,7 @@ function createGitClientAppState() {
         () => settings.state.activeView,
         () => {
             repos.getSelectedRepo()?.loadActiveViewData();
-        },
+        }
     );
 
     return {

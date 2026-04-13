@@ -23,7 +23,7 @@ const props = withDefaults(
     }>(),
     {
         showPathTooltip: false,
-    },
+    }
 );
 </script>
 

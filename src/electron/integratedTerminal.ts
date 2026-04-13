@@ -55,7 +55,7 @@ function sanitizeEnv() {
             ...process.env,
             TERM: 'xterm-256color',
             COLORTERM: process.env.COLORTERM || 'truecolor',
-        }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+        }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
     );
 }
 
@@ -102,7 +102,7 @@ export function createIntegratedTerminalSession(
     window: BrowserWindow,
     cwd: string,
     preferredShellPath?: string,
-    size?: { cols?: number; rows?: number },
+    size?: { cols?: number; rows?: number }
 ): IntegratedTerminalSession {
     const sessionId = randomUUID();
     const terminalCwd = resolveTerminalCwd(cwd);

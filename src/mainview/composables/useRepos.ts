@@ -27,7 +27,7 @@ export function _useRepositories() {
                 repo.update(_coreState.repos.find((r) => r.id === repo.id) ?? repo);
             });
         },
-        { deep: true },
+        { deep: true }
     );
     const state = reactive({
         repos: _coreState.repos.map((repo) => useRepo(repo)),
@@ -204,7 +204,7 @@ export function _useRepositories() {
                           fetch: 'Fetch completed.',
                           pull: 'Pull completed.',
                           push: 'Push completed.',
-                      }[operation],
+                      }[operation]
             );
         },
         async renameRepo(repoId: number, name: string) {

@@ -165,7 +165,7 @@ watch(
             closeAddMenu();
             closeContextMenu();
         }
-    },
+    }
 );
 
 watch(
@@ -175,7 +175,7 @@ watch(
             closeAddMenu();
             closeContextMenu();
         }
-    },
+    }
 );
 
 watch(
@@ -185,7 +185,7 @@ watch(
             contextMenuGroupId.value = undefined;
             contextMenuRepoId.value = undefined;
         }
-    },
+    }
 );
 
 watch(isAddMenuOpen, (isOpen) => {

@@ -12,7 +12,7 @@ const props = withDefaults(
     }>(),
     {
         severity: 'light',
-    },
+    }
 );
 const finalClass = computed(() => (props.smaller ? 'p-0.5 text-2xs' : 'p-1 text-sm'));
 </script>

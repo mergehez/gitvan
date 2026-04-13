@@ -316,7 +316,7 @@ async function pollGitlabDeviceFlow(session: OAuthDeviceSession): Promise<OAuthP
 
 export async function startOAuthDeviceSession(
     settings: OAuthProviderSettings,
-    params: { provider: OAuthProvider; label: string; setAsDefault: boolean },
+    params: { provider: OAuthProvider; label: string; setAsDefault: boolean }
 ): Promise<OAuthDeviceStartResult> {
     const provider = params.provider;
     const sessionId = randomUUID();

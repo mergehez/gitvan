@@ -235,7 +235,7 @@ export function useDb() {
                     'system-git',
                     null,
                     null,
-                    1,
+                    1
                 );
             }
 
@@ -470,7 +470,7 @@ export function useDb() {
                 username ?? null,
                 host ?? null,
                 setAsDefault ? 1 : 0,
-                id,
+                id
             );
         },
         reorderAccount(id: number, toIndex: number) {

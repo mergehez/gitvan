@@ -59,7 +59,7 @@ watch(
         selectedGroupId.value = undefined;
         void loadDefaults();
     },
-    { immediate: true },
+    { immediate: true }
 );
 </script>
 

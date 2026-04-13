@@ -18,7 +18,7 @@ describe('repoGit.getRepoBranches', () => {
 
     it('keeps the first non-current branch when stdout is trimmed', async () => {
         runGit.mockResolvedValue(
-            'bun\trefs/heads/bun\t\t\t\t76b9eac\tfix phpstan erors\nmain\trefs/heads/main\t*\torigin/main\t\t76b9eac\tfix phpstan erors\norigin\trefs/remotes/origin/HEAD\t \t\t\t76b9eac\tfix phpstan erors\norigin/main\trefs/remotes/origin/main\t \t\t\t76b9eac\tfix phpstan erors\nmaster\trefs/heads/master\t \torigin/master\t\tbdc22a0\tchange package name set version\norigin/master\trefs/remotes/origin/master\t \t\t\tbdc22a0\tchange package name set version',
+            'bun\trefs/heads/bun\t\t\t\t76b9eac\tfix phpstan erors\nmain\trefs/heads/main\t*\torigin/main\t\t76b9eac\tfix phpstan erors\norigin\trefs/remotes/origin/HEAD\t \t\t\t76b9eac\tfix phpstan erors\norigin/main\trefs/remotes/origin/main\t \t\t\t76b9eac\tfix phpstan erors\nmaster\trefs/heads/master\t \torigin/master\t\tbdc22a0\tchange package name set version\norigin/master\trefs/remotes/origin/master\t \t\t\tbdc22a0\tchange package name set version'
         );
 
         const { repoGit } = await import('../../../../../backend/services/git/git-repo.js');

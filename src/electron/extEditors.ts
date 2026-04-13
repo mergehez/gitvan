@@ -8,7 +8,7 @@ type OpenInEditorMode = 'default-or-pick' | 'pick' | 'default';
 
 async function pickApplication(
     window: BrowserWindow | undefined,
-    options: { title: string; buttonLabel: string; defaultPath: string; filters?: Array<{ name: string; extensions: string[] }> },
+    options: { title: string; buttonLabel: string; defaultPath: string; filters?: Array<{ name: string; extensions: string[] }> }
 ): Promise<{ path: string; label: string } | undefined> {
     if (!window) {
         return undefined;

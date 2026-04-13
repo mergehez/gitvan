@@ -53,7 +53,7 @@ watch(
         await nextTick();
         updatePosition();
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(
@@ -66,7 +66,7 @@ watch(
 
         window.removeEventListener('keydown', onWindowKeydown);
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 onBeforeUnmount(() => {

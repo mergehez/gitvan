@@ -182,7 +182,7 @@ export function createRemoteGitEnvForUrl(remoteUrl: string, auth: GitRemoteAuth 
         throw new GitCommandError(
             `The assigned account is configured for ${auth.host}, but the repository remote points to ${remoteHost}.`,
             ['git', 'remote', 'get-url', 'origin'],
-            remoteUrl,
+            remoteUrl
         );
     }
 
@@ -248,14 +248,14 @@ if (prompt.includes("username")) {
     process.stdout.write(process.env.GITVAN_ASKPASS_PASSWORD || "");
 }
 `,
-        'utf8',
+        'utf8'
     );
     writeFileSync(
         askPassLauncherPath,
         `#!/bin/sh
 ELECTRON_RUN_AS_NODE=1 exec "$GITVAN_ELECTRON_EXECUTABLE" "$GITVAN_ASKPASS_SCRIPT" "$@"
 `,
-        'utf8',
+        'utf8'
     );
     chmodSync(askPassScriptPath, 0o755);
     chmodSync(askPassLauncherPath, 0o755);

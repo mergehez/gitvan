@@ -227,7 +227,7 @@ watch(
             void refreshRepositoryList();
         }
     },
-    { immediate: true },
+    { immediate: true }
 );
 
 watch(browserAccounts, (accounts) => {

@@ -51,7 +51,7 @@ function createRepo() {
             'line 20',
             '',
         ].join('\n'),
-        'utf8',
+        'utf8'
     );
 
     return {

@@ -127,7 +127,7 @@ export const repoGit = {
                 'refs/heads',
                 'refs/remotes',
             ],
-            repoPath,
+            repoPath
         );
 
         const branches = output
