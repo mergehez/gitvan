@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { OAuthDeviceStartResult, OAuthProvider, OAuthProviderSettings } from '../../shared/gitClient.js';
 
 type OAuthSecretRecord = {
@@ -319,7 +318,7 @@ export async function startOAuthDeviceSession(
     params: { provider: OAuthProvider; label: string; setAsDefault: boolean }
 ): Promise<OAuthDeviceStartResult> {
     const provider = params.provider;
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     const label = params.label.trim();
 
     if (provider === 'github' && !settings.githubClientId.trim()) {

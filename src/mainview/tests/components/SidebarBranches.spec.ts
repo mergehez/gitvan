@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { defineComponent, reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, reactive } from 'vue';
 import SidebarBranches from '../../components/SidebarBranches.vue';
 
 const fileTreeStub = defineComponent({

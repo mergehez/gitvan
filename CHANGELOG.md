@@ -48,7 +48,7 @@ Initial public alpha release.
 
 ### Added
 
-- Electron desktop app shell with Vue-based renderer for local Git workflows.
+- Electrobun desktop app shell with Vue-based renderer for local Git workflows.
 - Repository management for adding existing repositories, creating new repositories, and cloning into tracked locations.
 - Repository grouping and persistent local repository catalog backed by SQLite.
 - Changes view with staged and unstaged file lists, built-in diff viewer, and common file actions.

@@ -4,14 +4,14 @@
 
 This repository should evolve toward a thin native shell and a Vue-owned application layer.
 
-When working in this codebase, preserve the current product feel. Refactors should reduce Electron/native coupling without changing anything user-facing unless the user explicitly asks for a UX change.
+When working in this codebase, preserve the current product feel. Refactors should reduce Electrobun/native coupling without changing anything user-facing unless the user explicitly asks for a UX change.
 
 ## Product Expectations
 
 - Do not redesign the app unless explicitly asked.
 - Preserve current labels, flows, shortcuts, modal behavior, and overall interaction patterns.
 - Prefer invisible architectural improvement over visible polish work.
-- If a native Electron dialog or menu can be replaced with an in-app Vue equivalent without users noticing, prefer the Vue implementation.
+- If a native Electrobun dialog or menu can be replaced with an in-app Vue equivalent without users noticing, prefer the Vue implementation.
 - Keep the existing visual language consistent with the current app: dark desktop UI, compact controls, modal-driven workflows, and utility-first layout patterns.
 
 ## Architecture Direction
@@ -25,19 +25,19 @@ In practice:
 
 - Move policy into Vue.
 - Keep RPC methods thin and explicit.
-- Prefer generic host primitives over app-specific Electron wrappers.
+- Prefer generic host primitives over app-specific Electrobun wrappers.
 
 Good example:
 
 - Better: Vue decides what path to open and calls a generic host method like "open this path".
-- Worse: Electron receives repo ids and decides labels, fallbacks, or user-flow branching.
+- Worse: Electrobun receives repo ids and decides labels, fallbacks, or user-flow branching.
 
 ## Vue Preferences
 
 - Prefer Vue 3 Composition API with focused composables.
 - Keep components presentational when possible and move reusable behavior into composables or small shared helpers.
 - Centralize duplicated menu-building and action-planning logic.
-- Prefer frontend-owned modals over native dialogs when parity is possible.
+- Prefer frontend-owned modals over native Electrobun dialogs when parity is possible.
 - Keep user-visible behavior stable while moving logic across the boundary.
 - Normalize and sort UI state in Vue instead of relying on the host to do it.
 

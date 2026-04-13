@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync } from 'fs';
+import { executeTextCommand } from '../backend/services/bunSubprocess.js';
 
 type CommandAttempt = {
     command: string;
@@ -7,30 +7,20 @@ type CommandAttempt = {
 };
 
 function runCommand({ command, args }: CommandAttempt, directoryPath: string) {
-    return new Promise<void>((resolve, reject) => {
-        const child = spawn(command, args, {
-            stdio: 'ignore',
-            cwd: directoryPath,
-            detached: process.platform !== 'win32',
-        });
-
-        child.on('error', reject);
-        child.on('close', (code) => {
-            if ((code ?? 1) !== 0) {
-                reject(new Error(`Command exited with code ${code ?? 1}.`));
-                return;
-            }
-
-            resolve();
-        });
-
-        if (process.platform !== 'win32') {
-            child.unref();
+    return executeTextCommand({
+        command,
+        args,
+        cwd: directoryPath,
+        detached: process.platform !== 'win32',
+    }).then(([stdout, stderr, exitCode]) => {
+        if (exitCode !== 0) {
+            throw new Error(stderr.trim() || stdout.trim() || `Command exited with code ${exitCode}.`);
         }
     });
 }
 
-export async function openDirectoryInTerminal(directoryPath: string, applicationPath?: string) {
+export async function openDirectoryInTerminal(ps: { directoryPath: string; applicationPath?: string }) {
+    const { directoryPath, applicationPath } = ps;
     const attempts: CommandAttempt[] = (() => {
         const configuredApplicationPath = applicationPath && existsSync(applicationPath) ? applicationPath : undefined;
 

@@ -29,8 +29,8 @@ else
 
     rg -n -H \
         -e '/Users/' \
-        -e 'APPLE_SIGNING_ID="Apple Development:[^"]+"' \
-        -e 'APPLE_SIGNING_ID="Developer ID Application:[^"]+"' \
+        -e 'ELECTROBUN_DEVELOPER_ID="Apple Development:[^"]+"' \
+        -e 'ELECTROBUN_DEVELOPER_ID="Developer ID Application:[^"]+"' \
         --glob '!release/**' \
         --glob '!dist/**' \
         --glob '!dist-electron/**' \
@@ -38,7 +38,7 @@ else
         --glob '!.vite/**' \
         "${tracked_files[@]}" \
         | rg -Fv "rg -n '/Users/|Apple Development:|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' . --glob '!.git' --glob '!node_modules' --glob '!dist' --glob '!dist-electron' --glob '!release'" \
-        | rg -v "APPLE_SIGNING_ID=\"Apple Development:|APPLE_SIGNING_ID=\"Developer ID Application:" \
+        | rg -v "ELECTROBUN_DEVELOPER_ID=\"Apple Development:|ELECTROBUN_DEVELOPER_ID=\"Developer ID Application:" \
         | rg -Fv "$benign_lockfile_glob_deprecation" >> "$tmp_matches_file" || true
 
     rg -n -H \

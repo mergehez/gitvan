@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import type {
     AppBootstrapApi,
     BranchesData,
@@ -26,6 +25,7 @@ import type {
     RepoChangesData,
 } from '../../shared/gitClient.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
+import { executeTextCommand } from './bunSubprocess.js';
 import type { RepoRow } from './database.js';
 import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
@@ -231,30 +231,16 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
 }
 
 async function runProcess(command: string, args: string[], cwd: string) {
-    await new Promise<void>((resolve, reject) => {
-        const child = spawn(command, args, {
-            cwd,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: process.env,
-        });
-
-        let stderr = '';
-
-        child.stderr.setEncoding('utf8');
-        child.stderr.on('data', (chunk) => {
-            stderr += chunk;
-        });
-
-        child.on('error', reject);
-        child.on('close', (code) => {
-            if ((code ?? 1) !== 0) {
-                reject(new Error(stderr.trim() || `${command} exited with code ${code ?? -1}.`));
-                return;
-            }
-
-            resolve();
-        });
+    const [stdout, stderr, exitCode] = await executeTextCommand({
+        command,
+        args,
+        cwd,
+        env: process.env,
     });
+
+    if (exitCode !== 0) {
+        throw new Error(stderr.trim() || stdout.trim() || `${command} exited with code ${exitCode}.`);
+    }
 }
 
 async function resolveVerifiedManualAccount(params: {

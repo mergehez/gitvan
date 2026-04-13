@@ -1,7 +1,62 @@
-import { existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite';
+import { Database } from 'bun:sqlite';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import type { AccountSummary, GroupSummary } from '../../shared/gitClient.js';
+
+type SQLInputValue = string | number | bigint | Uint8Array | Buffer | null;
+type SQLOutputValue = string | number | bigint | Uint8Array | Buffer | null;
+
+type DatabaseRunResult = {
+    lastInsertRowid: number | bigint;
+};
+
+type DatabaseStatement = {
+    run: (...params: SQLInputValue[]) => DatabaseRunResult;
+    get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T | undefined;
+    all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T[];
+};
+
+type DatabaseClient = {
+    exec: (sql: string) => void;
+    prepare: (sql: string) => DatabaseStatement;
+    close: () => void;
+};
+
+function applyConnectionPragmas(db: Pick<DatabaseClient, 'exec'>) {
+    db.exec('PRAGMA foreign_keys = ON;');
+    db.exec('PRAGMA busy_timeout = 5000;');
+}
+
+function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?: boolean }): DatabaseClient {
+    const db = new Database(databasePath, {
+        readonly: options?.readOnly === true,
+        create: options?.readOnly !== true,
+        readwrite: options?.readOnly !== true,
+        strict: true,
+    });
+
+    const client: DatabaseClient = {
+        exec: (sql: string) => {
+            db.exec(sql);
+        },
+        prepare: (sql: string): DatabaseStatement => {
+            const statement = db.query(sql);
+
+            return {
+                run: (...params: SQLInputValue[]) => statement.run(...params),
+                get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => (statement.get(...params) ?? undefined) as T | undefined,
+                all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.all(...params) as T[],
+            };
+        },
+        close: () => {
+            db.close();
+        },
+    };
+
+    applyConnectionPragmas(client);
+
+    return client;
+}
 
 export const DATABASE_FILE_NAME = 'gitvan.sqlite';
 
@@ -53,21 +108,12 @@ function createDbClient(userDataDir: string) {
     mkdirSync(userDataDir, { recursive: true });
 
     console.log(`Using database path: ${join(userDataDir, DATABASE_FILE_NAME)}`);
-    const db = new DatabaseSync(join(userDataDir, DATABASE_FILE_NAME), {
-        enableForeignKeyConstraints: true,
-        timeout: 5000,
-    });
+    const db = createRuntimeDatabaseClient(join(userDataDir, DATABASE_FILE_NAME));
 
     return {
         exec: (sql: string) => db.exec(sql),
-        prepare: (sql: string) => {
-            const statement = db.prepare(sql);
-            return {
-                run: (...params: SQLInputValue[]) => statement.run(...params),
-                get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.get(...params) as T | undefined,
-                all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.all(...params) as T[],
-            };
-        },
+        prepare: (sql: string) => db.prepare(sql),
+        close: () => db.close(),
     };
 }
 
@@ -250,10 +296,10 @@ export function useDb() {
                 return undefined;
             }
 
-            let tempDatabase: DatabaseSync | undefined = undefined;
+            let tempDatabase: DatabaseClient | undefined = undefined;
 
             try {
-                tempDatabase = new DatabaseSync(databasePath, { readOnly: true });
+                tempDatabase = createRuntimeDatabaseClient(databasePath, { readOnly: true });
 
                 const hasRepositoriesTable = tempDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repositories'").get() as
                     | { name: string }

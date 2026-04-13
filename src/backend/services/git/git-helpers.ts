@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { isAbsolute, join } from 'path';
 import type { ChangeStatus, CommitFileEntry, FileDiffHunk } from '../../../shared/gitClient.js';
 import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
 
