@@ -1,17 +1,20 @@
-import './css/app.css';
-import App from './App.vue';
 import { createApp } from 'vue';
+import App from './App.vue';
+import { vError } from './components/VError';
 import { vLoading } from './components/VLoading';
 import { vTooltip } from './components/VTooltip';
-import { vError } from './components/VError';
 import { initTasks } from './composables/useTasks';
+import './css/app.css';
+import { ensureGitClientBridge } from './lib/installGitClientBridge';
 
-const app = createApp(App);
+void ensureGitClientBridge().then(() => {
+    const app = createApp(App);
 
-app.directive('loading', vLoading);
-app.directive('tooltip', vTooltip);
-app.directive('error', vError);
+    app.directive('loading', vLoading);
+    app.directive('tooltip', vTooltip);
+    app.directive('error', vError);
 
-initTasks();
+    initTasks();
 
-app.mount('#app');
+    app.mount('#app');
+});

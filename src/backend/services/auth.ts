@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { executeTextCommand } from './bunSubprocess.js';
 
 const KEYCHAIN_SERVICE_NAME = 'Gitvan';
 
@@ -7,39 +7,16 @@ function getKeychainAccountName(accountId: number) {
 }
 
 async function runSecurityCommand(args: string[], allowedExitCodes: number[] = [0]) {
-    return await new Promise<string>((resolve, reject) => {
-        const child = spawn('security', args, {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.setEncoding('utf8');
-        child.stderr.setEncoding('utf8');
-
-        child.stdout.on('data', (chunk) => {
-            stdout += chunk;
-        });
-
-        child.stderr.on('data', (chunk) => {
-            stderr += chunk;
-        });
-
-        child.on('error', (error) => {
-            reject(error);
-        });
-
-        child.on('close', (code) => {
-            const exitCode = code ?? -1;
-            if (!allowedExitCodes.includes(exitCode)) {
-                reject(new Error(stderr.trim() || stdout.trim() || 'Keychain command failed.'));
-                return;
-            }
-
-            resolve(stdout.trim());
-        });
+    const [stdout, stderr, exitCode] = await executeTextCommand({
+        command: 'security',
+        args,
     });
+
+    if (!allowedExitCodes.includes(exitCode)) {
+        throw new Error(stderr.trim() || stdout.trim() || 'Keychain command failed.');
+    }
+
+    return stdout.trim();
 }
 
 function ensureSupportedPlatform() {

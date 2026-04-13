@@ -1,12 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { repoGit } from '../../../../../backend/services/git/git-repo.js';
 
-const runGit = vi.fn();
+const { runGit } = vi.hoisted(() => ({
+    runGit: vi.fn(),
+}));
 
-vi.mock('../../../../../backend/services/git/git-common.js', async () => {
-    const actual = await vi.importActual<typeof import('../../../../../backend/services/git/git-common.js')>('../../../../../backend/services/git/git-common.js');
+vi.mock('../../../../../backend/services/git/git-common.js', () => {
+    class GitCommandError extends Error {
+        command: string[];
+        stderr: string;
+        stdout: string;
+
+        constructor(message: string, command: string[], stderr: string, stdout = '') {
+            super(message);
+            this.name = 'GitCommandError';
+            this.command = command;
+            this.stderr = stderr;
+            this.stdout = stdout;
+        }
+    }
 
     return {
-        ...actual,
+        createRemoteGitEnv: vi.fn(),
+        createRemoteGitEnvForUrl: vi.fn(),
+        GitCommandError,
         runGit,
     };
 });
@@ -21,7 +38,6 @@ describe('repoGit.getRepoBranches', () => {
             'bun\trefs/heads/bun\t\t\t\t76b9eac\tfix phpstan erors\nmain\trefs/heads/main\t*\torigin/main\t\t76b9eac\tfix phpstan erors\norigin\trefs/remotes/origin/HEAD\t \t\t\t76b9eac\tfix phpstan erors\norigin/main\trefs/remotes/origin/main\t \t\t\t76b9eac\tfix phpstan erors\nmaster\trefs/heads/master\t \torigin/master\t\tbdc22a0\tchange package name set version\norigin/master\trefs/remotes/origin/master\t \t\t\tbdc22a0\tchange package name set version'
         );
 
-        const { repoGit } = await import('../../../../../backend/services/git/git-repo.js');
         const branches = await repoGit.getRepoBranches('/tmp/arg-starter-kit');
 
         expect(branches.currentBranch).toBe('main');

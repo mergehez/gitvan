@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { executeBufferCommand, executeTextCommand } from '../bunSubprocess.js';
 
 export type GitRemoteAuth = {
     kind: 'https-token';
@@ -29,143 +29,86 @@ export class GitCommandError extends Error {
 }
 
 export async function runGit(args: string[], cwd: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
-    return await new Promise<string>((resolve, reject) => {
-        try {
-            const gitExecutable = resolveGitExecutable();
-            const child = spawn(gitExecutable, args, {
-                cwd,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: createGitProcessEnv(env),
-            });
+    try {
+        const gitExecutable = resolveGitExecutable();
+        const [stdout, stderr, exitCode] = await executeTextCommand({
+            command: gitExecutable,
+            args,
+            cwd,
+            env: createGitProcessEnv(env),
+        });
 
-            let stdout = '';
-            let stderr = '';
+        if (!allowedExitCodes.includes(exitCode)) {
+            const normalizedStderr = stderr.trim();
+            const normalizedStdout = stdout.trim();
 
-            child.stdout.setEncoding('utf8');
-            child.stderr.setEncoding('utf8');
-
-            child.stdout.on('data', (chunk) => {
-                stdout += chunk;
-            });
-
-            child.stderr.on('data', (chunk) => {
-                stderr += chunk;
-            });
-
-            child.on('error', (error) => {
-                reject(new GitCommandError(error.message, [gitExecutable, ...args], error.message));
-            });
-
-            child.on('close', (code) => {
-                const exitCode = code ?? -1;
-                if (!allowedExitCodes.includes(exitCode)) {
-                    const normalizedStderr = stderr.trim();
-                    const normalizedStdout = stdout.trim();
-
-                    reject(new GitCommandError(normalizedStderr || normalizedStdout || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, normalizedStdout));
-                    return;
-                }
-
-                resolve(trimOutput ? stdout.trim() : stdout);
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            reject(new GitCommandError(message, [resolveGitExecutable(), ...args], message));
+            throw new GitCommandError(normalizedStderr || normalizedStdout || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, normalizedStdout);
         }
-    });
+
+        return trimOutput ? stdout.trim() : stdout;
+    } catch (error) {
+        if (error instanceof GitCommandError) {
+            throw error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+    }
 }
 
 export async function runGitWithInput(args: string[], cwd: string, input: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
-    return await new Promise<string>((resolve, reject) => {
-        try {
-            const gitExecutable = resolveGitExecutable();
-            const child = spawn(gitExecutable, args, {
-                cwd,
-                stdio: ['pipe', 'pipe', 'pipe'],
-                env: createGitProcessEnv(env),
-            });
+    try {
+        const gitExecutable = resolveGitExecutable();
+        const [stdout, stderr, exitCode] = await executeTextCommand({
+            command: gitExecutable,
+            args,
+            cwd,
+            env: createGitProcessEnv(env),
+            input,
+        });
 
-            let stdout = '';
-            let stderr = '';
+        if (!allowedExitCodes.includes(exitCode)) {
+            const normalizedStderr = stderr.trim();
+            const normalizedStdout = stdout.trim();
 
-            child.stdout.setEncoding('utf8');
-            child.stderr.setEncoding('utf8');
-
-            child.stdout.on('data', (chunk) => {
-                stdout += chunk;
-            });
-
-            child.stderr.on('data', (chunk) => {
-                stderr += chunk;
-            });
-
-            child.on('error', (error) => {
-                reject(new GitCommandError(error.message, [gitExecutable, ...args], error.message));
-            });
-
-            child.on('close', (code) => {
-                const exitCode = code ?? -1;
-                if (!allowedExitCodes.includes(exitCode)) {
-                    const normalizedStderr = stderr.trim();
-                    const normalizedStdout = stdout.trim();
-
-                    reject(new GitCommandError(normalizedStderr || normalizedStdout || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, normalizedStdout));
-                    return;
-                }
-
-                resolve(trimOutput ? stdout.trim() : stdout);
-            });
-
-            child.stdin.end(input, 'utf8');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            reject(new GitCommandError(message, [resolveGitExecutable(), ...args], message));
+            throw new GitCommandError(normalizedStderr || normalizedStdout || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, normalizedStdout);
         }
-    });
+
+        return trimOutput ? stdout.trim() : stdout;
+    } catch (error) {
+        if (error instanceof GitCommandError) {
+            throw error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+    }
 }
 
 export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes: number[] = [0], env: NodeJS.ProcessEnv = {}) {
-    return await new Promise<Buffer>((resolve, reject) => {
-        try {
-            const gitExecutable = resolveGitExecutable();
-            const child = spawn(gitExecutable, args, {
-                cwd,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: createGitProcessEnv(env),
-            });
+    try {
+        const gitExecutable = resolveGitExecutable();
+        const [stdout, stderr, exitCode] = await executeBufferCommand({
+            command: gitExecutable,
+            args,
+            cwd,
+            env: createGitProcessEnv(env),
+        });
 
-            const stdoutChunks: Buffer[] = [];
-            const stderrChunks: Buffer[] = [];
-
-            child.stdout.on('data', (chunk) => {
-                stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            });
-
-            child.stderr.on('data', (chunk) => {
-                stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            });
-
-            child.on('error', (error) => {
-                reject(new GitCommandError(error.message, [gitExecutable, ...args], error.message));
-            });
-
-            child.on('close', (code) => {
-                const exitCode = code ?? -1;
-                const stdout = Buffer.concat(stdoutChunks);
-                const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
-
-                if (!allowedExitCodes.includes(exitCode)) {
-                    reject(new GitCommandError(stderr || 'Git command failed.', [gitExecutable, ...args], stderr, stdout.toString('utf8').trim()));
-                    return;
-                }
-
-                resolve(stdout);
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            reject(new GitCommandError(message, [resolveGitExecutable(), ...args], message));
+        if (!allowedExitCodes.includes(exitCode)) {
+            const normalizedStderr = stderr.trim();
+            throw new GitCommandError(normalizedStderr || 'Git command failed.', [gitExecutable, ...args], normalizedStderr, stdout.toString('utf8').trim());
         }
-    });
+
+        return stdout;
+    } catch (error) {
+        if (error instanceof GitCommandError) {
+            throw error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+    }
 }
 
 export function createRemoteGitEnvForUrl(remoteUrl: string, auth: GitRemoteAuth | undefined) {
@@ -190,7 +133,7 @@ export function createRemoteGitEnvForUrl(remoteUrl: string, auth: GitRemoteAuth 
         GIT_TERMINAL_PROMPT: '0',
         GIT_ASKPASS: ensureAskPassScript(),
         GITVAN_ASKPASS_SCRIPT: askPassScriptPath,
-        GITVAN_ELECTRON_EXECUTABLE: process.execPath,
+        GITVAN_RUNTIME_EXECUTABLE: process.execPath,
         GITVAN_ASKPASS_USERNAME: auth.username,
         GITVAN_ASKPASS_PASSWORD: auth.password,
         GIT_CONFIG_COUNT: '1',
@@ -253,7 +196,7 @@ if (prompt.includes("username")) {
     writeFileSync(
         askPassLauncherPath,
         `#!/bin/sh
-ELECTRON_RUN_AS_NODE=1 exec "$GITVAN_ELECTRON_EXECUTABLE" "$GITVAN_ASKPASS_SCRIPT" "$@"
+exec "$GITVAN_RUNTIME_EXECUTABLE" "$GITVAN_ASKPASS_SCRIPT" "$@"
 `,
         'utf8'
     );
