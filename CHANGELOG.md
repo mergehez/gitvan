@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.1.0] - 2026-04-13
+
+Alpha milestone focused on the Bun and Electrobun migration, macOS release packaging, and runtime stability.
+
+### Changed
+
+- Migrated the desktop runtime fully from Electron/Node to Electrobun/Bun.
+- Replaced the integrated terminal backend with Bun's native PTY support.
+- Moved the SQLite layer to Bun's native `bun:sqlite` driver.
+- Replaced Node-oriented subprocess handling with Bun-based process execution across the host and backend services.
+- Removed runtime dynamic imports and remaining `node:`-scheme imports from the app codepath.
+- Rebuilt the macOS release flow around Electrobun's build pipeline instead of the previous Electron-era packaging path.
+- Updated source-build and release documentation to match the current `build`, `build:canary`, `build:stable`, and `release:mac` scripts.
+
 ## [0.0.3] - 2026-04-13
 
 Alpha update focused on repository actions, partial change workflows, and in-app terminal support.
