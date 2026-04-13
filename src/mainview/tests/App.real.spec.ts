@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { app, configureAppHost } from '../../backend/services/app';
+import { app } from '../../backend/services/app';
 import { useDb } from '../../backend/services/database';
 import type { AppBootstrapApi, EditorSettings } from '../../shared/gitClient';
 import AppVue from '../App.vue';
@@ -46,10 +46,6 @@ if (typeof (document as any).queryCommandSupported !== 'function') {
 }
 
 useDb().configureDatabase(realUserDataDir);
-configureAppHost({
-    updateWindowTitle: () => undefined,
-    getDefaultCloneParentDirectory: () => realUserDataDir,
-});
 
 const defaultEditorSettings: EditorSettings = {
     editors: [],

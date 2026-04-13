@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watchEffect } from 'vue';
 import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppConfirmationModal from './components/AppConfirmationModal.vue';
@@ -30,6 +30,11 @@ const settings = useSettings();
 const repos = useRepos();
 const contextMenu = useContextMenu();
 const selectedRepo = computed(() => repos.getSelectedRepo());
+
+watchEffect(() => {
+    const repo = selectedRepo.value;
+    document.title = repo ? `${repo.name} - ${repo.status.branch ?? 'No branch'} - Gitvan` : 'Gitvan';
+});
 
 let disposeNativeCommandListener: (() => void) | undefined = undefined;
 
