@@ -16,6 +16,12 @@ async function ensureAppIcon(appBundlePath: string) {
 }
 
 async function main() {
+    // if dev return
+    if (process.env.ELECTROBUN_BUILD_ENV === 'dev') {
+        console.log('Development mode detected, skipping app icon fix.');
+        return;
+    }
+
     if (process.platform !== 'darwin') {
         return;
     }
