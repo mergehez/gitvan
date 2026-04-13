@@ -103,6 +103,36 @@ const defaultEditorSettings: EditorSettings = {
     showBranches: false,
 };
 
+type RemoteOperationResult =
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'completed';
+          stashed: false;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'conflicted';
+          stashed: false;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'blocked-by-local-changes';
+          stashed: false;
+          conflictingFiles: string[];
+      };
+
+type RetryPullAfterStashResult =
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'completed';
+          stashed: true;
+      }
+    | {
+          bootstrap: AppBootstrapApi;
+          status: 'conflicted';
+          stashed: true;
+      };
+
 function getDefaultTerminalEntries(): EditorSettings['terminals'] {
     if (process.platform === 'darwin') {
         return [{ path: '/bin/zsh', label: 'zsh', locked: true }].filter((terminal) => existsSync(terminal.path));
@@ -1124,16 +1154,37 @@ export const app = {
 
         return buildBootstrap();
     },
-    runRemoteOperation: async (ps: { repoId: number; operation: RemoteOperation }) => {
+    runRemoteOperation: async (ps: { repoId: number; operation: RemoteOperation }): Promise<RemoteOperationResult> => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
             await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, ps.operation, auth);
         } catch (error) {
+            if (ps.operation === 'pull' && git.isPullMergeConflictError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'conflicted',
+                    stashed: false,
+                };
+            }
+
+            if (ps.operation === 'pull' && git.isPullBlockedByLocalChangesError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'blocked-by-local-changes',
+                    stashed: false,
+                    conflictingFiles: git.getPullBlockedByLocalChangesFiles(error),
+                };
+            }
+
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return {
+            bootstrap: await buildBootstrap(),
+            status: 'completed',
+            stashed: false,
+        };
     },
     stashRepo: async (ps: { repoId: number }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1145,6 +1196,31 @@ export const app = {
         }
 
         return buildBootstrap();
+    },
+    retryPullAfterStash: async (ps: { repoId: number }): Promise<RetryPullAfterStashResult> => {
+        await app.stashRepo({ repoId: ps.repoId });
+
+        const auth = await resolveRepoRemoteAuth(ps.repoId);
+
+        try {
+            await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, 'pull', auth);
+        } catch (error) {
+            if (git.isPullMergeConflictError(error)) {
+                return {
+                    bootstrap: await buildBootstrap(),
+                    status: 'conflicted',
+                    stashed: true,
+                };
+            }
+
+            rethrowRemoteAuthError(error, auth);
+        }
+
+        return {
+            bootstrap: await buildBootstrap(),
+            status: 'completed',
+            stashed: true,
+        };
     },
     restoreStash: async (ps: { repoId: number; stashRef: string }) => {
         try {

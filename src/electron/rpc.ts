@@ -1,7 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { app } from '../backend/services/app.js';
-import { git } from '../backend/services/git.js';
-import type { RemoteOperation } from '../shared/gitClient.js';
 import { openFileInEditor, pickEditorApplication, pickTerminalApplication } from './extEditors.js';
 import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
 import { openDirectoryInTerminal as openDirectoryInSystemTerminal } from './systemShell.js';
@@ -41,7 +39,6 @@ export const gitClientRequestHandlers = {
         return result.canceled ? undefined : (result.filePaths[0] ?? undefined);
     },
     listCloneableRepos: _mapPs(app.listCloneableRepos),
-    listCloneableRepos2: _mapPs(app.listCloneableRepos),
     addTrackedRepoFromPath: _mapPs(app.addTrackedRepoFromPath),
     cloneTrackedRepo: _mapPs(app.cloneTrackedRepo),
     createTrackedLocalRepo: _mapPs(app.createTrackedLocalRepo),
@@ -112,55 +109,8 @@ export const gitClientRequestHandlers = {
     createBranch: _mapPs(app.createBranch),
     createRemoteBranch: _mapPs(app.createRemoteBranch),
     publishBranch: _mapPs(app.publishBranch),
-    runRemoteOperation: async (_: Ctx, ps: { repoId: number; operation: RemoteOperation }) => {
-        try {
-            return {
-                bootstrap: await app.runRemoteOperation(ps),
-                status: 'completed' as const,
-                stashed: false,
-            };
-        } catch (error) {
-            if (ps.operation === 'pull' && git.isPullMergeConflictError(error)) {
-                return {
-                    bootstrap: await app.getBootstrap(),
-                    status: 'conflicted' as const,
-                    stashed: false,
-                };
-            }
-
-            if (ps.operation !== 'pull' || !git.isPullBlockedByLocalChangesError(error)) {
-                throw error;
-            }
-
-            return {
-                bootstrap: await app.getBootstrap(),
-                status: 'blocked-by-local-changes' as const,
-                stashed: false,
-                conflictingFiles: git.getPullBlockedByLocalChangesFiles(error),
-            };
-        }
-    },
-    retryPullAfterStash: async (_ctx: Ctx, ps: { repoId: number }) => {
-        await app.stashRepo({ repoId: ps.repoId });
-
-        try {
-            return {
-                bootstrap: await app.runRemoteOperation({ repoId: ps.repoId, operation: 'pull' }),
-                status: 'completed' as const,
-                stashed: true,
-            };
-        } catch (error) {
-            if (git.isPullMergeConflictError(error)) {
-                return {
-                    bootstrap: await app.getBootstrap(),
-                    status: 'conflicted' as const,
-                    stashed: true,
-                };
-            }
-
-            throw error;
-        }
-    },
+    runRemoteOperation: _mapPs(app.runRemoteOperation),
+    retryPullAfterStash: _mapPs(app.retryPullAfterStash),
     revealPathInFileManager: async (_ctx: Ctx, ps: { path: string; mode: 'open-directory' | 'reveal-item' }) => {
         if (ps.mode === 'reveal-item') {
             shell.showItemInFolder(ps.path);

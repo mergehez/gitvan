@@ -8,7 +8,6 @@ export const apiMethods = [
     'getCloneRepoDefaults',
     'pickDirectory',
     'listCloneableRepos',
-    'listCloneableRepos2',
     'addTrackedRepoFromPath',
     'cloneTrackedRepo',
     'createTrackedLocalRepo',
