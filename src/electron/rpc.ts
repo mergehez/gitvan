@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { app } from '../backend/services/app.js';
 import { git } from '../backend/services/git.js';
 import type { RemoteOperation } from '../shared/gitClient.js';
@@ -28,10 +28,21 @@ export const gitClientRequestHandlers = {
     updateEditorSettings: _mapPs(app.updateEditorSettings),
     getBootstrap: _mapNo(app.getBootstrap),
     getCloneRepoDefaults: _mapNo(app.getCloneRepoDefaults),
-    pickCloneRepoDirectory: _mapNo(app.pickCloneRepoDirectory),
+    pickDirectory: async (ctx: Ctx, ps?: { title?: string; buttonLabel?: string; defaultPath?: string }) => {
+        const options = {
+            title: ps?.title,
+            buttonLabel: ps?.buttonLabel,
+            defaultPath: ps?.defaultPath,
+            properties: ['openDirectory'] as Array<'openDirectory'>,
+        };
+
+        const result = ctx.window ? await dialog.showOpenDialog(ctx.window, options) : await dialog.showOpenDialog(options);
+
+        return result.canceled ? undefined : (result.filePaths[0] ?? undefined);
+    },
     listCloneableRepos: _mapPs(app.listCloneableRepos),
     listCloneableRepos2: _mapPs(app.listCloneableRepos),
-    pickRepo: _mapPs(app.pickRepo),
+    addTrackedRepoFromPath: _mapPs(app.addTrackedRepoFromPath),
     cloneTrackedRepo: _mapPs(app.cloneTrackedRepo),
     createTrackedLocalRepo: _mapPs(app.createTrackedLocalRepo),
     createRepoGroup: _mapPs(app.createTrackedRepoGroup),

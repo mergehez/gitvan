@@ -156,7 +156,7 @@ async function loadCloneDefaults() {
 }
 
 async function chooseCloneDirectory() {
-    const selectedDirectory = await repos.pickCloneRepoDirectory();
+    const selectedDirectory = await repos.pickCloneRepoDirectory(parentDirectory.value);
     if (selectedDirectory) {
         parentDirectory.value = selectedDirectory;
     }

@@ -479,6 +479,22 @@ export const app = {
         setStoredCloneParentDirectory(selectedPath);
         return selectedPath;
     },
+    addTrackedRepoFromPath: async (ps: { path: string; targetGroupId?: number }) => {
+        const selectedPath = ps.path.trim();
+
+        if (!selectedPath) {
+            return buildBootstrap();
+        }
+
+        const repo = await git.resolveGitRepo(selectedPath);
+        const repoId = db.upsertRepo(repo.path, repo.name);
+        if (ps.targetGroupId !== undefined) {
+            db.updateRepoGroup(repoId, ps.targetGroupId);
+        }
+        db.setSelectedRepoId(repoId);
+
+        return buildBootstrap();
+    },
     listCloneableRepos: async (ps: { accountId: number }): Promise<CloneableRepo[]> => {
         const account = db.getAccountAuthById(ps.accountId);
         if (!account) {
@@ -559,14 +575,7 @@ export const app = {
             return buildBootstrap();
         }
 
-        const repo = await git.resolveGitRepo(selectedPath);
-        const repoId = db.upsertRepo(repo.path, repo.name);
-        if (ps.targetGroupId !== undefined) {
-            db.updateRepoGroup(repoId, ps.targetGroupId);
-        }
-        db.setSelectedRepoId(repoId);
-
-        return buildBootstrap();
+        return await app.addTrackedRepoFromPath({ path: selectedPath, targetGroupId: ps.targetGroupId });
     },
     cloneTrackedRepo: async (ps: { accountId: number | undefined; cloneUrl: string; parentDirectory: string; repoName?: string | undefined; groupId?: number | undefined }) => {
         function extractRepoNameFromCloneUrl(remoteUrl: string) {

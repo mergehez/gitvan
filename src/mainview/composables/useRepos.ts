@@ -67,8 +67,21 @@ export function _useRepositories() {
         async getCloneRepoDefaults(): Promise<CloneRepoDefaults> {
             return await gitClientRpc.request.getCloneRepoDefaults(undefined);
         },
-        async pickCloneRepoDirectory() {
-            return await gitClientRpc.request.pickCloneRepoDirectory(undefined);
+        async pickDirectory(options?: { title?: string; buttonLabel?: string; defaultPath?: string }) {
+            return await gitClientRpc.request.pickDirectory(options);
+        },
+        async pickCloneRepoDirectory(defaultPath?: string) {
+            const selectedPath = await this.pickDirectory({
+                title: 'Choose Local Path',
+                buttonLabel: 'Use Selected Folder',
+                defaultPath,
+            });
+
+            if (!selectedPath) {
+                return undefined;
+            }
+
+            return selectedPath;
         },
         async cloneTrackedRepo(params: { accountId: number | undefined; cloneUrl: string; parentDirectory: string; repoName?: string | undefined; groupId?: number | undefined }) {
             const nextBootstrap = await tasks.cloneTrackedRepo.run(params);
@@ -102,7 +115,16 @@ export function _useRepositories() {
             toast.showSuccessToast('Sandboxes reset and re-added.');
         },
         async pickRepo(targetGroupId?: number) {
-            const nextBootstrap = await tasks.pickRepo.run({ targetGroupId });
+            const selectedPath = await this.pickDirectory({
+                title: 'Add Existing Repository',
+                buttonLabel: 'Add Selected Repository',
+            });
+
+            if (!selectedPath) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.addTrackedRepoFromPath.run({ path: selectedPath, targetGroupId });
 
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('Repository added.');
