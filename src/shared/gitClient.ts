@@ -261,6 +261,11 @@ export type FileDiffData = {
     entry: FileDiffEntry;
 };
 
+export type CommitTag = {
+    name: string;
+    isUnpushed: boolean;
+};
+
 export type CommitSummary = {
     sha: string;
     shortSha: string;
@@ -269,6 +274,7 @@ export type CommitSummary = {
     authorEmail: string;
     authoredAt: string;
     refs: string[];
+    tags: CommitTag[];
     isUnpushed: boolean;
 };
 

@@ -8,6 +8,7 @@ import {
     isImagePath,
     isPreviewTooLarge,
     parseCommitFilesWithConflicts,
+    parseCommitTags,
     parseRefs,
     parseUnifiedDiffHunks,
     readGitRevisionFile,
@@ -86,6 +87,18 @@ export const historyGit = {
                 .filter(Boolean)
         );
     },
+    _normalizeTagName(tagName: string) {
+        const normalized = tagName.trim();
+
+        if (!normalized) {
+            throw new Error('Tag name is required.');
+        }
+
+        return normalized;
+    },
+    async _assertValidTagName(repoPath: string, tagName: string) {
+        await runGit(['check-ref-format', '--allow-onelevel', `refs/tags/${tagName}`], repoPath);
+    },
     async getRepoHistory(repoPath: string): Promise<HistoryData> {
         const [output, unpushedCommits] = await Promise.all([
             runGit(['log', '--date=iso-strict', '--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%d%x1f%s', '-n', '60'], repoPath),
@@ -98,9 +111,19 @@ export const historyGit = {
                 .filter(Boolean)
                 .map((line) => {
                     const [sha, shortSha, authorName, authorEmail, authoredAt, refsRaw, summary] = line.split('\u001f');
+                    const isUnpushed = unpushedCommits.has(sha);
 
-                    const commit = { sha, shortSha, summary, authorName, authorEmail, authoredAt, refs: parseRefs(refsRaw ?? ''), isUnpushed: false };
-                    return { ...commit, isUnpushed: unpushedCommits.has(commit.sha) };
+                    return {
+                        sha,
+                        shortSha,
+                        summary,
+                        authorName,
+                        authorEmail,
+                        authoredAt,
+                        refs: parseRefs(refsRaw ?? ''),
+                        tags: parseCommitTags(refsRaw ?? '', isUnpushed),
+                        isUnpushed,
+                    };
                 }),
         };
     },
@@ -140,11 +163,35 @@ export const historyGit = {
             authorEmail,
             authoredAt,
             refs: parseRefs(refsRaw ?? ''),
+            tags: parseCommitTags(refsRaw ?? '', unpushedCommits.has(sha)),
             isUnpushed: unpushedCommits.has(sha),
             body: parsedBody.body,
             files: parseCommitFilesWithConflicts(filesRaw, parsedBody.conflictPaths),
             patch,
         };
+    },
+    async createRepoTag(repoPath: string, commitSha: string, tagName: string) {
+        const normalizedTagName = this._normalizeTagName(tagName);
+        await this._assertValidTagName(repoPath, normalizedTagName);
+        await runGit(['tag', normalizedTagName, commitSha], repoPath);
+    },
+    async deleteRepoTag(repoPath: string, tagName: string) {
+        const normalizedTagName = this._normalizeTagName(tagName);
+        await runGit(['tag', '-d', normalizedTagName], repoPath);
+    },
+    async renameRepoTag(repoPath: string, tagName: string, nextTagName: string) {
+        const normalizedTagName = this._normalizeTagName(tagName);
+        const normalizedNextTagName = this._normalizeTagName(nextTagName);
+
+        if (normalizedTagName === normalizedNextTagName) {
+            return;
+        }
+
+        await this._assertValidTagName(repoPath, normalizedNextTagName);
+
+        const targetObject = await runGit(['rev-parse', '--verify', `${normalizedTagName}^{}`], repoPath);
+        await runGit(['tag', normalizedNextTagName, targetObject], repoPath);
+        await runGit(['tag', '-d', normalizedTagName], repoPath);
     },
     async getCommittedFile(repoPath: string, filePath: string, commitSha?: string): Promise<CommittedFileData> {
         const resolvedCommitSha = await this._resolveCommittedRevision(repoPath, commitSha);

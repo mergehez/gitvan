@@ -3,6 +3,7 @@ import type {
     BranchesData,
     CommitDetail,
     CommitFormState,
+    CommitSummary,
     CommittedFileData,
     CommittedTreeData,
     FileChangeEntry,
@@ -745,6 +746,66 @@ const _useRepository = (repo: Repo) => {
             this.resetCommitForm();
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('Last commit undone. Changes are staged.');
+        },
+        latestUnpushedCommit() {
+            const latestCommit = this.history?.commits[0];
+            return latestCommit?.isUnpushed ? latestCommit : undefined;
+        },
+        editableTagsForCommit(commit: CommitSummary | undefined) {
+            if (!commit?.isUnpushed) {
+                return [];
+            }
+
+            return commit.tags.filter((tag) => tag.isUnpushed);
+        },
+        async createTag(commitSha: string, tagName: string) {
+            const normalizedTagName = tagName.trim();
+            if (!normalizedTagName) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.createTag.run({ repoId: this.id, commitSha, tagName: normalizedTagName }, `${commitSha}:${normalizedTagName}`);
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast(`Tag "${normalizedTagName}" created.`);
+        },
+        async renameTag(tagName: string, nextTagName: string) {
+            const normalizedTagName = tagName.trim();
+            const normalizedNextTagName = nextTagName.trim();
+
+            if (!normalizedTagName || !normalizedNextTagName || normalizedTagName === normalizedNextTagName) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.renameTag.run(
+                { repoId: this.id, tagName: normalizedTagName, nextTagName: normalizedNextTagName },
+                `${normalizedTagName}:${normalizedNextTagName}`
+            );
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast(`Tag "${normalizedTagName}" renamed to "${normalizedNextTagName}".`);
+        },
+        async deleteTag(tagName: string) {
+            const normalizedTagName = tagName.trim();
+            if (!normalizedTagName) {
+                return;
+            }
+
+            const confirmed = await confirmAction({
+                title: 'Delete tag',
+                message: `Delete tag '${normalizedTagName}'?`,
+                detail: 'This removes the local tag reference from the repository.',
+                confirmLabel: 'Delete tag',
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.deleteTag.run({ repoId: this.id, tagName: normalizedTagName }, normalizedTagName);
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast(`Tag "${normalizedTagName}" deleted.`);
         },
         async createBranch(branchName: string) {
             branchName = branchName.trim();

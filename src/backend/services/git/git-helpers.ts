@@ -458,13 +458,33 @@ export function extractConflictPathsFromCommitBody(body: string) {
     };
 }
 
-export function parseRefs(rawRefs: string) {
+function splitRefs(rawRefs: string) {
     return rawRefs
         .replace(/^\s*\(/, '')
         .replace(/\)\s*$/, '')
         .split(',')
         .map((ref) => ref.trim())
         .filter(Boolean);
+}
+
+export function parseRefs(rawRefs: string) {
+    return splitRefs(rawRefs);
+}
+
+export function parseCommitTags(rawRefs: string, isUnpushed: boolean) {
+    return splitRefs(rawRefs)
+        .flatMap((ref) => {
+            const match = ref.match(/^tag:\s*(.+)$/i);
+            return match?.[1]
+                ? [
+                      {
+                          name: match[1].trim(),
+                          isUnpushed,
+                      },
+                  ]
+                : [];
+        })
+        .filter((tag, index, tags) => tags.findIndex((entry) => entry.name === tag.name) === index);
 }
 
 function imageFileExtension(path: string) {

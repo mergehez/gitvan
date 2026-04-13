@@ -1064,6 +1064,18 @@ export const app = {
         await git.undoLastRepoCommit(db.getRepo(ps.repoId)!.path);
         return buildBootstrap();
     },
+    createTag: async (ps: { repoId: number; commitSha: string; tagName: string }) => {
+        await git.createRepoTag(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.tagName);
+        return buildBootstrap();
+    },
+    renameTag: async (ps: { repoId: number; tagName: string; nextTagName: string }) => {
+        await git.renameRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, ps.nextTagName);
+        return buildBootstrap();
+    },
+    deleteTag: async (ps: { repoId: number; tagName: string }) => {
+        await git.deleteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName);
+        return buildBootstrap();
+    },
     getHistory: async (ps: { repoId: number }): Promise<HistoryData> => {
         return git.getRepoHistory(db.getRepo(ps.repoId)!.path);
     },
