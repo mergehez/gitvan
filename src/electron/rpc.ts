@@ -1,10 +1,10 @@
-import { BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import { app } from '../backend/services/app.js';
 import { git } from '../backend/services/git.js';
 import type { RemoteOperation } from '../shared/gitClient.js';
 import { openFileInEditor, pickEditorApplication, pickTerminalApplication } from './extEditors.js';
 import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
-import { openDirectoryInTerminal } from './systemShell.js';
+import { openDirectoryInTerminal as openDirectoryInSystemTerminal } from './systemShell.js';
 
 type Ctx = {
     window: BrowserWindow | undefined;
@@ -64,7 +64,7 @@ export const gitClientRequestHandlers = {
     getMergeConflictState: _mapPs(app.getMergeConflictState),
     getMergeConflictFileDetails: _mapPs(app.getMergeConflictFileDetails),
     getFileDiff: _mapPs(app.getDiff),
-    openFileInEditor: _mapWindow(openFileInEditor),
+    openFileInEditor: _mapPs(openFileInEditor),
     stageFile: _mapPs(app.stageFile),
     stageFileHunks: _mapPs(app.stageFileHunks),
     stageRepoFiles: _mapPs(app.stageRepoFiles),
@@ -150,18 +150,20 @@ export const gitClientRequestHandlers = {
             throw error;
         }
     },
-    copyRepoPath: async (_ctx: Ctx, ps: { repoId: number }) => {
-        clipboard.writeText(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
-    },
-    revealRepoInFinder: async (_ctx: Ctx, ps: { repoId: number }) => {
-        const result = await shell.openPath(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
+    revealPathInFileManager: async (_ctx: Ctx, ps: { path: string; mode: 'open-directory' | 'reveal-item' }) => {
+        if (ps.mode === 'reveal-item') {
+            shell.showItemInFolder(ps.path);
+            return;
+        }
+
+        const result = await shell.openPath(ps.path);
 
         if (result) {
             throw new Error(result);
         }
     },
-    openRepoInTerminal: async (_ctx: Ctx, ps: { repoId: number }) => {
-        await openDirectoryInTerminal(app.resolveRepoFilePath({ repoId: ps.repoId, path: '' }));
+    openDirectoryInTerminal: async (_ctx: Ctx, ps: { directoryPath: string }) => {
+        await openDirectoryInSystemTerminal(ps.directoryPath);
     },
     createIntegratedTerminalSession: async (ctx: Ctx, ps: { repoId: number; cols?: number; rows?: number; terminalPath?: string }) => {
         if (!ctx.window) {
@@ -179,14 +181,8 @@ export const gitClientRequestHandlers = {
     closeIntegratedTerminalSession: async (_ctx: Ctx, ps: { sessionId: string }) => {
         closeIntegratedTerminalSession(ps.sessionId);
     },
-    copyRepoFilePath: async (_ctx: Ctx, ps: { repoId: number; path: string; mode: 'absolute' | 'relative' }) => {
-        clipboard.writeText(ps.mode === 'absolute' ? app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path }) : ps.path);
-    },
-    revealRepoFileInFinder: async (_ctx: Ctx, ps: { repoId: number; path: string }) => {
-        shell.showItemInFolder(app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path }));
-    },
-    openRepoFileWithDefaultProgram: async (_ctx: Ctx, ps: { repoId: number; path: string }) => {
-        const result = await shell.openPath(app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path }));
+    openPathWithDefaultProgram: async (_ctx: Ctx, ps: { path: string }) => {
+        const result = await shell.openPath(ps.path);
 
         if (result) {
             throw new Error(result);

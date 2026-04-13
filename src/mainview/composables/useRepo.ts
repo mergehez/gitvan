@@ -16,6 +16,7 @@ import type {
     RepoStashEntry,
 } from '../../shared/gitClient.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
+import { joinNativePath, writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
 import { applyMutation } from './initializeStates.ts';
 import { useAuth } from './useAuth.ts';
@@ -159,7 +160,7 @@ const _useRepository = (repo: Repo) => {
             toast.showSuccessToast(hunkIds.length === 1 ? 'Change staged.' : `${hunkIds.length} changes staged.`);
         },
         async openFileInEditor(path: string) {
-            await tasks.openFileInEditor.run({ repoId: this.id, path }, path);
+            await settings.openRepoPathInEditor({ repoId: this.id, path }, path);
         },
         async stageAllFiles() {
             const nextBootstrap = await tasks.stageAllFiles.run({ repoId: this.id });
@@ -394,14 +395,14 @@ const _useRepository = (repo: Repo) => {
             toast.showSuccessToast(mode === 'directory' ? 'Folder added to .gitignore.' : 'Ignore rule added to .gitignore.');
         },
         async copyFilePath(path: string, mode: 'absolute' | 'relative') {
-            await tasks.copyRepoFilePath.run({ repoId: this.id, path, mode }, `${mode}:${path}`);
+            await writeClipboardText(mode === 'absolute' ? joinNativePath(this.path, path) : path);
             toast.showSuccessToast(mode === 'absolute' ? 'File path copied.' : 'Relative path copied.');
         },
         async revealFileInFinder(path: string) {
-            await tasks.revealRepoFileInFinder.run({ repoId: this.id, path }, path);
+            await tasks.revealPathInFileManager.run({ path: joinNativePath(this.path, path), mode: 'reveal-item' }, path);
         },
         async openFileWithDefaultProgram(path: string) {
-            await tasks.openRepoFileWithDefaultProgram.run({ repoId: this.id, path }, path);
+            await tasks.openPathWithDefaultProgram.run({ path: joinNativePath(this.path, path) }, path);
         },
         clearSelectedRepositoryStash() {
             this.currStashRef = undefined;

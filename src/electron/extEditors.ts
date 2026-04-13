@@ -4,8 +4,6 @@ import { existsSync } from 'node:fs';
 import { app } from '../backend/services/app.js';
 import type { TerminalApp } from '../shared/gitClient.js';
 
-type OpenInEditorMode = 'default-or-pick' | 'pick' | 'default';
-
 async function pickApplication(
     window: BrowserWindow | undefined,
     options: { title: string; buttonLabel: string; defaultPath: string; filters?: Array<{ name: string; extensions: string[] }> }
@@ -61,35 +59,20 @@ export async function pickTerminalApplication(window: BrowserWindow | undefined)
     return selection ? ({ ...selection, locked: false } satisfies TerminalApp) : undefined;
 }
 
-export async function openFileInEditor(window: BrowserWindow | undefined, ps: { repoId: number; path: string; mode?: OpenInEditorMode; editorPath?: string }) {
+export async function openFileInEditor(ps: { repoId: number; path: string; editorPath: string }) {
     const filePath = app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path });
-    const editorSettings = app.getEditorSettings();
-    const mode = ps.mode ?? 'default-or-pick';
 
     if (!existsSync(filePath)) {
         throw new Error('The selected file no longer exists in the working tree.');
     }
 
-    const resolvedDefaultEditorPath = editorSettings.defaultEditorPath && existsSync(editorSettings.defaultEditorPath) ? editorSettings.defaultEditorPath : undefined;
-    const resolvedExplicitEditorPath = ps.editorPath && existsSync(ps.editorPath) ? ps.editorPath : undefined;
-    let applicationPath = resolvedExplicitEditorPath ?? (mode === 'pick' ? undefined : resolvedDefaultEditorPath);
-
-    if (!applicationPath && ps.editorPath) {
+    if (!existsSync(ps.editorPath)) {
         throw new Error('The selected editor no longer exists on disk.');
     }
 
-    if (!applicationPath && mode !== 'default') {
-        const selectedEditor = await pickEditorApplication(window);
-        applicationPath = selectedEditor?.path ?? undefined;
-    }
-
-    if (!applicationPath) {
-        return;
-    }
-
     await new Promise<void>((resolve, reject) => {
-        const command = process.platform === 'darwin' ? 'open' : applicationPath;
-        const args = process.platform === 'darwin' ? ['-a', applicationPath, filePath] : [filePath];
+        const command = process.platform === 'darwin' ? 'open' : ps.editorPath;
+        const args = process.platform === 'darwin' ? ['-a', ps.editorPath, filePath] : [filePath];
 
         const child = spawn(command, args, {
             stdio: 'ignore',

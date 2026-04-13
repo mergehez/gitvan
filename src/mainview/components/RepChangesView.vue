@@ -7,6 +7,7 @@ import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
+import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
@@ -23,24 +24,7 @@ const settings = useSettings();
 const repo = computed(() => repos.getSelectedRepo()!);
 const mergeState = useMergeHelper();
 const openWithEditors = computed(() => {
-    const defaultEditorPath = settings.state.defaultEditorPath;
-
-    return settings.state.editors
-        .map((editor) => ({
-            path: editor.path,
-            label: editor.label,
-        }))
-        .sort((left, right) => {
-            if (left.path === defaultEditorPath) {
-                return -1;
-            }
-
-            if (right.path === defaultEditorPath) {
-                return 1;
-            }
-
-            return left.label.localeCompare(right.label, undefined, { sensitivity: 'accent' });
-        });
+    return settings.getOpenWithEditors();
 });
 
 const showDescription = ref(false);
@@ -486,26 +470,19 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
             entries.push({
                 id: `change-open-with:${firstItem.id}`,
                 label: 'Open with...',
-                children: [
-                    ...openWithEditors.value.map((editor) => ({
-                        id: `change-open-with-editor:${firstItem.id}:${editor.path}`,
-                        label: editor.label,
-                        action: async () => {
-                            await runChangeContextAction(items, {
-                                kind: 'open-with-editor',
-                                editorPath: editor.path,
-                            });
-                        },
-                    })),
-                    ...(openWithEditors.value.length > 0 ? ([{ type: 'separator' as const, id: `change-open-with-separator:${firstItem.id}` }] as ContextMenuEntry[]) : []),
-                    {
-                        id: `change-open-with-picker:${firstItem.id}`,
-                        label: 'Pick Program',
-                        action: async () => {
-                            await runChangeContextAction(items, { kind: 'open-with' });
-                        },
+                children: buildOpenWithEntries({
+                    keyPrefix: `change-open-with:${firstItem.id}`,
+                    editors: openWithEditors.value,
+                    onOpenWithEditor: async (editorPath) => {
+                        await runChangeContextAction(items, {
+                            kind: 'open-with-editor',
+                            editorPath,
+                        });
                     },
-                ],
+                    onPickProgram: async () => {
+                        await runChangeContextAction(items, { kind: 'open-with' });
+                    },
+                }),
             });
         }
     }
@@ -563,12 +540,12 @@ async function runChangeContextAction(items: ChangeTreeEntry[], action: ChangeFi
     }
 
     if (action.kind === 'open-with') {
-        await tasks.openFileInEditor.run({ repoId: repo.value.id, path: firstItem.path, mode: 'pick' }, `change:${firstItem.path}:pick-editor`);
+        await settings.openRepoPathInEditor({ repoId: repo.value.id, path: firstItem.path, mode: 'pick' }, `change:${firstItem.path}:pick-editor`);
         return;
     }
 
     if (typeof action === 'object' && action.kind === 'open-with-editor') {
-        await tasks.openFileInEditor.run({ repoId: repo.value.id, path: firstItem.path, editorPath: action.editorPath }, `change:${firstItem.path}:editor:${action.editorPath}`);
+        await settings.openRepoPathInEditor({ repoId: repo.value.id, path: firstItem.path, editorPath: action.editorPath }, `change:${firstItem.path}:editor:${action.editorPath}`);
         return;
     }
 
