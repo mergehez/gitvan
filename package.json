@@ -13,6 +13,8 @@
         "release:audit": "bash ./scripts/release-audit.sh",
         "release:validate": "vitest run --exclude tests/App.real.spec.ts && bun run build",
         "release:mac": "bun run ./scripts/build.ts",
+        "release:mac:signed": "bun run ./scripts/build.ts --signed",
+        "release:mac:notarize": "bun run ./scripts/build.ts --notarize",
         "dev": "concurrently \"vp dev --port 5173\" \"vp build && electrobun dev --watch\"",
         "build:canary": "electrobun build --env=canary",
         "build:stable": "electrobun build --env=stable"
