@@ -378,7 +378,7 @@ export const changesGit = {
         const output = await runGit(['ls-files', '--error-unmatch', '--', filePath], repoPath, [0, 1]);
 
         if (output.length > 0) {
-            await runGit(['restore', '--worktree', '--source=HEAD', '--', filePath], repoPath);
+            await runGit(['restore', '--worktree', '--', filePath], repoPath);
             return;
         }
 
@@ -397,7 +397,7 @@ export const changesGit = {
         await runGit(['restore', '--staged', '--', '.'], repoPath);
     },
     async discardAllRepoChanges(repoPath: string) {
-        await runGit(['restore', '--worktree', '--source=HEAD', '--', '.'], repoPath);
+        await runGit(['restore', '--worktree', '--', '.'], repoPath);
         await runGit(['clean', '-fd', '--', '.'], repoPath);
     },
     async restoreRepoFile(repoPath: string, filePath: string, kind: 'staged' | 'unstaged') {
