@@ -49,13 +49,13 @@ const hasAnyIcon = props.items.some((entry) => !isSeparator(entry) && entry.icon
 </script>
 
 <template>
-    <div class="min-w-56 overflow-visible rounded-md border border-white/12 bg-x2/97 py-1 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-        <template v-for="entry in props.items" :key="entryKey(entry)">
+    <div class="min-w-56 overflow-visible rounded-md border border-x8 bg-x3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <template v-for="(entry, i) in props.items" :key="entryKey(entry)">
             <div v-if="isSeparator(entry)" class="my-1 border-t border-white/10"></div>
             <div v-else class="group relative">
                 <button
                     type="button"
-                    class="flex w-full items-center gap-1.5 pr-2 py-0.5 text-left text-xs transition min-w-20"
+                    class="flex w-full items-center gap-1.5 pr-2 text-left text-xs transition min-w-20"
                     :class="[
                         entry.disabled
                             ? 'cursor-not-allowed opacity-40'
@@ -63,6 +63,7 @@ const hasAnyIcon = props.items.some((entry) => !isSeparator(entry) && entry.icon
                               ? 'text-red-200 hover:bg-red-500/12 hover:text-red-100'
                               : 'text-white/90 hover:bg-white/8 hover:text-white',
                         hasAnyIcon ? 'pl-2' : 'pl-3',
+                        i == 0 || i === items.length - 1 ? 'py-1.5' : 'py-1',
                     ]"
                     :disabled="entry.disabled"
                     @click.stop="onSelect(entry)"
