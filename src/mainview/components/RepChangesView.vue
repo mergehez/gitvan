@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption, type FileDiffHunk } from '../../shared/gitClient';
 import { useContextMenu } from '../composables/useContextMenu';
 import { useDiffViewer } from '../composables/useDiffViewer';
@@ -8,6 +8,7 @@ import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
+import { areEquivalentIgnoringDiffChars } from '../lib/diffIgnoredChars';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
@@ -42,9 +43,25 @@ type ChangeTreeEntry = TTreeData & {
     title: string;
     subtitle?: string;
     id: string;
+    noActualChange?: boolean;
 };
 
 type TreeItem = FileTreeItem<TTreeData, { isStaged: boolean }>;
+
+type ChangeTreeHeaderItem = FileTreeItem<TTreeData, { isStaged: boolean }>;
+
+function findChangeEntry(kind: 'staged' | 'unstaged', path: string) {
+    const entries = kind === 'staged' ? (repo.value?.changes?.staged ?? []) : (repo.value?.changes?.unstaged ?? []);
+
+    return entries.find((entry) => entry.path === path);
+}
+
+function hasBackendNoActualChange(kind: 'staged' | 'unstaged', path: string) {
+    const entry = findChangeEntry(kind, path);
+
+    return kind === 'staged' ? entry?.stagedNoActualChange === true : entry?.unstagedNoActualChange === true;
+}
+
 const treeItems = computed<TreeItem[]>(() => {
     return [
         {
@@ -57,6 +74,7 @@ const treeItems = computed<TreeItem[]>(() => {
                 subtitle: e.previousPath,
                 path: e.path,
                 status: e.stagedStatus,
+                noActualChange: hasBackendNoActualChange('staged', e.path),
                 isStaged: true,
             })),
         },
@@ -70,6 +88,7 @@ const treeItems = computed<TreeItem[]>(() => {
                 subtitle: e.previousPath,
                 path: e.path,
                 status: e.unstagedStatus,
+                noActualChange: hasBackendNoActualChange('unstaged', e.path),
                 isStaged: false,
             })),
         },
@@ -80,8 +99,39 @@ const selectedDiffConflictCount = computed(() => {
     const matches = repo.value.curDiff?.entry.modified.match(/^<<<<<<< /gm);
     return matches?.length ?? 0;
 });
-const selectedDiffViewerState = useDiffViewer(computed(() => repo.value.curDiff));
+const baseSelectedDiffViewerState = useDiffViewer(computed(() => repo.value.curDiff));
 const selectedStashDiffViewerState = useDiffViewer(computed(() => repo.value.currStashDiff));
+
+const selectedDiffViewerState = computed(() => {
+    const state = baseSelectedDiffViewerState.value;
+    const currentDiff = repo.value.curDiff;
+
+    if (!state || !currentDiff?.path) {
+        return state;
+    }
+
+    const treeKind = currentDiff.entry.kind === 'staged' ? 'staged' : 'unstaged';
+    const cachedNoActualChange = hasBackendNoActualChange(treeKind, currentDiff.path);
+
+    if (!cachedNoActualChange || state.noActualChange) {
+        return state;
+    }
+
+    return {
+        ...state,
+        noActualChange: true,
+    };
+});
+
+watch(
+    () => [repo.value.id, settings.state.diffIgnoredChars, settings.state.showWhitespaceChanges],
+    () => {
+        void repo.value.loadChanges();
+    },
+    {
+        immediate: false,
+    }
+);
 const stashTreeItem = computed<FileTreeItem>(() => {
     return {
         id: 'stash',
@@ -110,7 +160,34 @@ const stashFilesTreeItem = computed<FileTreeItem>(() => {
     };
 });
 
-const partialDiffHunks = computed(() => repo.value.curDiff?.entry.hunks ?? []);
+const partialDiffHunks = computed(() => {
+    const currentDiff = repo.value.curDiff;
+    const diffViewerState = selectedDiffViewerState.value;
+
+    if (!currentDiff || diffViewerState?.noActualChange) {
+        return [];
+    }
+
+    return currentDiff.entry.hunks.filter((hunk) => {
+        const currentDiff = repo.value.curDiff;
+
+        if (!currentDiff) {
+            return false;
+        }
+        function getTextRangeByLines(text: string, startLine: number, lineCount: number) {
+            if (startLine <= 0 || lineCount <= 0) {
+                return '';
+            }
+
+            const lines = text.split('\n');
+            return lines.slice(startLine - 1, startLine - 1 + lineCount).join('\n');
+        }
+        const originalText = getTextRangeByLines(currentDiff.entry.original, hunk.oldStart, hunk.oldLines);
+        const modifiedText = getTextRangeByLines(currentDiff.entry.modified, hunk.newStart, hunk.newLines);
+
+        return !areEquivalentIgnoringDiffChars(originalText, modifiedText, settings.state.diffIgnoredChars, !settings.state.showWhitespaceChanges);
+    });
+});
 const showPartialChangeButtons = computed(() => {
     const entry = repo.value.curDiff?.entry;
 
@@ -423,6 +500,11 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
         },
     });
 
+    if (!isStaged) {
+        entries.push({ type: 'separator', id: `change-separator-cosmetic:${firstItem.id}` });
+        entries.push(...buildBulkChangeClassificationMenuEntries('unstaged'));
+    }
+
     if (hasSingleSelection && !isStaged && firstItem.status !== 'deleted') {
         entries.push({ type: 'separator', id: `change-separator-ignore:${firstItem.id}` });
         entries.push({
@@ -488,6 +570,48 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     }
 
     return entries;
+}
+
+function buildChangeHeaderContextMenuEntries(item: ChangeTreeHeaderItem): ContextMenuEntry[] {
+    if (item.isStaged) {
+        return [];
+    }
+
+    return buildBulkChangeClassificationMenuEntries('unstaged');
+}
+
+function buildBulkChangeClassificationMenuEntries(kind: 'unstaged'): ContextMenuEntry[] {
+    const noActualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange === true);
+    const actualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange !== true);
+    const noActualChangePaths = noActualChangeEntries.map((entry) => entry.path);
+    const actualChangePaths = actualChangeEntries.map((entry) => entry.path);
+
+    return [
+        {
+            id: `${kind}-discard-cosmetic`,
+            label: 'Discard All Cosmetic Changes',
+            disabled: noActualChangePaths.length === 0,
+            action: async () => {
+                await repo.value.discardFiles(noActualChangePaths);
+            },
+        },
+        {
+            id: `${kind}-stage-cosmetic`,
+            label: 'Stage All Cosmetic Changes',
+            disabled: noActualChangePaths.length === 0,
+            action: async () => {
+                await repo.value.stageFiles(noActualChangePaths);
+            },
+        },
+        {
+            id: `${kind}-stage-real`,
+            label: 'Stage All Real Changes',
+            disabled: actualChangePaths.length === 0,
+            action: async () => {
+                await repo.value.stageFiles(actualChangePaths);
+            },
+        },
+    ];
 }
 
 async function runChangeContextAction(items: ChangeTreeEntry[], action: ChangeFileContextMenuAction) {
@@ -561,6 +685,19 @@ async function onOpenChangeContextMenu(item: ChangeTreeEntry, event?: MouseEvent
     }
 
     contextMenu.openAtEvent(event, buildChangeContextMenuEntries(selectedItems));
+}
+
+function onOpenChangeHeaderContextMenu(item: ChangeTreeHeaderItem, event?: MouseEvent) {
+    if (!event) {
+        return;
+    }
+
+    const entries = buildChangeHeaderContextMenuEntries(item);
+    if (entries.length === 0) {
+        return;
+    }
+
+    contextMenu.openAtEvent(event, entries);
 }
 
 async function onSelectChangeEntry(item: ChangeTreeEntry, event?: MouseEvent) {
@@ -698,6 +835,7 @@ onUnmounted(() => {
                             empty-text="No files"
                             :selection="visibleSelectionForKind(item.isStaged ? 'staged' : 'unstaged')"
                             :onContextMenu="(t, event) => onOpenChangeContextMenu(t as ChangeTreeEntry, event)"
+                            :onHeaderContextMenu="(t, event) => onOpenChangeHeaderContextMenu(t as ChangeTreeHeaderItem, event)"
                             :onSelect="(t, event) => onSelectChangeEntry(t as ChangeTreeEntry, event)"
                         >
                             <template #header-actions="{ item }">

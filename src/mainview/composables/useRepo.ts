@@ -413,7 +413,11 @@ const _useRepository = (repo: Repo) => {
         },
 
         async loadChanges() {
-            const nextChanges = await tasks.getChanges.run({ repoId: this.id });
+            const nextChanges = await tasks.getChanges.run({
+                repoId: this.id,
+                ignoredChars: settings.state.diffIgnoredChars,
+                showWhitespaceChanges: settings.state.showWhitespaceChanges,
+            });
 
             this.changes = nextChanges;
 

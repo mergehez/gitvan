@@ -3,22 +3,19 @@ import type * as MonacoEditorModule from 'monaco-editor';
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { useSettings } from '../composables/useSettings';
 import { configureMonaco, configureMonacoEnvironment, createMonacoOptions, getMonacoLanguage, getMonacoModule as loadMonacoModule } from '../lib/monaco';
+import { useDiffActionZones } from '../lib/monacoDiffActionZones';
+import { useCosmeticDiffMasking } from '../lib/monacoDiffMasking';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
 import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
 type MonacoModule = typeof import('monaco-editor');
-type AppliedMonacoActionZone = {
-    domNode: HTMLDivElement;
-    zoneId: string | undefined;
-    dispose: () => void;
-};
-
-type ActionZoneVisibility = 'always' | 'hover';
-type DiffEditorSide = 'original' | 'modified';
 
 configureMonacoEnvironment();
 
 const modelValue = defineModel<string>();
+const emit = defineEmits<{
+    visibleDiffChange: [hasVisibleChanges: boolean | undefined];
+}>();
 const props = defineProps<{
     title?: string;
     noHead?: boolean;
@@ -29,10 +26,11 @@ const props = defineProps<{
     original?: string;
     modified?: string;
     diffViewMode?: 'changes' | 'full-file';
+    diffIgnoredChars?: string;
     showWhitespaceChanges?: boolean;
     revealLine?: number;
     actionZones?: MonacoEditorActionZone[];
-    actionZoneVisibility?: ActionZoneVisibility;
+    actionZoneVisibility?: 'always' | 'hover';
 }>();
 const settings = useSettings();
 
@@ -44,14 +42,46 @@ const modelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
 const diffEditorRef = shallowRef<MonacoEditorModule.editor.IStandaloneDiffEditor>();
 const originalModelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
 const modifiedModelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
-const diffActionZoneRefs = shallowRef<AppliedMonacoActionZone[]>([]);
 const diffEditorListenersRef = shallowRef<MonacoEditorModule.IDisposable[]>([]);
 const diffComputationListenersRef = shallowRef<MonacoEditorModule.IDisposable[]>([]);
-const hoveredActionZoneId = ref<string>();
-const hoveringActionZone = ref(false);
-let pendingHoveredActionZoneClearTimeout: ReturnType<typeof setTimeout> | undefined;
+const originalCosmeticDiffMutationObserverRef = shallowRef<MutationObserver>();
+const modifiedCosmeticDiffMutationObserverRef = shallowRef<MutationObserver>();
 let applyingExternalValue = false;
 let syncDiffRequestId = 0;
+
+const cosmeticMasking = useCosmeticDiffMasking({
+    diffEditorRef,
+    originalModelRef,
+    modifiedModelRef,
+    diffContainerRef,
+    monacoModuleRef,
+    originalMutationObserverRef: originalCosmeticDiffMutationObserverRef,
+    modifiedMutationObserverRef: modifiedCosmeticDiffMutationObserverRef,
+    diffIgnoredChars: () => props.diffIgnoredChars ?? '',
+    showWhitespaceChanges: () => props.showWhitespaceChanges ?? false,
+    onVisibleDiffChange: (hasVisible) => emit('visibleDiffChange', hasVisible),
+});
+
+const diffActions = useDiffActionZones({
+    diffEditorRef,
+    diffContainerRef,
+    monacoModuleRef,
+    actionZones: () => props.actionZones,
+    actionZoneVisibility: () => props.actionZoneVisibility,
+    getRenderedDiffBlocks: cosmeticMasking.getRenderedDiffBlocks,
+    hasVisibleDiffChanges: cosmeticMasking.hasVisibleDiffChanges,
+});
+
+const {
+    centeredActionZoneLayouts,
+    hoveredActionZoneId,
+    hoveringActionZone,
+    getActionZoneVisibility,
+    syncCenteredActionZoneLayouts,
+    setHoveredActionZone,
+    scheduleHoveredActionZoneClear,
+    dispose: disposeActionZones,
+} = diffActions;
 
 const isDiffEditor = computed(() => props.original !== undefined && props.modified !== undefined);
 
@@ -59,64 +89,20 @@ async function getMonacoModule() {
     if (!monacoModuleRef.value) {
         monacoModuleRef.value = await loadMonacoModule();
     }
-
     return monacoModuleRef.value;
-}
-
-async function ensureEditor() {
-    if (isDiffEditor.value || !editorContainerRef.value || editorRef.value) {
-        return;
-    }
-
-    const monaco = await getMonacoModule();
-
-    configureMonaco(monaco);
-    monaco.editor.setTheme('vs-dark');
-
-    modelRef.value = monaco.editor.createModel(modelValue.value ?? '', finalLanguage.value);
-    editorRef.value = monaco.editor.create(editorContainerRef.value, options.value);
-    editorRef.value.setModel(modelRef.value);
-
-    modelRef.value.onDidChangeContent(() => {
-        if (applyingExternalValue) {
-            return;
-        }
-
-        modelValue.value = modelRef.value?.getValue() ?? '';
-    });
-}
-
-function disposeEditor() {
-    editorRef.value?.dispose();
-    modelRef.value?.dispose();
-    editorRef.value = undefined;
-    modelRef.value = undefined;
 }
 
 function createDiffModels() {
     const monaco = monacoModuleRef.value!;
-
     originalModelRef.value = monaco.editor.createModel(props.original ?? '', finalLanguage.value);
     modifiedModelRef.value = monaco.editor.createModel(props.modified ?? '', finalLanguage.value);
 }
 
-function clearDiffActionZones(editor = diffEditorRef.value?.getModifiedEditor()) {
-    if (editor && diffActionZoneRefs.value.length > 0) {
-        editor.changeViewZones((accessor) => {
-            diffActionZoneRefs.value.forEach((zone) => {
-                if (zone.zoneId) {
-                    accessor.removeZone(zone.zoneId);
-                }
-                zone.dispose();
-            });
-        });
-    } else {
-        diffActionZoneRefs.value.forEach((zone) => {
-            zone.dispose();
-        });
-    }
-
-    diffActionZoneRefs.value = [];
+function disconnectCosmeticDiffMutationObservers() {
+    originalCosmeticDiffMutationObserverRef.value?.disconnect();
+    originalCosmeticDiffMutationObserverRef.value = undefined;
+    modifiedCosmeticDiffMutationObserverRef.value?.disconnect();
+    modifiedCosmeticDiffMutationObserverRef.value = undefined;
 }
 
 function clearDiffEditorListeners() {
@@ -129,323 +115,118 @@ function clearDiffComputationListeners() {
     diffComputationListenersRef.value = [];
 }
 
-function getActionZoneVisibility(): ActionZoneVisibility {
-    return props.actionZoneVisibility ?? 'always';
-}
-
-function clearPendingHoveredActionZoneClear() {
-    if (pendingHoveredActionZoneClearTimeout !== undefined) {
-        clearTimeout(pendingHoveredActionZoneClearTimeout);
-        pendingHoveredActionZoneClearTimeout = undefined;
-    }
-}
-
-function scheduleHoveredActionZoneClear() {
-    clearPendingHoveredActionZoneClear();
-    pendingHoveredActionZoneClearTimeout = setTimeout(() => {
-        pendingHoveredActionZoneClearTimeout = undefined;
-
-        if (!hoveringActionZone.value) {
-            setHoveredActionZone(undefined);
-        }
-    }, 220);
-}
-
-function findActionZoneForLine(lineNumber: number, side: DiffEditorSide) {
-    return (props.actionZones ?? []).find((zone) => {
-        const startLineNumber = Math.max(
-            1,
-            side === 'original' ? (zone.originalStartLineNumber ?? zone.startLineNumber ?? zone.afterLineNumber + 1) : (zone.startLineNumber ?? zone.afterLineNumber + 1)
-        );
-        const endLineNumber = Math.max(
-            startLineNumber,
-            side === 'original' ? (zone.originalEndLineNumber ?? zone.endLineNumber ?? startLineNumber) : (zone.endLineNumber ?? startLineNumber)
-        );
-
-        return lineNumber >= startLineNumber && lineNumber <= endLineNumber;
+async function ensureEditor() {
+    if (isDiffEditor.value || !editorContainerRef.value || editorRef.value) return;
+    const monaco = await getMonacoModule();
+    configureMonaco(monaco);
+    monaco.editor.setTheme('vs-dark');
+    modelRef.value = monaco.editor.createModel(modelValue.value ?? '', finalLanguage.value);
+    editorRef.value = monaco.editor.create(editorContainerRef.value, options.value);
+    editorRef.value.setModel(modelRef.value);
+    modelRef.value.onDidChangeContent(() => {
+        if (applyingExternalValue) return;
+        modelValue.value = modelRef.value?.getValue() ?? '';
     });
 }
 
-function getMouseTargetLineNumber(target: MonacoEditorModule.editor.IMouseTarget) {
-    return target.position?.lineNumber ?? target.range?.startLineNumber;
+function disposeEditor() {
+    editorRef.value?.dispose();
+    modelRef.value?.dispose();
+    editorRef.value = undefined;
+    modelRef.value = undefined;
 }
 
-function createDiffHoverListener(editor: MonacoEditorModule.editor.ICodeEditor, side: DiffEditorSide) {
-    return [
-        editor.onMouseMove((event) => {
-            if (getActionZoneVisibility() !== 'hover') {
-                return;
-            }
-
-            const lineNumber = getMouseTargetLineNumber(event.target);
-
-            if (!lineNumber) {
-                if (!hoveringActionZone.value) {
-                    scheduleHoveredActionZoneClear();
-                }
-                return;
-            }
-
-            const nextZone = findActionZoneForLine(lineNumber, side);
-
-            if (nextZone) {
-                setHoveredActionZone(nextZone.id);
-                return;
-            }
-
-            if (!hoveringActionZone.value) {
-                scheduleHoveredActionZoneClear();
-            }
+async function ensureDiffEditor() {
+    if (!isDiffEditor.value || !diffContainerRef.value || diffEditorRef.value) return;
+    const monaco = await getMonacoModule();
+    configureMonaco(monaco);
+    monaco.editor.setTheme('vs-dark');
+    diffEditorRef.value = monaco.editor.createDiffEditor(diffContainerRef.value, { ...diffOptions.value });
+    createDiffModels();
+    diffEditorRef.value.setModel({ original: originalModelRef.value!, modified: modifiedModelRef.value! });
+    const originalEditor = diffEditorRef.value.getOriginalEditor();
+    const modifiedEditor = diffEditorRef.value.getModifiedEditor();
+    diffEditorListenersRef.value = [
+        originalEditor.onDidScrollChange(() => {
+            cosmeticMasking.scheduleCosmeticDiffMaskSync('original', 'onDidScrollChange');
+            syncCenteredActionZoneLayouts();
         }),
-        editor.onMouseLeave(() => {
-            if (getActionZoneVisibility() !== 'hover' || hoveringActionZone.value) {
-                return;
-            }
-
-            scheduleHoveredActionZoneClear();
+        modifiedEditor.onDidScrollChange(() => {
+            cosmeticMasking.scheduleCosmeticDiffMaskSync('modified', 'onDidScrollChange');
+            syncCenteredActionZoneLayouts();
+        }),
+        originalEditor.onDidLayoutChange(() => {
+            cosmeticMasking.scheduleCosmeticDiffMaskSync('original', 'onDidLayoutChange');
+            syncCenteredActionZoneLayouts();
+        }),
+        modifiedEditor.onDidLayoutChange(() => {
+            cosmeticMasking.scheduleCosmeticDiffMaskSync('modified', 'onDidLayoutChange');
+            syncCenteredActionZoneLayouts();
         }),
     ];
-}
-
-function setHoveredActionZone(nextZoneId: string | undefined) {
-    if (nextZoneId !== undefined) {
-        clearPendingHoveredActionZoneClear();
-    }
-
-    if (hoveredActionZoneId.value === nextZoneId) {
-        return;
-    }
-
-    hoveredActionZoneId.value = nextZoneId;
-    syncDiffActionZones();
-}
-
-function createDiffActionZone(zone: MonacoEditorActionZone): AppliedMonacoActionZone {
-    const panelNode = document.createElement('div');
-    panelNode.className = 'monaco-diff-actions';
-    panelNode.style.pointerEvents = 'auto';
-
-    if (zone.label) {
-        const labelNode = document.createElement('span');
-        labelNode.className = 'monaco-diff-actions__label';
-        labelNode.textContent = zone.label;
-        panelNode.appendChild(labelNode);
-    }
-
-    if (zone.meta) {
-        const metaNode = document.createElement('span');
-        metaNode.className = 'monaco-diff-actions__meta';
-        metaNode.textContent = zone.meta;
-        panelNode.appendChild(metaNode);
-    }
-
-    const listeners = zone.actions.map((action) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = ['monaco-diff-actions__button', action.tone === 'danger' ? 'monaco-diff-actions__button--danger' : ''].filter(Boolean).join(' ');
-        button.textContent = action.label;
-        button.title = action.title ?? action.label;
-        button.disabled = Boolean(action.disabled);
-        button.toggleAttribute('data-busy', Boolean(action.busy));
-        button.addEventListener('mousedown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-        });
-        button.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (button.disabled) {
-                return;
-            }
-
-            action.onClick();
-        });
-        panelNode.appendChild(button);
-
-        return () => button.remove();
-    });
-
-    const containerNode = document.createElement('div');
-    containerNode.className = 'monaco-diff-actions-container';
-    containerNode.addEventListener('mouseenter', () => {
-        hoveringActionZone.value = true;
-        setHoveredActionZone(zone.id);
-    });
-    containerNode.addEventListener('mouseleave', () => {
-        hoveringActionZone.value = false;
-
-        if (getActionZoneVisibility() === 'hover') {
-            scheduleHoveredActionZoneClear();
-        }
-    });
-    containerNode.appendChild(panelNode);
-
-    return {
-        domNode: containerNode,
-        zoneId: undefined,
-        dispose() {
-            listeners.forEach((cleanup) => cleanup());
-            containerNode.remove();
-        },
-    };
-}
-
-function syncDiffActionZones() {
-    const modifiedEditor = diffEditorRef.value?.getModifiedEditor();
-
-    if (!modifiedEditor) {
-        clearDiffActionZones(undefined);
-        return;
-    }
-
-    clearDiffActionZones(modifiedEditor);
-
-    const visibleActionZones =
-        // getActionZoneVisibility() === 'hover' ? (props.actionZones ?? []) : (props.actionZones ?? []);
-        getActionZoneVisibility() === 'hover' ? (props.actionZones ?? []).filter((zone) => zone.id === hoveredActionZoneId.value) : (props.actionZones ?? []);
-
-    const nextZones = visibleActionZones
-        .filter((zone) => zone.actions.length > 0)
-        .map((zone) => ({
-            zone: createDiffActionZone(zone),
-            afterLineNumber: Math.max(0, zone.afterLineNumber),
-        }));
-
-    if (!nextZones.length) {
-        return;
-    }
-
-    modifiedEditor.changeViewZones((accessor) => {
-        nextZones.forEach(({ zone, afterLineNumber }) => {
-            zone.zoneId = accessor.addZone({
-                afterLineNumber,
-                heightInPx: 0,
-                suppressMouseDown: true,
-                domNode: zone.domNode,
-            });
-        });
-    });
-
-    diffActionZoneRefs.value = nextZones.map(({ zone }) => zone);
-}
-
-function applyStableDiffOptions() {
-    const diffEditor = diffEditorRef.value;
-
-    if (!diffEditor) {
-        return;
-    }
-
-    diffEditor.updateOptions(diffOptions.value);
-    diffEditor.getOriginalEditor().updateOptions({
-        hover: {
-            enabled: false,
-        },
-    });
-    diffEditor.getModifiedEditor().updateOptions({
-        hover: {
-            enabled: false,
-        },
-    });
-    syncDiffActionZones();
-
-    if (props.revealLine && props.revealLine > 0) {
-        diffEditor.getModifiedEditor().revealLineInCenter(props.revealLine);
-    }
-
-    diffEditor.layout();
+    originalCosmeticDiffMutationObserverRef.value = new MutationObserver(() => cosmeticMasking.scheduleCosmeticDiffMaskSync('original', 'mutationObserver', 50));
+    modifiedCosmeticDiffMutationObserverRef.value = new MutationObserver(() => cosmeticMasking.scheduleCosmeticDiffMaskSync('modified', 'mutationObserver', 50));
+    diffComputationListenersRef.value = [diffEditorRef.value.onDidUpdateDiff(() => applyStableDiffOptions())];
 }
 
 function disposeDiffEditor() {
-    clearDiffActionZones();
+    disposeActionZones();
+    cosmeticMasking.dispose();
     clearDiffEditorListeners();
     clearDiffComputationListeners();
-    clearPendingHoveredActionZoneClear();
-    hoveredActionZoneId.value = undefined;
-    hoveringActionZone.value = false;
-
+    disconnectCosmeticDiffMutationObservers();
     const diffEditor = diffEditorRef.value;
-
     if (diffEditor) {
         diffEditor.dispose();
         diffEditorRef.value = undefined;
     }
-
     originalModelRef.value?.dispose();
     modifiedModelRef.value?.dispose();
     originalModelRef.value = undefined;
     modifiedModelRef.value = undefined;
 }
 
-async function ensureDiffEditor() {
-    if (!isDiffEditor.value || !diffContainerRef.value || diffEditorRef.value) {
-        return;
+let applyingStableOptions = false;
+
+function applyStableDiffOptions() {
+    if (applyingStableOptions) return;
+    applyingStableOptions = true;
+    try {
+        const diffEditor = diffEditorRef.value;
+        if (!diffEditor) return;
+        diffEditor.updateOptions(diffOptions.value);
+        diffEditor.getOriginalEditor().updateOptions({ wordWrap: 'off', hover: { enabled: false } });
+        diffEditor.getModifiedEditor().updateOptions({ wordWrap: 'off', hover: { enabled: false } });
+        cosmeticMasking.syncCosmeticDiffMasks(undefined, 'applyStableDiffOptions');
+        syncCenteredActionZoneLayouts();
+        cosmeticMasking.emitVisibleDiffChange();
+        if (props.revealLine && props.revealLine > 0) diffEditor.getModifiedEditor().revealLineInCenter(props.revealLine);
+        diffEditor.layout();
+    } finally {
+        applyingStableOptions = false;
     }
-
-    const monaco = await getMonacoModule();
-
-    configureMonaco(monaco);
-    monaco.editor.setTheme('vs-dark');
-
-    diffEditorRef.value = monaco.editor.createDiffEditor(diffContainerRef.value, {
-        ...diffOptions.value,
-    });
-
-    createDiffModels();
-    diffEditorRef.value.setModel({
-        original: originalModelRef.value!,
-        modified: modifiedModelRef.value!,
-    });
-
-    const originalEditor = diffEditorRef.value.getOriginalEditor();
-    const modifiedEditor = diffEditorRef.value.getModifiedEditor();
-    diffEditorListenersRef.value = [...createDiffHoverListener(originalEditor, 'original'), ...createDiffHoverListener(modifiedEditor, 'modified')];
-    diffComputationListenersRef.value = [
-        diffEditorRef.value.onDidUpdateDiff(() => {
-            applyStableDiffOptions();
-        }),
-    ];
 }
 
 async function syncDiffEditor() {
     const requestId = ++syncDiffRequestId;
-
     if (!isDiffEditor.value) {
         disposeDiffEditor();
         return;
     }
-
     await ensureDiffEditor();
-
-    if (requestId !== syncDiffRequestId || !originalModelRef.value || !modifiedModelRef.value) {
-        return;
+    if (cosmeticMasking.hasVisibleDiffChanges.value !== undefined) {
+        cosmeticMasking.hasVisibleDiffChanges.value = undefined;
+        emit('visibleDiffChange', undefined);
     }
-
+    if (requestId !== syncDiffRequestId || !originalModelRef.value || !modifiedModelRef.value) return;
     const nextLanguage = finalLanguage.value;
     const nextOriginal = props.original ?? '';
     const nextModified = props.modified ?? '';
-
-    if (originalModelRef.value.getLanguageId() !== nextLanguage) {
-        monacoModuleRef.value?.editor.setModelLanguage(originalModelRef.value, nextLanguage);
-    }
-
-    if (modifiedModelRef.value.getLanguageId() !== nextLanguage) {
-        monacoModuleRef.value?.editor.setModelLanguage(modifiedModelRef.value, nextLanguage);
-    }
-
-    if (originalModelRef.value.getValue() !== nextOriginal) {
-        originalModelRef.value.setValue(nextOriginal);
-    }
-
-    if (modifiedModelRef.value.getValue() !== nextModified) {
-        modifiedModelRef.value.setValue(nextModified);
-    }
-
-    if (requestId !== syncDiffRequestId) {
-        return;
-    }
-
+    if (originalModelRef.value.getLanguageId() !== nextLanguage) monacoModuleRef.value?.editor.setModelLanguage(originalModelRef.value, nextLanguage);
+    if (modifiedModelRef.value.getLanguageId() !== nextLanguage) monacoModuleRef.value?.editor.setModelLanguage(modifiedModelRef.value, nextLanguage);
+    if (originalModelRef.value.getValue() !== nextOriginal) originalModelRef.value.setValue(nextOriginal);
+    if (modifiedModelRef.value.getValue() !== nextModified) modifiedModelRef.value.setValue(nextModified);
+    if (requestId !== syncDiffRequestId) return;
     applyStableDiffOptions();
 }
 
@@ -454,53 +235,44 @@ async function syncEditor() {
         disposeEditor();
         return;
     }
-
     await ensureEditor();
-
-    if (!modelRef.value || !editorRef.value) {
-        return;
-    }
-
+    if (!modelRef.value || !editorRef.value) return;
     const nextValue = modelValue.value ?? '';
     const nextLanguage = finalLanguage.value;
-
-    if (modelRef.value.getLanguageId() !== nextLanguage) {
-        monacoModuleRef.value?.editor.setModelLanguage(modelRef.value, nextLanguage);
-    }
-
+    if (modelRef.value.getLanguageId() !== nextLanguage) monacoModuleRef.value?.editor.setModelLanguage(modelRef.value, nextLanguage);
     if (modelRef.value.getValue() !== nextValue) {
         applyingExternalValue = true;
         modelRef.value.setValue(nextValue);
         applyingExternalValue = false;
     }
-
     editorRef.value.updateOptions(options.value);
     editorRef.value.layout();
 }
 
-const finalLanguage = computed(() => {
-    return getMonacoLanguage(props.language, props.pathForLanguage);
-});
+const finalLanguage = computed(() => getMonacoLanguage(props.language, props.pathForLanguage));
 
-const options = computed(() => {
-    return createMonacoOptions({
-        readonly: props.readonly,
-        fontSize: settings.state.diffFontSize,
-    }) as MonacoEditorModule.editor.IStandaloneEditorConstructionOptions;
-});
+const options = computed(
+    () =>
+        createMonacoOptions({
+            readonly: props.readonly,
+            fontSize: settings.state.diffFontSize,
+        }) as MonacoEditorModule.editor.IStandaloneEditorConstructionOptions
+);
 
-const diffOptions = computed(() => {
-    return {
-        ...options.value,
-        hideUnchangedRegions: {
-            enabled: props.diffViewMode === 'changes',
-        },
-        hover: {
-            enabled: false,
-        },
-        ignoreTrimWhitespace: !props.showWhitespaceChanges,
-    } satisfies MonacoEditorModule.editor.IDiffEditorConstructionOptions;
-});
+const diffOptions = computed(
+    () =>
+        ({
+            ...options.value,
+            renderSideBySide: true,
+            compactMode: false,
+            renderSideBySideInlineBreakpoint: 0,
+            useInlineViewWhenSpaceIsLimited: false,
+            diffWordWrap: 'off',
+            hideUnchangedRegions: { enabled: props.diffViewMode === 'changes', contextLineCount: 4 },
+            hover: { enabled: false },
+            ignoreTrimWhitespace: !props.showWhitespaceChanges,
+        }) as MonacoEditorModule.editor.IDiffEditorConstructionOptions
+);
 
 watch(
     () => [
@@ -513,9 +285,9 @@ watch(
         props.readonly,
         settings.state.diffFontSize,
         props.diffViewMode,
+        props.diffIgnoredChars,
         props.showWhitespaceChanges,
         props.revealLine,
-        props.actionZones,
     ],
     () => {
         void syncEditor();
@@ -523,13 +295,16 @@ watch(
     }
 );
 
+watch(
+    () => [props.actionZones, props.actionZoneVisibility],
+    () => syncCenteredActionZoneLayouts()
+);
+
 onMounted(() => {
     void syncEditor();
     void syncDiffEditor();
 });
-
 onUnmounted(() => {
-    clearPendingHoveredActionZoneClear();
     disposeEditor();
     disposeDiffEditor();
 });
@@ -545,23 +320,90 @@ onUnmounted(() => {
             <MonacoEditorSettingsButton :hide-diff-options="!isDiffEditor" />
         </div>
 
-        <div v-if="isDiffEditor" ref="diffContainerRef" class="w-full min-h-40 flex-1" :class="props.class" />
+        <div
+            v-if="isDiffEditor"
+            class="relative w-full min-h-40 flex-1"
+            :class="[props.class, cosmeticMasking.wholeDocumentCosmeticMaskActive.value ? 'gitvan-hide-all-diff-decorations' : '']"
+        >
+            <div ref="diffContainerRef" class="absolute inset-0" />
+            <div class="monaco-diff-actions-overlay">
+                <div
+                    v-for="layout in centeredActionZoneLayouts"
+                    :key="layout.id"
+                    class="monaco-diff-actions-anchor"
+                    :style="{ left: `${layout.left}px`, top: `${layout.top}px` }"
+                    @mouseenter="
+                        hoveringActionZone = true;
+                        setHoveredActionZone(layout.id);
+                    "
+                    @mouseleave="
+                        hoveringActionZone = false;
+                        scheduleHoveredActionZoneClear();
+                    "
+                >
+                    <button type="button" class="monaco-diff-actions-trigger" :title="layout.zone.label ?? 'Change actions'" @mousedown.prevent.stop>
+                        <span class="icon icon-[mdi--dots-horizontal] text-[11px]"></span>
+                    </button>
+
+                    <div v-if="getActionZoneVisibility() === 'always' || hoveredActionZoneId === layout.id" class="monaco-diff-actions-popover" @mousedown.prevent.stop>
+                        <div v-if="layout.zone.label" class="monaco-diff-actions__label">{{ layout.zone.label }}</div>
+                        <div v-if="layout.zone.meta" class="monaco-diff-actions__meta">{{ layout.zone.meta }}</div>
+                        <button
+                            v-for="action in layout.zone.actions"
+                            :key="action.id"
+                            type="button"
+                            :class="['monaco-diff-actions__button', action.tone === 'danger' ? 'monaco-diff-actions__button--danger' : '']"
+                            :title="action.title ?? action.label"
+                            :disabled="Boolean(action.disabled)"
+                            :data-busy="Boolean(action.busy)"
+                            @mousedown.prevent.stop
+                            @click.prevent.stop="action.disabled ? undefined : action.onClick()"
+                        >
+                            {{ action.label }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div v-else ref="editorContainerRef" class="w-full min-h-40 flex-1" :class="props.class" />
     </div>
 </template>
 
 <style>
-.monaco-diff-actions-container {
-    display: block !important;
-    height: 0 !important;
-    overflow: visible !important;
-    pointer-events: auto;
-    position: relative;
+.monaco-diff-actions-overlay {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
     z-index: 55;
 }
 
-.monaco-diff-actions {
-    display: inline-flex !important;
+.monaco-diff-actions-anchor {
+    position: absolute;
+    pointer-events: auto;
+    transform: translate(-50%, -50%);
+}
+
+.monaco-diff-actions-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #1274cf;
+    border-radius: 999px;
+    background: #0b4983;
+    color: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    cursor: pointer;
+}
+
+.monaco-diff-actions-trigger:hover {
+    background: #0f5ca7;
+}
+
+.monaco-diff-actions-popover {
+    display: inline-flex;
     align-items: center;
     gap: 0.2rem;
     flex-wrap: wrap;
@@ -569,11 +411,14 @@ onUnmounted(() => {
     border: 1px solid #1274cf;
     border-radius: 0.35rem;
     pointer-events: auto;
-    position: relative;
-    z-index: 55;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 56;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-    width: fit-content !important;
-    transform: translateY(calc(-100% - 1px));
+    width: max-content;
+    transform: translate(-50%, calc(-100% - 8px));
+    padding: 1px;
 }
 
 .monaco-diff-actions__label {
@@ -624,5 +469,30 @@ onUnmounted(() => {
 .monaco-diff-actions__button:disabled:hover,
 .monaco-diff-actions__button[data-busy='true']:hover {
     background: transparent;
+}
+
+.gitvan-cosmetic-diff-mask {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.gitvan-cosmetic-diff-mask::before,
+.gitvan-cosmetic-diff-mask::after {
+    opacity: 0 !important;
+}
+
+.gitvan-hide-all-diff-decorations .line-insert,
+.gitvan-hide-all-diff-decorations .line-delete,
+.gitvan-hide-all-diff-decorations .char-insert,
+.gitvan-hide-all-diff-decorations .char-delete,
+.gitvan-hide-all-diff-decorations .diff-range-empty,
+.gitvan-hide-all-diff-decorations .diagonal-fill {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+    opacity: 0 !important;
 }
 </style>

@@ -43,12 +43,26 @@ const props = defineProps<{
     onHeaderContextMenu?: (item: FileTreeItem<TData, TRoot>, event?: MouseEvent) => void;
 }>();
 
+function clearTextSelection() {
+    window.getSelection()?.removeAllRanges();
+}
+
+function onMouseDown(event: MouseEvent) {
+    if (event.button !== 2) {
+        return;
+    }
+
+    event.preventDefault();
+    clearTextSelection();
+}
+
 function onHeaderContextMenu(event: MouseEvent) {
     if (!props.onHeaderContextMenu) {
         return;
     }
 
     event.preventDefault();
+    clearTextSelection();
     props.onHeaderContextMenu(props.item, event);
 }
 
@@ -57,6 +71,7 @@ function onContextMenu(event: MouseEvent, item: Item) {
         return;
     }
     event.preventDefault();
+    clearTextSelection();
     props.onContextMenu(item, event);
 }
 
@@ -129,6 +144,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
             v-if="item.title"
             class="flex items-center justify-between px-1 py-1 text-xs font-semibold tracking-[0.02em] text-default"
             :class="props.headerOutlined ? 'outline-1 -outline-offset-1 outline-white/35 bg-white/6' : undefined"
+            @mousedown.capture="onMouseDown"
             @contextmenu="onHeaderContextMenu"
         >
             <div class="flex items-center uppercase gap-1 flex-1">
@@ -155,6 +171,8 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                     isOutlined(entryState.item) ? 'outline-1 -outline-offset-1 outline-white/35' : undefined,
                     itemClass,
                 ]"
+                @mousedown.capture="onMouseDown"
+                @contextmenu="(e) => onContextMenu(e, entryState.item)"
             >
                 <button
                     type="button"
@@ -164,7 +182,6 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                     class="flex min-w-0 w-full flex-1 items-center gap-1.5 text-left overflow-hidden"
                     :style="{ paddingLeft: `${entryState.depth * 0.875}rem` }"
                     @click="(event) => onEntryClick(event as MouseEvent, entryState.item)"
-                    @contextmenu="(e) => onContextMenu(e, entryState.item)"
                 >
                     <span
                         v-if="entryState.isGroup"

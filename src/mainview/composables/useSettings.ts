@@ -11,6 +11,10 @@ function normalizeApplicationLabel(path: string, label?: string) {
     return (label?.trim() || fallbackLabel).replace(/\.app$|\.exe$/i, '');
 }
 
+function normalizeDiffIgnoredChars(value: string) {
+    return Array.from(new Set(value.replace(/\s+/gu, '').slice(0, 64))).join('');
+}
+
 function compareApplications(left: { path: string; label: string }, right: { path: string; label: string }, defaultPath: string | undefined) {
     if (left.path === defaultPath) {
         return -1;
@@ -32,6 +36,7 @@ export function _useSettings() {
             defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
+            diffIgnoredChars: '',
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
@@ -162,6 +167,7 @@ export function _useSettings() {
                     defaultTerminalPath: settings.defaultTerminalPath,
                     diffFontSize: settings.diffFontSize,
                     diffViewMode: settings.diffViewMode,
+                    diffIgnoredChars: settings.diffIgnoredChars,
                     showWhitespaceChanges: settings.showWhitespaceChanges,
                     activeView: settings.activeView,
                     showBranches: settings.showBranches,
@@ -267,6 +273,9 @@ export function _useSettings() {
         },
         async setDiffViewMode(diffViewMode: EditorSettings['diffViewMode']) {
             await this._patchEditorSettings({ diffViewMode });
+        },
+        async setDiffIgnoredChars(diffIgnoredChars: string) {
+            await this._patchEditorSettings({ diffIgnoredChars: normalizeDiffIgnoredChars(diffIgnoredChars) });
         },
         async setShowWhitespaceChanges(showWhitespaceChanges: boolean) {
             await this._patchEditorSettings({ showWhitespaceChanges });

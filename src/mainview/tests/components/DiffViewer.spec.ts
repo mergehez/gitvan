@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { reactive } from 'vue';
+import { defineComponent, reactive } from 'vue';
 import type { EditorSettings } from '../../../shared/gitClient';
 import DiffViewer from '../../components/DiffViewer.vue';
 import type { MonacoEditorActionZone } from '../../components/monacoEditorTypes';
@@ -24,6 +24,7 @@ function createMockSettings() {
             defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
+            diffIgnoredChars: '',
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
@@ -42,18 +43,28 @@ const iconButtonStub = {
     template: '<button type="button" @click="$emit(\'click\')"><slot /></button>',
 };
 
-const monacoEditorStub = {
+const monacoEditorStub = defineComponent({
     name: 'MonacoEditor',
-    props: ['actionZones'],
-    template: '<div data-testid="monaco-editor" :data-action-zone-count="actionZones?.length ?? 0">Monaco</div>',
-};
+    emits: ['visible-diff-change'],
+    props: {
+        actionZones: {
+            type: Array,
+            default: () => [],
+        },
+        diffIgnoredChars: {
+            type: String,
+            default: '',
+        },
+    },
+    template: '<div data-testid="monaco-editor" :data-action-zone-count="actionZones.length" :data-diff-ignored-chars="diffIgnoredChars">Monaco</div>',
+});
 
 const monacoEditorSettingsButtonStub = {
     name: 'MonacoEditorSettingsButton',
     template: '<button type="button" data-testid="monaco-editor-settings">Settings</button>',
 };
 
-function mountDiffViewer(onlyWhitespaceChanges: boolean, actionZones?: MonacoEditorActionZone[]) {
+function mountDiffViewer(onlyWhitespaceChanges: boolean, noActualChange = false, actionZones?: MonacoEditorActionZone[]) {
     return mount(DiffViewer, {
         props: {
             state: {
@@ -63,6 +74,7 @@ function mountDiffViewer(onlyWhitespaceChanges: boolean, actionZones?: MonacoEdi
                 pathForLanguage: 'README.md',
                 previewMessage: undefined,
                 onlyWhitespaceChanges,
+                noActualChange,
                 metaItems: [],
                 originalSrc: undefined,
                 modifiedSrc: undefined,
@@ -86,9 +98,10 @@ describe('DiffViewer', () => {
     });
 
     it('shows a header badge for whitespace-only diffs', () => {
-        const wrapper = mountDiffViewer(true);
+        const wrapper = mountDiffViewer(true, true);
 
         expect(wrapper.text()).toContain('space-only-diff');
+        expect(wrapper.text()).toContain('no actual change');
         expect(wrapper.find('[data-testid="monaco-editor-settings"]').exists()).toBe(true);
     });
 
@@ -96,10 +109,41 @@ describe('DiffViewer', () => {
         const wrapper = mountDiffViewer(false);
 
         expect(wrapper.text()).not.toContain('space-only-diff');
+        expect(wrapper.text()).not.toContain('no actual change');
+    });
+
+    it('shows the no-actual-change badge for ignored-char-only diffs', () => {
+        const wrapper = mountDiffViewer(false, true);
+
+        expect(wrapper.text()).not.toContain('space-only-diff');
+        expect(wrapper.text()).toContain('no actual change');
+    });
+
+    it('shows the no-actual-change badge when Monaco reports no visible changes', async () => {
+        const wrapper = mountDiffViewer(false, false, [
+            {
+                id: 'hunk-1',
+                afterLineNumber: 4,
+                label: '#1 -1 +2',
+                meta: 'Old 4:1  New 4:2',
+                actions: [
+                    {
+                        id: 'stage:hunk-1',
+                        label: 'Stage Change',
+                        onClick: vi.fn(),
+                    },
+                ],
+            },
+        ]);
+
+        wrapper.getComponent(monacoEditorStub).vm.$emit('visible-diff-change', false);
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.text()).toContain('no actual change');
     });
 
     it('passes Monaco action zones through to the editor', () => {
-        const wrapper = mountDiffViewer(false, [
+        const wrapper = mountDiffViewer(false, false, [
             {
                 id: 'hunk-1',
                 afterLineNumber: 4,
@@ -116,5 +160,13 @@ describe('DiffViewer', () => {
         ]);
 
         expect(wrapper.get('[data-testid="monaco-editor"]').attributes('data-action-zone-count')).toBe('1');
+    });
+
+    it('passes ignored diff characters through to the editor', () => {
+        mockSettings.state.diffIgnoredChars = ',;"\'';
+
+        const wrapper = mountDiffViewer(false);
+
+        expect(wrapper.get('[data-testid="monaco-editor"]').attributes('data-diff-ignored-chars')).toBe(',;"\'');
     });
 });

@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { areEquivalentIgnoringDiffChars } from '../../../shared/diffIgnoredChars.js';
 import type { FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/gitClient.js';
 import { runGit } from './git-common.js';
 import {
@@ -126,7 +127,13 @@ export const changesGit = {
             };
         }
     },
-    async getRepoChanges(repoPath: string): Promise<RepoChangesData> {
+    async getRepoChanges(
+        repoPath: string,
+        options: {
+            ignoredChars?: string;
+            showWhitespaceChanges?: boolean;
+        } = {}
+    ): Promise<RepoChangesData> {
         const [stagedRaw, unstagedRaw, untrackedRaw, trackedStatusRaw] = await Promise.all([
             runGit(['diff', '--staged', '--name-status', '-z', '--find-renames', '--'], repoPath),
             runGit(['diff', '--name-status', '-z', '--find-renames', '--'], repoPath),
@@ -165,7 +172,7 @@ export const changesGit = {
         }
 
         const allPaths = new Set([...stagedMap.keys(), ...unstagedMap.keys()]);
-        const entries = [...allPaths]
+        const entries: FileChangeEntry[] = [...allPaths]
             .sort((left, right) => left.localeCompare(right))
             .map((path) => {
                 const stagedEntry = stagedMap.get(path);
@@ -182,6 +189,18 @@ export const changesGit = {
                     displayStatus: labelForStatus(primaryStatus),
                 } satisfies FileChangeEntry;
             });
+
+        await Promise.all(
+            entries.map(async (entry) => {
+                if (entry.stagedStatus === 'modified') {
+                    entry.stagedNoActualChange = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
+                }
+
+                if (entry.unstagedStatus === 'modified') {
+                    entry.unstagedNoActualChange = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
+                }
+            })
+        );
 
         return {
             staged: entries.filter((entry) => entry.stagedStatus !== 'clean'),
@@ -452,6 +471,42 @@ export const changesGit = {
         await runGit(['reset', '--soft', 'HEAD~1'], repoPath);
     },
 };
+
+async function hasNoActualChangeForKind(
+    repoPath: string,
+    filePath: string,
+    kind: FileDiffRequestKind,
+    ignoredChars: string | undefined,
+    showWhitespaceChanges: boolean | undefined
+) {
+    if (isImagePath(filePath)) {
+        return false;
+    }
+
+    const absolutePath = join(repoPath, filePath);
+
+    if (kind === 'staged') {
+        const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `HEAD:${filePath}`), readGitRevisionFileSize(repoPath, `:${filePath}`)]);
+
+        if (isPreviewTooLarge(originalSize, modifiedSize)) {
+            return false;
+        }
+
+        const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `HEAD:${filePath}`), readGitRevisionFile(repoPath, `:${filePath}`)]);
+
+        return areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false));
+    }
+
+    const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFileSize(absolutePath))]);
+
+    if (isPreviewTooLarge(originalSize, modifiedSize)) {
+        return false;
+    }
+
+    const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFile(absolutePath))]);
+
+    return areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false));
+}
 
 function buildPartialCapabilities(kind: 'staged' | 'unstaged', oldSizeBytes: number, newSizeBytes: number, hunks: FileDiffEntry['hunks']) {
     const supportsPartialHunks = hunks.length > 1 && oldSizeBytes > 0 && newSizeBytes > 0;

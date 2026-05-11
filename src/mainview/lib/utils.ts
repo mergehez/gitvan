@@ -95,8 +95,12 @@ export function statusLetter(entry: { status?: ChangeStatus }) {
     return map[status];
 }
 
-export function statusClass(entry: { status?: ChangeStatus }) {
+export function statusClass(entry: { status?: ChangeStatus; noActualChange?: boolean }) {
     const status: ChangeStatus = entry.status ?? 'clean';
+
+    if (status === 'modified' && entry.noActualChange) {
+        return 'text-white/25';
+    }
 
     if (status === 'deleted' || status === 'unmerged') {
         return 'text-red-400';

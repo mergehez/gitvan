@@ -87,4 +87,37 @@ describe('useSettings openRepoPathInEditor', () => {
         expect(mockTasks.openFileInEditor.run).toHaveBeenCalledTimes(1);
         expect(mockTasks.pickEditorApplication.run).toHaveBeenCalledTimes(1);
     });
+
+    it('persists ignored diff characters through updateEditorSettings', async () => {
+        const settings = _useSettings();
+        mockTasks.updateEditorSettings.run.mockResolvedValue({
+            ...settings.state,
+            diffIgnoredChars: ',;"\'',
+        });
+
+        await settings.setDiffIgnoredChars(',;"\'');
+
+        expect(mockTasks.updateEditorSettings.run).toHaveBeenCalledWith({
+            settings: expect.objectContaining({
+                diffIgnoredChars: ',;"\'',
+            }),
+        });
+        expect(settings.state.diffIgnoredChars).toBe(',;"\'');
+    });
+
+    it('strips whitespace from ignored diff characters before persisting', async () => {
+        const settings = _useSettings();
+        mockTasks.updateEditorSettings.run.mockResolvedValue({
+            ...settings.state,
+            diffIgnoredChars: ',;"\'',
+        });
+
+        await settings.setDiffIgnoredChars(', ; " \t\'');
+
+        expect(mockTasks.updateEditorSettings.run).toHaveBeenCalledWith({
+            settings: expect.objectContaining({
+                diffIgnoredChars: ',;"\'',
+            }),
+        });
+    });
 });

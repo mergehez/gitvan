@@ -85,6 +85,7 @@ function createMockSettings(activeView: NavigationView = 'changes') {
             defaultTerminalPath: undefined,
             diffFontSize: 12,
             diffViewMode: 'full-file',
+            diffIgnoredChars: '',
             showWhitespaceChanges: false,
             activeView,
             showBranches: false,

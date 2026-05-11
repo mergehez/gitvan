@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { DiffViewerState } from '../composables/useDiffViewer';
 import { useSettings } from '../composables/useSettings';
 import Alert from './Alert.vue';
@@ -13,6 +13,9 @@ const props = defineProps<{
     focusLine?: number;
     actionZones?: MonacoEditorActionZone[];
     actionZoneVisibility?: 'always' | 'hover';
+}>();
+const emit = defineEmits<{
+    visibleDiffChange: [hasVisibleChanges: boolean | undefined];
 }>();
 
 type PreviewPane = {
@@ -41,8 +44,23 @@ const panes = computed<PreviewPane[]>(() => {
 });
 const hasPreviewImages = computed(() => Boolean(props.state?.originalSrc || props.state?.modifiedSrc));
 const rendersTextDiff = computed(() => !props.state?.previewMessage && !hasPreviewImages.value);
+const hasVisibleDiffChanges = ref<boolean>();
 const showsWhitespaceOnlyIndicator = computed(() => !settings.state.showWhitespaceChanges && rendersTextDiff.value && props.state?.onlyWhitespaceChanges);
+const showsNoActualChangeIndicator = computed(() => rendersTextDiff.value && (props.state?.noActualChange || hasVisibleDiffChanges.value === false));
 const horizontalImages = ref(false);
+
+watch(
+    () => [props.state?.title, props.state?.original, props.state?.modified, props.state?.pathForLanguage],
+    () => {
+        hasVisibleDiffChanges.value = undefined;
+        emit('visibleDiffChange', undefined);
+    }
+);
+
+function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
+    hasVisibleDiffChanges.value = hasVisibleChanges;
+    emit('visibleDiffChange', hasVisibleChanges);
+}
 </script>
 
 <template>
@@ -51,6 +69,7 @@ const horizontalImages = ref(false);
             <div class="truncate flex-1 text-white">{{ state?.title }}</div>
             <slot name="before-header-actions"></slot>
             <Alert v-if="showsWhitespaceOnlyIndicator" severity="secondary" class="rounded px-2 py-px tracking-tight text-white/75"> space-only-diff </Alert>
+            <Alert v-if="showsNoActualChangeIndicator" severity="secondary" class="rounded px-2 py-px tracking-tight text-white/75"> no actual change </Alert>
             <div v-if="state?.metaItems?.length" class="flex flex-wrap items-center gap-1 text-xs text-white/65">
                 <Alert severity="secondary" v-for="item in state.metaItems" :key="item.id" class="rounded px-2 py-px tracking-tight" v-html="item.text"> </Alert>
             </div>
@@ -97,12 +116,14 @@ const horizontalImages = ref(false);
             :modified="state?.modified"
             :path-for-language="state?.pathForLanguage"
             :diff-view-mode="settings.state.diffViewMode"
+            :diff-ignored-chars="settings.state.diffIgnoredChars"
             :show-whitespace-changes="settings.state.showWhitespaceChanges"
             :reveal-line="props.focusLine"
             :action-zones="props.actionZones"
             :action-zone-visibility="props.actionZoneVisibility"
             :readonly="true"
             class="overflow-y-auto text-xs leading-6 text-white/85"
+            @visible-diff-change="onVisibleDiffChange"
         />
     </div>
 </template>

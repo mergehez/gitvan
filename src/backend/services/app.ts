@@ -91,6 +91,7 @@ const defaultEditorSettings: EditorSettings = {
     defaultTerminalPath: undefined,
     diffFontSize: 12,
     diffViewMode: 'full-file',
+    diffIgnoredChars: '',
     showWhitespaceChanges: false,
     activeView: 'changes',
     showBranches: false,
@@ -156,6 +157,14 @@ function normalizeOAuthProviderSettings(value: unknown): OAuthProviderSettings {
     };
 }
 
+function normalizeDiffIgnoredChars(value: unknown) {
+    if (typeof value !== 'string') {
+        return defaultEditorSettings.diffIgnoredChars;
+    }
+
+    return Array.from(new Set(value.replace(/\s+/gu, '').slice(0, 64))).join('');
+}
+
 function normalizeEditorSettings(value: unknown): EditorSettings {
     if (!value || typeof value !== 'object') {
         return defaultEditorSettings;
@@ -168,6 +177,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         defaultTerminalPath?: string | undefined;
         diffFontSize?: number;
         diffViewMode?: EditorSettings['diffViewMode'];
+        diffIgnoredChars?: string;
         showWhitespaceChanges?: boolean;
         activeView?: NavigationView;
         lastEditorPath?: string | undefined;
@@ -224,6 +234,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
             return Math.min(24, Math.max(10, Math.round(value)));
         })(),
         diffViewMode: raw.diffViewMode === 'changes' ? 'changes' : 'full-file',
+        diffIgnoredChars: normalizeDiffIgnoredChars(raw.diffIgnoredChars),
         showWhitespaceChanges: raw.showWhitespaceChanges === true,
         activeView: raw.activeView === 'history' || raw.activeView === 'explorer' ? raw.activeView : 'changes',
         showBranches: raw.showBranches === true,
@@ -656,7 +667,7 @@ export const app = {
 
         return buildBootstrap();
     },
-    removeTrackedRepo: async (ps: { repoId: number }) => {
+    removeRepo: async (ps: { repoId: number }) => {
         db.removeRepo(ps.repoId);
 
         if (db.getSelectedRepoId() === ps.repoId) {
@@ -665,7 +676,7 @@ export const app = {
 
         return buildBootstrap();
     },
-    createTrackedRepoGroup: async (ps: { name: string }) => {
+    createRepoGroup: async (ps: { name: string }) => {
         const normalizedName = ((groupName: string): string => groupName.trim())(ps.name);
 
         if (!normalizedName) {
@@ -694,7 +705,7 @@ export const app = {
         db.deleteGroup(ps.groupId);
         return buildBootstrap();
     },
-    renameTrackedRepoGroup: async (ps: { groupId: number; name: string }) => {
+    renameRepoGroup: async (ps: { groupId: number; name: string }) => {
         const normalizedName = ((groupName: string): string => groupName.trim())(ps.name);
 
         if (!normalizedName) {
@@ -713,7 +724,7 @@ export const app = {
         db.updateGroupName(ps.groupId, normalizedName);
         return buildBootstrap();
     },
-    renameTrackedRepo: async (ps: { repoId: number; name: string }) => {
+    renameRepo: async (ps: { repoId: number; name: string }) => {
         const normalizedName = ps.name.trim();
 
         if (!normalizedName) {
@@ -727,7 +738,7 @@ export const app = {
         db.updateRepoName(ps.repoId, normalizedName);
         return buildBootstrap();
     },
-    updateTrackedRepoGroup: async (ps: { repoId: number; groupId: number | undefined }) => {
+    updateRepoGroup: async (ps: { repoId: number; groupId: number | undefined }) => {
         if (!db.repoExists(ps.repoId)) {
             throw new Error('The selected repository could not be found.');
         }
@@ -739,7 +750,7 @@ export const app = {
         db.updateRepoGroup(ps.repoId, ps.groupId);
         return buildBootstrap();
     },
-    updateTrackedRepoGroups: async (ps: { updates: Array<{ repoId: number; groupId: number | undefined }> }) => {
+    updateRepoGroups: async (ps: { updates: Array<{ repoId: number; groupId: number | undefined }> }) => {
         for (const update of ps.updates) {
             if (!db.repoExists(update.repoId)) {
                 throw new Error('One of the selected repositories could not be found.');
@@ -754,7 +765,7 @@ export const app = {
 
         return buildBootstrap();
     },
-    moveTrackedRepo: async (ps: { repoId: number; direction: 'up' | 'down' }) => {
+    moveRepo: async (ps: { repoId: number; direction: 'up' | 'down' }) => {
         if (!db.repoExists(ps.repoId)) {
             throw new Error('The selected repository could not be found.');
         }
@@ -762,7 +773,7 @@ export const app = {
         db.moveRepo(ps.repoId, ps.direction);
         return buildBootstrap();
     },
-    reorderTrackedRepo: async (ps: { repoId: number; toIndex: number }) => {
+    reorderRepo: async (ps: { repoId: number; toIndex: number }) => {
         if (!db.repoExists(ps.repoId)) {
             throw new Error('The selected repository could not be found.');
         }
@@ -770,7 +781,7 @@ export const app = {
         db.reorderRepo(ps.repoId, ps.toIndex);
         return buildBootstrap();
     },
-    moveTrackedRepoGroup: async (ps: { groupId: number; direction: 'up' | 'down' }) => {
+    moveRepoGroup: async (ps: { groupId: number; direction: 'up' | 'down' }) => {
         if (!db.groupExists(ps.groupId)) {
             throw new Error('The selected group could not be found.');
         }
@@ -778,7 +789,7 @@ export const app = {
         db.moveGroup(ps.groupId, ps.direction);
         return buildBootstrap();
     },
-    createAccountRecord: async (ps: {
+    createAccount: async (ps: {
         label: string;
         provider: string;
         authKind: string;
@@ -826,7 +837,7 @@ export const app = {
 
         return buildBootstrap();
     },
-    updateAccountRecord: async (ps: {
+    updateAccount: async (ps: {
         accountId: number;
         label: string;
         username: string | undefined;
@@ -867,7 +878,7 @@ export const app = {
         db.updateAccount(ps.accountId, normalizedLabel, nextUsername, nextHost, ps.setAsDefault);
         return buildBootstrap();
     },
-    deleteAccountRecord: async (ps: { accountId: number }) => {
+    deleteAccount: async (ps: { accountId: number }) => {
         if (!db.accountExists(ps.accountId)) {
             throw new Error('The selected account could not be found.');
         }
@@ -876,7 +887,7 @@ export const app = {
         await deleteAccountSecret(ps.accountId);
         return buildBootstrap();
     },
-    reorderAccountRecord: async (ps: { accountId: number; toIndex: number }) => {
+    reorderAccount: async (ps: { accountId: number; toIndex: number }) => {
         if (!db.accountExists(ps.accountId)) {
             throw new Error('The selected account could not be found.');
         }
@@ -884,7 +895,7 @@ export const app = {
         db.reorderAccount(ps.accountId, ps.toIndex);
         return buildBootstrap();
     },
-    startOAuthAccountDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
+    startOAuthDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
         const settings = app.getOAuthProviderSettings();
         return await startOAuthDeviceSession(settings, {
             provider: ps.provider,
@@ -892,7 +903,7 @@ export const app = {
             setAsDefault: ps.setAsDefault,
         });
     },
-    pollOAuthAccountDeviceFlow: async (ps: { sessionId: string }): Promise<OAuthDevicePollResult> => {
+    pollOAuthDeviceFlow: async (ps: { sessionId: string }): Promise<OAuthDevicePollResult> => {
         const result = await pollOAuthDeviceSession(ps.sessionId);
 
         if (result.status === 'pending') {
@@ -923,7 +934,7 @@ export const app = {
             bootstrap: await buildBootstrap(),
         };
     },
-    assignAccountToRepo: async (ps: { repoId: number; accountId: number | undefined }) => {
+    assignRepoAccount: async (ps: { repoId: number; accountId: number | undefined }) => {
         db.getRepo(ps.repoId)!;
 
         if (ps.accountId !== undefined && !db.accountExists(ps.accountId)) {
@@ -933,7 +944,7 @@ export const app = {
         db.assignRepoAccount(ps.repoId, ps.accountId);
         return buildBootstrap();
     },
-    assignTerminalToRepo: async (ps: { repoId: number; terminalPath: string | undefined }) => {
+    assignRepoTerminal: async (ps: { repoId: number; terminalPath: string | undefined }) => {
         db.getRepo(ps.repoId)!;
 
         const settings = app.getEditorSettings();
@@ -944,8 +955,13 @@ export const app = {
         db.assignRepoTerminal(ps.repoId, ps.terminalPath);
         return buildBootstrap();
     },
-    getChanges: async (ps: { repoId: number }): Promise<RepoChangesData> => {
-        return git.getRepoChanges(db.getRepo(ps.repoId)!.path);
+    getChanges: async (ps: { repoId: number; ignoredChars?: string; showWhitespaceChanges?: boolean }): Promise<RepoChangesData> => {
+        const settings = app.getEditorSettings();
+
+        return git.getRepoChanges(db.getRepo(ps.repoId)!.path, {
+            ignoredChars: ps.ignoredChars ?? settings.diffIgnoredChars,
+            showWhitespaceChanges: ps.showWhitespaceChanges ?? settings.showWhitespaceChanges,
+        });
     },
     getStashes: async (ps: { repoId: number }) => {
         return git.getRepoStashes(db.getRepo(ps.repoId)!.path);
@@ -962,7 +978,7 @@ export const app = {
     getMergeConflictFileDetails: async (ps: { repoId: number; path: string }): Promise<MergeConflictFileDetails> => {
         return git.getRepoMergeConflictFileDetails(db.getRepo(ps.repoId)!.path, ps.path);
     },
-    getDiff: async (ps: { repoId: number; path: string; kind: FileDiffRequestKind }): Promise<FileDiffData> => {
+    getFileDiff: async (ps: { repoId: number; path: string; kind: FileDiffRequestKind }): Promise<FileDiffData> => {
         return git.getFileDiff(db.getRepo(ps.repoId)!.path, ps.path, ps.kind);
     },
     resolveRepoFilePath: (ps: { repoId: number; path: string }) => {
@@ -1085,10 +1101,10 @@ export const app = {
     getCommittedFile: async (ps: { repoId: number; path: string; commitSha?: string }): Promise<CommittedFileData> => {
         return git.getCommittedFile(db.getRepo(ps.repoId)!.path, ps.path, ps.commitSha);
     },
-    getCommit: async (ps: { repoId: number; commitSha: string }): Promise<CommitDetail> => {
+    getCommitDetail: async (ps: { repoId: number; commitSha: string }): Promise<CommitDetail> => {
         return git.getCommitDetail(db.getRepo(ps.repoId)!.path, ps.commitSha);
     },
-    getCommitDiff: async (ps: { repoId: number; commitSha: string; path: string; previousPath?: string }): Promise<FileDiffData> => {
+    getCommitFileDiff: async (ps: { repoId: number; commitSha: string; path: string; previousPath?: string }): Promise<FileDiffData> => {
         return git.getCommitFileDiff(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.path, ps.previousPath);
     },
     getBranches: async (ps: { repoId: number }): Promise<BranchesData> => {

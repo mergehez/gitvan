@@ -7,7 +7,7 @@ import { executeTextCommand } from '../backend/services/bunSubprocess.js';
 import { useDb } from '../backend/services/database.js';
 import type { IntegratedTerminalEvent, NativeCommand, TerminalApp } from '../shared/gitClient.js';
 import { closeIntegratedTerminalSession, createIntegratedTerminalSession, resizeIntegratedTerminalSession, writeIntegratedTerminalSession } from './integratedTerminal.js';
-import { openDirectoryInTerminal as openDirectoryInSystemTerminal } from './systemShell.js';
+import { openDirectoryInTerminal } from './systemShell.js';
 
 export type RendererDiagnosticPayload = {
     type: 'console-error' | 'window-error' | 'unhandled-rejection';
@@ -88,39 +88,39 @@ export const gitClientRequestHandlers = {
     addTrackedRepoFromPath: _mapPs(app.addTrackedRepoFromPath),
     cloneTrackedRepo: _mapPs(app.cloneTrackedRepo),
     createTrackedLocalRepo: _mapPs(app.createTrackedLocalRepo),
-    createRepoGroup: _mapPs(app.createTrackedRepoGroup),
+    createRepoGroup: _mapPs(app.createRepoGroup),
     deleteTrackedRepoGroup: _mapPs(app.deleteTrackedRepoGroup),
-    moveRepo: _mapPs(app.moveTrackedRepo),
-    reorderRepo: _mapPs(app.reorderTrackedRepo),
-    moveRepoGroup: _mapPs(app.moveTrackedRepoGroup),
-    renameRepoGroup: _mapPs(app.renameTrackedRepoGroup),
-    renameRepo: _mapPs(app.renameTrackedRepo),
+    moveRepo: _mapPs(app.moveRepo),
+    reorderRepo: _mapPs(app.reorderRepo),
+    moveRepoGroup: _mapPs(app.moveRepoGroup),
+    renameRepoGroup: _mapPs(app.renameRepoGroup),
+    renameRepo: _mapPs(app.renameRepo),
     selectRepo: _mapPs(app.selectRepo),
-    updateRepoGroup: _mapPs(app.updateTrackedRepoGroup),
-    updateRepoGroups: _mapPs(app.updateTrackedRepoGroups),
+    updateRepoGroup: _mapPs(app.updateRepoGroup),
+    updateRepoGroups: _mapPs(app.updateRepoGroups),
     refreshRepos: _mapNo(app.refreshRepos),
     resetSandboxRepos: _mapNo(app.resetSandboxRepos),
-    removeRepo: _mapPs(app.removeTrackedRepo),
-    createAccount: _mapPs(app.createAccountRecord),
-    updateAccount: _mapPs(app.updateAccountRecord),
-    deleteAccount: _mapPs(app.deleteAccountRecord),
-    reorderAccount: _mapPs(app.reorderAccountRecord),
+    removeRepo: _mapPs(app.removeRepo),
+    createAccount: _mapPs(app.createAccount),
+    updateAccount: _mapPs(app.updateAccount),
+    deleteAccount: _mapPs(app.deleteAccount),
+    reorderAccount: _mapPs(app.reorderAccount),
     getOAuthProviderSettings: _mapNo(app.getOAuthProviderSettings),
     updateOAuthProviderSettings: _mapPs(app.updateOAuthProviderSettings),
     openExternalUrl: _mapPs(async (ps) => {
         Utils.openExternal(ps.url);
     }),
-    startOAuthDeviceFlow: _mapPs(app.startOAuthAccountDeviceFlow),
-    pollOAuthDeviceFlow: _mapPs(app.pollOAuthAccountDeviceFlow),
-    assignRepoAccount: _mapPs(app.assignAccountToRepo),
-    assignRepoTerminal: _mapPs(app.assignTerminalToRepo),
+    startOAuthDeviceFlow: _mapPs(app.startOAuthDeviceFlow),
+    pollOAuthDeviceFlow: _mapPs(app.pollOAuthDeviceFlow),
+    assignRepoAccount: _mapPs(app.assignRepoAccount),
+    assignRepoTerminal: _mapPs(app.assignRepoTerminal),
     getChanges: _mapPs(app.getChanges),
     getStashes: _mapPs(app.getStashes),
     getStashDetail: _mapPs(app.getStashDetail),
     getStashFileDiff: _mapPs(app.getStashFileDiff),
     getMergeConflictState: _mapPs(app.getMergeConflictState),
     getMergeConflictFileDetails: _mapPs(app.getMergeConflictFileDetails),
-    getFileDiff: _mapPs(app.getDiff),
+    getFileDiff: _mapPs(app.getFileDiff),
     openFileInEditor: _mapPs(async function (ps: { repoId: number; path: string; editorPath: string }) {
         const filePath = app.resolveRepoFilePath({ repoId: ps.repoId, path: ps.path });
 
@@ -175,8 +175,8 @@ export const gitClientRequestHandlers = {
     getHistory: _mapPs(app.getHistory),
     getCommittedTree: _mapPs(app.getCommittedTree),
     getCommittedFile: _mapPs(app.getCommittedFile),
-    getCommitDetail: _mapPs(app.getCommit),
-    getCommitFileDiff: _mapPs(app.getCommitDiff),
+    getCommitDetail: _mapPs(app.getCommitDetail),
+    getCommitFileDiff: _mapPs(app.getCommitFileDiff),
     getBranches: _mapPs(app.getBranches),
     checkoutBranch: _mapPs(app.checkoutBranch),
     createBranch: _mapPs(app.createBranch),
@@ -191,7 +191,7 @@ export const gitClientRequestHandlers = {
         }
         Utils.openPath(ps.path);
     }),
-    openDirectoryInTerminal: _mapPs(openDirectoryInSystemTerminal),
+    openDirectoryInTerminal: _mapPs(openDirectoryInTerminal),
     createIntegratedTerminalSession: _mapPs(async (ps) => {
         return createIntegratedTerminalSession(
             {

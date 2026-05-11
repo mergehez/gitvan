@@ -55,6 +55,7 @@ const settingsState = {
     defaultTerminalPath: '/bin/zsh',
     diffFontSize: 12,
     diffViewMode: 'full-file',
+    diffIgnoredChars: '',
     showWhitespaceChanges: false,
     activeView: 'changes',
     showBranches: false,

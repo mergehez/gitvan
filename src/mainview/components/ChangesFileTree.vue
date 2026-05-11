@@ -6,6 +6,7 @@ import FileTree, { FileTreeChild, FileTreeItem } from './FileTree.vue';
 type ChangesFileTreeEntry = FileTreeChild & {
     path?: string;
     status?: ChangeStatus;
+    noActualChange?: boolean;
     hadConflict?: boolean;
     [key: string]: any;
 };
@@ -20,6 +21,7 @@ const props = withDefaults(
         showPathTooltip?: boolean;
         onSelect: (item: ChangesFileTreeEntry, event?: MouseEvent) => void;
         onContextMenu?: (item: ChangesFileTreeEntry, event?: MouseEvent) => void;
+        onHeaderContextMenu?: (item: FileTreeItem<ChangesFileTreeEntry, Record<string, unknown>>, event?: MouseEvent) => void;
     }>(),
     {
         showPathTooltip: false,
@@ -36,6 +38,7 @@ const props = withDefaults(
         :no-actions="props.noActions"
         :onSelect="props.onSelect"
         :onContextMenu="props.onContextMenu"
+        :onHeaderContextMenu="props.onHeaderContextMenu"
     >
         <template #header-actions="slotProps">
             <slot name="header-actions" :item="slotProps.item"></slot>

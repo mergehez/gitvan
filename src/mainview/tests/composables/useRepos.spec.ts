@@ -33,6 +33,7 @@ const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, moc
                 defaultTerminalPath: '/bin/zsh',
                 diffFontSize: 12,
                 diffViewMode: 'full-file',
+                diffIgnoredChars: '',
                 showWhitespaceChanges: false,
                 activeView: 'changes',
                 showBranches: false,

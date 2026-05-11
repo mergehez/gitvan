@@ -1,6 +1,8 @@
 import { computed, type MaybeRefOrGetter, toValue } from 'vue';
+import { areEquivalentIgnoringDiffChars } from '../../shared/diffIgnoredChars.ts';
 import type { FileDiffData } from '../../shared/gitClient.ts';
 import { formatBytes } from '../lib/utils.ts';
+import { useSettings } from './useSettings.ts';
 
 export type DiffViewerMetaItem = {
     id: string;
@@ -14,6 +16,7 @@ export type DiffViewerState = {
     pathForLanguage: string;
     previewMessage: string | undefined;
     onlyWhitespaceChanges: boolean;
+    noActualChange: boolean;
     metaItems: DiffViewerMetaItem[];
     originalSrc: string | undefined;
     modifiedSrc: string | undefined;
@@ -24,10 +27,23 @@ function hasOnlyWhitespaceChanges(original: string, modified: string) {
         return false;
     }
 
-    return original.replace(/[\s,]+/g, '') === modified.replace(/[\s,]+/g, '');
+    return original.replace(/\s+/g, '') === modified.replace(/\s+/g, '');
+}
+
+export function hasNoActualDiffChanges(diff: FileDiffData, ignoredChars: string, showWhitespaceChanges: boolean) {
+    const nonCodePreview = diff.entry.nonCodePreview?.kind === 'image' ? diff.entry.nonCodePreview : undefined;
+
+    return (
+        !diff.entry.previewMessage &&
+        !nonCodePreview &&
+        diff.entry.original !== diff.entry.modified &&
+        areEquivalentIgnoringDiffChars(diff.entry.original, diff.entry.modified, ignoredChars, !showWhitespaceChanges)
+    );
 }
 
 export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) {
+    const settings = useSettings();
+
     return computed<DiffViewerState | undefined>(() => {
         const currentDiff = toValue(diff);
         if (!currentDiff) {
@@ -57,6 +73,8 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
             });
         }
 
+        const noActualChange = hasNoActualDiffChanges(currentDiff, settings.state.diffIgnoredChars, settings.state.showWhitespaceChanges);
+
         return {
             title: currentDiff.path,
             original: currentDiff.entry.original,
@@ -64,6 +82,7 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
             pathForLanguage: currentDiff.path,
             previewMessage: currentDiff.entry.previewMessage,
             onlyWhitespaceChanges: !currentDiff.entry.previewMessage && !nonCodePreview && hasOnlyWhitespaceChanges(currentDiff.entry.original, currentDiff.entry.modified),
+            noActualChange,
             metaItems: metaItems,
             originalSrc: nonCodePreview?.originalSrc,
             modifiedSrc: nonCodePreview?.modifiedSrc,

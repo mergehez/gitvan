@@ -169,6 +169,8 @@ export type FileChangeEntry = {
     previousPath: string | undefined;
     stagedStatus: ChangeStatus;
     unstagedStatus: ChangeStatus;
+    stagedNoActualChange?: boolean;
+    unstagedNoActualChange?: boolean;
     displayStatus: string;
 };
 
@@ -370,6 +372,7 @@ export type EditorSettings = {
     defaultTerminalPath: string | undefined;
     diffFontSize: number;
     diffViewMode: DiffViewMode;
+    diffIgnoredChars: string;
     showWhitespaceChanges: boolean;
     activeView: NavigationView;
     showBranches: boolean;

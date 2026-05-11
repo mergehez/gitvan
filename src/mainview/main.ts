@@ -7,7 +7,14 @@ import { initTasks } from './composables/useTasks';
 import './css/app.css';
 import { ensureGitClientBridge } from './lib/installGitClientBridge';
 
-void ensureGitClientBridge().then(() => {
+const isDev2 = import.meta.env.VITE_DEV2 === 'true';
+
+if (isDev2) {
+    const { installDev2GitClientBridge } = await import('./lib/gitClientDev2');
+    installDev2GitClientBridge();
+}
+
+void (isDev2 ? Promise.resolve() : ensureGitClientBridge()).then(() => {
     const app = createApp(App);
 
     app.directive('loading', vLoading);

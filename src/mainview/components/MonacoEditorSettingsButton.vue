@@ -107,6 +107,22 @@ onUnmounted(() => {
                             <span>Hide whitespace changes</span>
                         </label>
                     </div>
+
+                    <div class="pt-3">
+                        <div class="font-semibold opacity-50">Chars To Ignore (Cosmetics)</div>
+                        <input
+                            :value="settings.state.diffIgnoredChars"
+                            type="text"
+                            autocapitalize="off"
+                            autocomplete="off"
+                            autocorrect="off"
+                            spellcheck="false"
+                            class="w-full rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-xs text-white outline-none focus:border-white/30"
+                            placeholder=",;'&quot;'"
+                            @input="settings.setDiffIgnoredChars(($event.target as HTMLInputElement).value)"
+                        />
+                        <div class="mt-1 text-[11px] text-white/45">Whitespace is controlled by the toggle above.</div>
+                    </div>
                 </template>
             </div>
         </div>
