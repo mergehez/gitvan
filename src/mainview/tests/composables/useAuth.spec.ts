@@ -54,7 +54,7 @@ vi.mock('../../composables/useToast', () => ({
     toast: mockToast,
 }));
 
-vi.mock('../../composables/useContextMenu', () => ({
+vi.mock('../../directives/useContextMenu', () => ({
     useContextMenu: () => mockContextMenu,
 }));
 

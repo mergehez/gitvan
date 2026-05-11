@@ -1,4 +1,3 @@
-import { twMerge } from 'tailwind-merge';
 import type { Directive, DirectiveBinding, ObjectDirective, VNode } from 'vue';
 import { type TooltipDirectiveModifiers, type TooltipOptions, vTooltip } from './VTooltip';
 
@@ -28,8 +27,6 @@ type TooltipBinding = Omit<DirectiveBinding, 'modifiers' | 'value'> & {
 };
 
 const tooltipDirective = vTooltip as ObjectDirective<TooltipTargetElement, string | TooltipOptions | undefined>;
-
-const ERROR_BASE_CLASS = 'bg-red-500 dark:bg-red-600 text-white';
 
 function isComponentVNode(vnode: VNode) {
     return typeof vnode.type === 'object' || typeof vnode.type === 'function';
@@ -76,7 +73,7 @@ function resolveTooltipOptions(value?: string | ErrorDirectiveOptions) {
         if (!value) return undefined;
         return {
             value,
-            class: ERROR_BASE_CLASS,
+            class: 'v-error',
         } as TooltipOptions;
     }
 
@@ -85,7 +82,7 @@ function resolveTooltipOptions(value?: string | ErrorDirectiveOptions) {
 
     return {
         value: message,
-        class: twMerge(ERROR_BASE_CLASS, value.class),
+        class: `v-error ${value.class ?? ''}`.trim(),
         textClass: value.textClass,
     } as TooltipOptions;
 }

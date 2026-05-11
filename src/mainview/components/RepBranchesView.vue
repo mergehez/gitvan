@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { tasks } from '../composables/useTasks';
-import FileTree, { FileTreeItem } from './FileTree.vue';
-import { BranchSummary } from '../../shared/gitClient';
+import type { FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
+import type { BranchSummary } from '../../shared/gitClient';
 import { useRepos } from '../composables/useRepos';
 import IconButton from './IconButton.vue';
 

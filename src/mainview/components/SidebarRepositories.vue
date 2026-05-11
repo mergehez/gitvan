@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { Repo } from '../../shared/gitClient.ts';
+import type { Repo } from '../../shared/gitClient.ts';
 import { useAuth } from '../composables/useAuth.ts';
-import { useContextMenu } from '../composables/useContextMenu.ts';
 import { useRepos } from '../composables/useRepos.ts';
 import { useSettings } from '../composables/useSettings.ts';
 import { tasks } from '../composables/useTasks.ts';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes.ts';
+import { useContextMenu } from '../directives/useContextMenu.ts';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import Button from './Button.vue';
 import CenteredInputModal from './CenteredInputModal.vue';
-import type { ContextMenuEntry } from './contextMenuTypes';
-import FileTree, { FileTreeItem } from './FileTree.vue';
+import type { FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
 import IconButton from './IconButton.vue';
 
 const auth = useAuth();
@@ -95,15 +96,6 @@ function closeContextMenu() {
     appContextMenu.closeMenu();
     contextMenuGroupId.value = undefined;
     contextMenuRepoId.value = undefined;
-}
-
-function openContextMenu(event: MouseEvent | undefined, items: ContextMenuEntry[]) {
-    if (!event || items.length === 0) {
-        return;
-    }
-
-    closeAddMenu();
-    appContextMenu.openAtEvent(event, items);
 }
 
 function updateAddMenuPosition() {
@@ -362,7 +354,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-fetch:${repo.id}`,
             label: 'Fetch',
-            icon: 'icon-[mingcute--refresh-3-line]',
+            iconClass: 'icon-[mingcute--refresh-3-line]',
             disabled: !repos.canFetch(repo),
             action: async () => {
                 await repos.runRepoRemoteOperation(repo.id, 'fetch');
@@ -371,7 +363,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-pull:${repo.id}`,
             label: 'Pull',
-            icon: 'icon-[fa--arrow-down]',
+            iconClass: 'icon-[fa--arrow-down]',
             disabled: !repos.canPull(repo),
             action: async () => {
                 await repos.runRepoRemoteOperation(repo.id, 'pull');
@@ -380,7 +372,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-push:${repo.id}`,
             label: 'Push',
-            icon: 'icon-[fa--arrow-up]',
+            iconClass: 'icon-[fa--arrow-up]',
             disabled: !repos.canPush(repo),
             action: async () => {
                 await repos.runRepoRemoteOperation(repo.id, 'push');
@@ -389,7 +381,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-publish:${repo.id}`,
             label: repo.status.hasRemote ? 'Publish Branch' : 'Publish Branch (No Remote)',
-            icon: 'icon-[mdi--plus-thick]',
+            iconClass: 'icon-[mdi--plus-thick]',
             disabled: !canPublishNow(repo),
             action: async () => {
                 await repos.publishRepoBranch(repo.id);
@@ -399,26 +391,26 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-open-with:${repo.id}`,
             label: 'Open with...',
-            icon: 'icon-[mdi--application-outline]',
+            iconClass: 'icon-[mdi--application-outline]',
             children: buildOpenWithItems(repo),
         },
         {
             id: `repo-move-to-group:${repo.id}`,
             label: 'Move to Group...',
-            icon: 'icon-[mdi--folder-move-outline]',
+            iconClass: 'icon-[mdi--folder-move-outline]',
             children: buildMoveToGroupItems(repo),
         },
         {
             id: `repo-assign-account:${repo.id}`,
             label: 'Assign Account...',
-            icon: 'icon-[mdi--account-switch-outline]',
+            iconClass: 'icon-[mdi--account-switch-outline]',
             children: buildAssignAccountItems(repo),
         },
         { type: 'separator' as const, id: `repo-separator-system:${repo.id}` },
         {
             id: `repo-open-integrated-terminal:${repo.id}`,
             label: 'Open in Integrated Terminal',
-            icon: 'icon-[mdi--console-network-outline]',
+            iconClass: 'icon-[mdi--console-network-outline]',
             action: async () => {
                 repos.openRepoInIntegratedTerminal(repo.id);
             },
@@ -426,7 +418,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-open-terminal:${repo.id}`,
             label: 'Open in Terminal',
-            icon: 'icon-[mdi--console-line]',
+            iconClass: 'icon-[mdi--console-line]',
             action: async () => {
                 await repos.openRepoInTerminal(repo.id);
             },
@@ -434,7 +426,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-open-file-manager:${repo.id}`,
             label: fileManagerLabel,
-            icon: 'icon-[mdi--folder-open-outline]',
+            iconClass: 'icon-[mdi--folder-open-outline]',
             action: async () => {
                 await repos.revealRepoInFinder(repo.id);
             },
@@ -442,7 +434,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-copy-path:${repo.id}`,
             label: 'Copy Path',
-            icon: 'icon-[mdi--content-copy]',
+            iconClass: 'icon-[mdi--content-copy]',
             action: async () => {
                 await repos.copyRepoPath(repo.id);
             },
@@ -451,7 +443,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-rename:${repo.id}`,
             label: 'Rename...',
-            icon: 'icon-[mdi--pencil-outline]',
+            iconClass: 'icon-[mdi--pencil-outline]',
             action: async () => {
                 openRenameRepoModal(repo);
             },
@@ -459,7 +451,7 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
         {
             id: `repo-delete:${repo.id}`,
             label: 'Remove Repository',
-            icon: 'icon-[mingcute--delete-2-fill]',
+            iconClass: 'icon-[mingcute--delete-2-fill]',
             danger: true,
             action: async () => {
                 await repos.removeRepo(repo.id);
@@ -469,13 +461,14 @@ function buildRepoContextMenuItems(repo: Repo): ContextMenuEntry[] {
 }
 
 function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[] {
-    const targetGroupId = typeof item.id === 'number' && item.id >= 0 ? item.id : undefined;
+    console.log(item);
+    const targetGroupId = typeof item?.id === 'number' && item.id >= 0 ? item.id : undefined;
 
     const items: ContextMenuEntry[] = [
         {
             id: `group-fetch:${item.id}`,
             label: item.id === -1 ? 'Fetch Repositories' : 'Fetch Repositories in Group',
-            icon: 'icon-[fluent--cloud-sync-16-regular]',
+            iconClass: 'icon-[fluent--cloud-sync-16-regular]',
             disabled: isButtonBusyBlocked.value,
             action: async () => {
                 fetchGroupRepos(Number(item.id));
@@ -484,7 +477,7 @@ function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[
         {
             id: `group-add-repo:${item.id}`,
             label: item.id === -1 ? 'Add Repository...' : `Add Repository to ${item.title}`,
-            icon: 'icon-[mdi--plus]',
+            iconClass: 'icon-[mdi--plus]',
             disabled: isButtonBusyBlocked.value,
             action: async () => {
                 await addExistingRepo(targetGroupId);
@@ -507,7 +500,7 @@ function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[
         {
             id: `group-rename:${group.id}`,
             label: 'Rename...',
-            icon: 'icon-[mdi--pencil-outline]',
+            iconClass: 'icon-[mdi--pencil-outline]',
             action: async () => {
                 openRenameGroupModal(group.id);
             },
@@ -515,7 +508,7 @@ function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[
         {
             id: `group-delete:${group.id}`,
             label: 'Delete Group',
-            icon: 'icon-[mingcute--delete-2-fill]',
+            iconClass: 'icon-[mingcute--delete-2-fill]',
             danger: true,
             action: async () => {
                 await repos.deleteRepoGroup(group.id);
@@ -525,7 +518,7 @@ function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[
         {
             id: `group-move-up:${group.id}`,
             label: 'Move Up',
-            icon: 'icon-[mdi--arrow-up]',
+            iconClass: 'icon-[mdi--arrow-up]',
             disabled: group.sequence <= 1,
             action: async () => {
                 await repos.moveRepoGroup(group.id, 'up');
@@ -534,30 +527,13 @@ function buildGroupContextMenuItems(item: FileTreeItem<Repo>): ContextMenuEntry[
         {
             id: `group-move-down:${group.id}`,
             label: 'Move Down',
-            icon: 'icon-[mdi--arrow-down]',
+            iconClass: 'icon-[mdi--arrow-down]',
             disabled: group.sequence >= repos.repoGroups.length,
             action: async () => {
                 await repos.moveRepoGroup(group.id, 'down');
             },
         },
     ];
-}
-
-function openRepoContextMenu(repoId: number, event?: MouseEvent) {
-    const repo = repos.repos.find((entry) => entry.id === repoId);
-    if (!repo) {
-        return;
-    }
-
-    contextMenuGroupId.value = undefined;
-    contextMenuRepoId.value = repo.id;
-    openContextMenu(event, buildRepoContextMenuItems(repo));
-}
-
-function openGroupContextMenu(item: FileTreeItem<Repo>, event?: MouseEvent) {
-    contextMenuRepoId.value = undefined;
-    contextMenuGroupId.value = Number(item.id);
-    openContextMenu(event, buildGroupContextMenuItems(item));
 }
 
 function fetchGroupRepos(groupId: number) {
@@ -623,8 +599,8 @@ function fetchGroupRepos(groupId: number) {
                     :outline-selection="contextMenuRepoId"
                     :header-outlined="contextMenuGroupId === treeItem.id"
                     :onSelect="(r) => repos.selectRepo(r.id)"
-                    :onContextMenu="(r, event) => openRepoContextMenu(r.id, event)"
-                    :onHeaderContextMenu="(item, event) => openGroupContextMenu(item, event)"
+                    :get-context-menu-items="buildRepoContextMenuItems"
+                    :get-header-context-menu-items="buildGroupContextMenuItems"
                 >
                     <template #header-actions>
                         <!-- <IconButton

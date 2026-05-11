@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { ChangeStatus, type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption, type FileDiffHunk } from '../../shared/gitClient';
-import { useContextMenu } from '../composables/useContextMenu';
+import type { ChangeStatus } from '../../shared/gitClient';
+import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption, type FileDiffHunk } from '../../shared/gitClient';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
+import type { ContextMenuEntry } from '../directives';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
 import { areEquivalentIgnoringDiffChars } from '../lib/diffIgnoredChars';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
-import type { ContextMenuEntry } from './contextMenuTypes';
 import DiffViewer from './DiffViewer.vue';
 import EtSplitter from './EtSplitter.vue';
-import FileTree, { FileTreeItem } from './FileTree.vue';
+import type { FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
 import IconButton from './IconButton.vue';
 import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
-const contextMenu = useContextMenu();
 const repos = useRepos();
 const settings = useSettings();
 const repo = computed(() => repos.getSelectedRepo()!);
@@ -37,7 +37,6 @@ type TTreeData = {
     status: ChangeStatus;
     isStaged: boolean;
 };
-
 type ChangeTreeEntry = TTreeData & {
     path: string;
     title: string;
@@ -46,9 +45,9 @@ type ChangeTreeEntry = TTreeData & {
     noActualChange?: boolean;
 };
 
-type TreeItem = FileTreeItem<TTreeData, { isStaged: boolean }>;
+type TreeItem = FileTreeItem<ChangeTreeEntry, { isStaged: boolean }>;
 
-type ChangeTreeHeaderItem = FileTreeItem<TTreeData, { isStaged: boolean }>;
+type ChangeTreeHeaderItem = FileTreeItem<ChangeTreeEntry, { isStaged: boolean }>;
 
 function findChangeEntry(kind: 'staged' | 'unstaged', path: string) {
     const entries = kind === 'staged' ? (repo.value?.changes?.staged ?? []) : (repo.value?.changes?.unstaged ?? []);
@@ -675,29 +674,11 @@ async function runChangeContextAction(items: ChangeTreeEntry[], action: ChangeFi
 
     await repo.value.openFileWithDefaultProgram(firstItem.path);
 }
+function getContextMenuItems(item: ChangeTreeEntry) {
+    const selectedItems = selectedEntriesForItem(item);
+    // await onSelectChangeFile(item.path, item.isStaged ? 'staged' : 'unstaged');
 
-async function onOpenChangeContextMenu(item: ChangeTreeEntry, event?: MouseEvent) {
-    const selectedItems = selectedEntriesForItem(item, event);
-    await onSelectChangeFile(item.path, item.isStaged ? 'staged' : 'unstaged');
-
-    if (!event) {
-        return;
-    }
-
-    contextMenu.openAtEvent(event, buildChangeContextMenuEntries(selectedItems));
-}
-
-function onOpenChangeHeaderContextMenu(item: ChangeTreeHeaderItem, event?: MouseEvent) {
-    if (!event) {
-        return;
-    }
-
-    const entries = buildChangeHeaderContextMenuEntries(item);
-    if (entries.length === 0) {
-        return;
-    }
-
-    contextMenu.openAtEvent(event, entries);
+    return buildChangeContextMenuEntries(selectedItems);
 }
 
 async function onSelectChangeEntry(item: ChangeTreeEntry, event?: MouseEvent) {
@@ -834,8 +815,8 @@ onUnmounted(() => {
                             :item="item"
                             empty-text="No files"
                             :selection="visibleSelectionForKind(item.isStaged ? 'staged' : 'unstaged')"
-                            :onContextMenu="(t, event) => onOpenChangeContextMenu(t as ChangeTreeEntry, event)"
-                            :onHeaderContextMenu="(t, event) => onOpenChangeHeaderContextMenu(t as ChangeTreeHeaderItem, event)"
+                            :getContextMenuItems="getContextMenuItems"
+                            :getHeaderContextMenuItems="buildChangeHeaderContextMenuEntries"
                             :onSelect="(t, event) => onSelectChangeEntry(t as ChangeTreeEntry, event)"
                         >
                             <template #header-actions="{ item }">
@@ -950,6 +931,8 @@ onUnmounted(() => {
                                 :selection="repo.currStashFilePath ?? undefined"
                                 no-actions
                                 :onSelect="(t) => t.path && repo.selectRepositoryStashFile(t.path)"
+                                :getContextMenuItems="getContextMenuItems"
+                                :getHeaderContextMenuItems="buildChangeHeaderContextMenuEntries"
                             >
                             </ChangesFileTree>
                         </template>

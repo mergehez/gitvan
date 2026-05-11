@@ -1,11 +1,10 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { ContextMenuEntry, ContextMenuItem } from '../../components/contextMenuTypes';
 import RepHistoryView from '../../components/RepHistoryView.vue';
-import type { useContextMenu } from '../../composables/useContextMenu';
 import type { useRepos } from '../../composables/useRepos';
 import type { tasks as tasksType } from '../../composables/useTasks';
+import type { ContextMenuEntry, ContextMenuItem, useContextMenu } from '../../directives';
 
 type ReposState = ReturnType<typeof useRepos>;
 type ContextMenuState = ReturnType<typeof useContextMenu>;
@@ -22,7 +21,7 @@ vi.mock('../../composables/useRepos', () => ({
         }) as unknown as ReposState,
 }));
 
-vi.mock('../../composables/useContextMenu', () => ({
+vi.mock('../../directives/useContextMenu', () => ({
     useContextMenu: () => mockContextMenu as ContextMenuState,
 }));
 

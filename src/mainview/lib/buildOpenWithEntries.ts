@@ -1,4 +1,4 @@
-import type { ContextMenuEntry } from '../components/contextMenuTypes';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes';
 
 type OpenWithEditor = {
     path: string;

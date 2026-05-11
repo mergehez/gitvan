@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import { useRepos } from '../composables/useRepos.ts';
 import { tasks } from '../composables/useTasks.ts';
-import FileTree, { FileTreeItem } from './FileTree.vue';
-import { BranchSummary } from '../../shared/gitClient.ts';
+import type { FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
+import type { BranchSummary } from '../../shared/gitClient.ts';
 import IconButton from './IconButton.vue';
 import CenteredInputModal from './CenteredInputModal.vue';
 

@@ -18,6 +18,7 @@
         "noFallthroughCasesInSwitch": true,
         "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
         "types": ["bun", "vite/client"]
     },
     "include": ["src", "env.d.ts", "vite-export-api-methods.ts"],

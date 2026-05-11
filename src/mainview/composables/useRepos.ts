@@ -1,6 +1,7 @@
 import { reactive, watch } from 'vue';
 import type { CloneRepoDefaults, RemoteOperation, Repo } from '../../shared/gitClient.ts';
-import type { ContextMenuEntry } from '../components/contextMenuTypes';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes.ts';
+import { useContextMenu } from '../directives/useContextMenu.ts';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries.ts';
 import { gitClientRpc } from '../lib/gitClient.ts';
 import { isButtonBusyStateSilenced, runWithButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
@@ -8,7 +9,6 @@ import { writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
 import { _coreState } from './coreState.ts';
 import { applyMutation } from './initializeStates.ts';
-import { useContextMenu } from './useContextMenu.ts';
 import { useRepo } from './useRepo.ts';
 import { useSettings } from './useSettings.ts';
 import { tasks } from './useTasks.ts';

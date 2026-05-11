@@ -1,27 +1,23 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends { status?: ChangeStatus }">
 import type { ChangeStatus } from '../../shared/gitClient';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes';
 import { fileIconAndLanguageByPath, fileName, parentPath, statusClass, statusLetter } from '../lib/utils';
-import FileTree, { FileTreeChild, FileTreeItem } from './FileTree.vue';
+import type { FileTreeChild, FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
 
-type ChangesFileTreeEntry = FileTreeChild & {
-    path?: string;
-    status?: ChangeStatus;
-    noActualChange?: boolean;
-    hadConflict?: boolean;
-    [key: string]: any;
-};
+type ChangesFileTreeEntry = FileTreeChild & T;
 
 const props = withDefaults(
     defineProps<{
-        item: FileTreeItem<ChangesFileTreeEntry, Record<string, unknown>>;
+        item: FileTreeItem<ChangesFileTreeEntry, any>;
         selection?: any | any[];
         emptyText?: string;
         itemClass?: string;
         noActions?: boolean;
         showPathTooltip?: boolean;
         onSelect: (item: ChangesFileTreeEntry, event?: MouseEvent) => void;
-        onContextMenu?: (item: ChangesFileTreeEntry, event?: MouseEvent) => void;
-        onHeaderContextMenu?: (item: FileTreeItem<ChangesFileTreeEntry, Record<string, unknown>>, event?: MouseEvent) => void;
+        getContextMenuItems?: (item: ChangesFileTreeEntry) => ContextMenuEntry[];
+        getHeaderContextMenuItems?: (item: FileTreeItem<ChangesFileTreeEntry, any>) => ContextMenuEntry[];
     }>(),
     {
         showPathTooltip: false,
@@ -37,8 +33,8 @@ const props = withDefaults(
         :item-class="props.itemClass"
         :no-actions="props.noActions"
         :onSelect="props.onSelect"
-        :onContextMenu="props.onContextMenu"
-        :onHeaderContextMenu="props.onHeaderContextMenu"
+        :getContextMenuItems="props.getContextMenuItems"
+        :getHeaderContextMenuItems="props.getHeaderContextMenuItems"
     >
         <template #header-actions="slotProps">
             <slot name="header-actions" :item="slotProps.item"></slot>

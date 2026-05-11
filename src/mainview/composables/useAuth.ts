@@ -1,12 +1,12 @@
 import { reactive } from 'vue';
 import type { OAuthDeviceStartResult, OAuthProvider } from '../../shared/gitClient';
-import type { ContextMenuEntry } from '../components/contextMenuTypes';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes.ts';
 import { confirmAction } from '../lib/utils';
 import { _coreState } from './coreState';
-import { useContextMenu } from './useContextMenu';
-import { RepositoryState } from './useRepo';
+import type { RepositoryState } from './useRepo';
 import { tasks } from './useTasks';
 import { toast } from './useToast';
+import { useContextMenu } from '../directives/useContextMenu.ts';
 
 export type CreateAccountParams = {
     label: string;

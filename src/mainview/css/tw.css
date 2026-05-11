@@ -5,49 +5,22 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-    /* --bg-reverse: rgb(18 18 18);
+    --clr-default: hsl(219, 100%, 96%);
+    --clr-muted: hsl(216, 40%, 68%);
+    --bg-reverse: hsl(220, 82%, 2%);
 
-    --clr-default: rgb(0 0 0);
-
-    --bg0: rgb(255 255 255);
-    --bg1: rgb(250 250 250);
-    --bg2: rgb(242 242 242);
-    --bg3: rgb(235 235 235);
-    --bg4: rgb(228 228 228);
-    --bg5: rgb(221 221 221);
-    --bg6: rgb(214 214 214);
-    --bg7: rgb(207 207 207);
-    --bg8: rgb(200 200 200); */
-
-    --bg-reverse: rgb(255 255 255);
-
-    --clr-default: rgb(204 204 204);
-
-    --bg0: rgb(10 20 22);
-    --bg1: rgb(15 23 28);
-    --bg2: rgb(21 31 39);
-    --bg3: rgb(31 41 55);
-    --bg4: rgb(43 50 60);
-    --bg5: rgb(50 60 60);
-    --bg6: rgb(53 60 60);
-    --bg7: rgb(94 94 94);
-    --bg8: rgb(106 106 106);
-}
-
-.dark {
-    --bg-reverse: rgb(255 255 255);
-
-    --clr-default: rgb(204 204 204);
-
-    --bg0: rgb(10 20 22);
-    --bg1: rgb(15 23 28);
-    --bg2: rgb(21 31 39);
-    --bg3: rgb(31 41 55);
-    --bg4: rgb(43 50 60);
-    --bg5: rgb(50 60 60);
-    --bg6: rgb(53 60 60);
-    --bg7: rgb(94 94 94);
-    --bg8: rgb(106 106 106);
+    /* Dark Mode: Increases Lightness by exactly 4% per step (Hue 220, Saturation 25%) */
+    --bg0: hsl(220, 25%, 7%);
+    --bg1: hsl(220, 25%, 11%);
+    --bg2: hsl(220, 25%, 15%);
+    --bg3: hsl(220, 25%, 19%);
+    --bg4: hsl(220, 25%, 23%);
+    --bg5: hsl(220, 25%, 27%);
+    --bg6: hsl(220, 25%, 31%);
+    --bg7: hsl(220, 25%, 35%);
+    --bg8: hsl(220, 25%, 39%);
+    --bg9: hsl(220, 25%, 43%);
+    --bg10: hsl(220, 25%, 47%);
 }
 
 @theme {
@@ -63,6 +36,9 @@
     --color-x6: var(--bg6);
     --color-x7: var(--bg7);
     --color-x8: var(--bg8);
+    --color-x9: var(--bg9);
+    --color-x10: var(--bg10);
     --color-reverse: var(--bg-reverse);
     --color-default: var(--clr-default);
+    --color-muted: var(--clr-muted);
 }

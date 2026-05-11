@@ -9,7 +9,6 @@ import AppIntegratedTerminalModal from './components/AppIntegratedTerminalModal.
 import AppMergeConflictModal from './components/AppMergeConflictModal.vue';
 import AppPullBlockedByLocalChangesModal from './components/AppPullBlockedByLocalChangesModal.vue';
 import AppSuccessToast from './components/AppSuccessToast.vue';
-import ContextMenu from './components/ContextMenu.vue';
 import EtSplitter from './components/EtSplitter.vue';
 import GitClientHeader from './components/GitClientHeader.vue';
 import RepChangesView from './components/RepChangesView.vue';
@@ -19,10 +18,11 @@ import Settings from './components/Settings.vue';
 import SidebarBranches from './components/SidebarBranches.vue';
 import SidebarRepositories from './components/SidebarRepositories.vue';
 import { initializeStates } from './composables/initializeStates';
-import { useContextMenu } from './composables/useContextMenu';
 import { useRepos } from './composables/useRepos';
 import { useSettings } from './composables/useSettings';
 import { tasks } from './composables/useTasks';
+import { useContextMenu } from './directives';
+import ContextMenu from './directives/ContextMenu.vue';
 
 initializeStates();
 
@@ -123,5 +123,5 @@ onBeforeUnmount(() => {
         <span class="text-xs">Running: {{ tasks.getLongRunningOperation || '...' }}</span>
     </Alert>
 
-    <ContextMenu :open="contextMenu.open" :items="contextMenu.items" :x="contextMenu.x" :y="contextMenu.y" @close="contextMenu.closeMenu" />
+    <ContextMenu :state="contextMenu" />
 </template>

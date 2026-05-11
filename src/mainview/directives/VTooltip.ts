@@ -1,5 +1,6 @@
 import { twMerge } from 'tailwind-merge';
-import { Directive, DirectiveBinding } from 'vue';
+import type { Directive, DirectiveBinding } from 'vue';
+import { useOverlaysState } from './useOverlaysState';
 
 export interface TooltipDirectiveModifiers {
     right?: boolean | undefined;
@@ -42,6 +43,8 @@ type ComputedOptions = {
     placement: Placement;
 };
 
+const overlayState = useOverlaysState();
+
 function useOptions(binding: Bindings): ComputedOptions {
     const customClass = typeof binding.value === 'object' ? binding.value.class : undefined;
     const textClass = typeof binding.value === 'object' ? binding.value.textClass : undefined;
@@ -79,54 +82,61 @@ function applyOptions(elems: Elems, options: ComputedOptions) {
     elems.arrow.className = options.arrowClass;
 }
 
+function show(tooltip: HTMLElement) {
+    tooltip.style.position = 'fixed';
+    tooltip.style.visibility = 'visible';
+    tooltip.style.zIndex = overlayState.increaseZIndex().toString();
+}
+
+function hide(tooltip: HTMLElement) {
+    tooltip.style.display = 'none';
+    overlayState.decreaseZIndex();
+}
+
 function positionTooltip(el: TooltipHostElement) {
     const { tooltip, arrow, placement } = el.__tooltip!;
-    const arrowSize = 8; // Should match the CSS size of the arrow
-    // Show tooltip off-screen first to get accurate measurements
+    const arrowSize = 8;
+    const viewportMargin = 8;
     tooltip.style.visibility = 'hidden';
     tooltip.style.display = 'inline-block';
 
-    function getHostOffset(el: HTMLElement) {
-        const offset = el.getBoundingClientRect();
-        const targetLeft = offset.left + window.scrollX;
-        const targetTop = offset.top + window.scrollY;
-        return { left: targetLeft, top: targetTop };
-    }
-
-    // Wait for next frame to ensure tooltip is rendered and measured
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            const hostOffset = getHostOffset(el);
+            const hostRect = el.getBoundingClientRect();
+            const tooltipWidth = tooltip.offsetWidth;
+            const tooltipHeight = tooltip.offsetHeight;
+            const maxLeft = Math.max(viewportMargin, window.innerWidth - tooltipWidth - viewportMargin);
+            const maxTop = Math.max(viewportMargin, window.innerHeight - tooltipHeight - viewportMargin);
             const posPx = `-${arrowSize / 2}px`;
+
             if (placement === 'left' || placement === 'right') {
-                tooltip.style.top = `${hostOffset.top + (el.offsetHeight - tooltip.offsetHeight) / 2}px`;
-                const shift = placement === 'left' ? -tooltip.offsetWidth - arrowSize : el.offsetWidth + arrowSize;
-                tooltip.style.left = `${hostOffset.left + shift}px`;
+                const desiredTop = hostRect.top + (hostRect.height - tooltipHeight) / 2;
+                const desiredLeft = placement === 'left' ? hostRect.left - tooltipWidth - arrowSize : hostRect.right + arrowSize;
+                const tooltipTop = Math.min(maxTop, Math.max(viewportMargin, desiredTop));
+                const tooltipLeft = Math.min(maxLeft, Math.max(viewportMargin, desiredLeft));
+
+                tooltip.style.top = `${tooltipTop}px`;
+                tooltip.style.left = `${tooltipLeft}px`;
                 arrow.style.left = placement === 'left' ? 'unset' : posPx;
                 arrow.style.right = placement === 'left' ? posPx : 'unset';
-                arrow.style.top = '50%';
+                arrow.style.top = `${hostRect.top + hostRect.height / 2 - tooltipTop}px`;
                 arrow.style.transform = 'translateY(-50%) rotate(45deg)';
             } else {
-                let left = hostOffset.left + (el.offsetWidth - tooltip.offsetWidth) / 2;
-                // Keep within viewport bounds
-                if (left < 0) {
-                    left = 0;
-                } else if (left + tooltip.offsetWidth > window.innerWidth) {
-                    left = Math.floor(hostOffset.left + el.offsetWidth - tooltip.offsetWidth);
-                }
+                const desiredLeft = hostRect.left + (hostRect.width - tooltipWidth) / 2;
+                const desiredTop = placement === 'top' ? hostRect.top - tooltipHeight - arrowSize : hostRect.bottom + arrowSize;
+                const tooltipLeft = Math.min(maxLeft, Math.max(viewportMargin, desiredLeft));
+                const tooltipTop = Math.min(maxTop, Math.max(viewportMargin, desiredTop));
 
-                tooltip.style.left = `${left}px`;
+                tooltip.style.left = `${tooltipLeft}px`;
+                tooltip.style.top = `${tooltipTop}px`;
 
-                arrow.style.left = `${hostOffset.left - getHostOffset(tooltip).left + el.offsetWidth / 2}px`;
+                arrow.style.left = `${hostRect.left + hostRect.width / 2 - tooltipLeft}px`;
                 arrow.style.top = placement === 'top' ? 'unset' : posPx;
                 arrow.style.bottom = placement === 'top' ? posPx : 'unset';
                 arrow.style.transform = 'translateX(-50%) rotate(45deg)';
-
-                const shift = (el.offsetHeight + arrowSize) * (placement === 'top' ? -1 : 1);
-                tooltip.style.top = `${hostOffset.top + shift}px`;
             }
 
-            tooltip.style.visibility = 'visible';
+            show(tooltip);
         });
     });
 }
@@ -184,15 +194,14 @@ export const vTooltip: Directive<TooltipHostElement> = {
         el.__mouseLeave = () => {
             clearTooltipShowTimeout(el);
             if (!opts.always) {
-                tooltip.style.display = 'none';
+                hide(tooltip);
             }
         };
 
-        // Hide tooltip on any click
         el.__click = (_e: MouseEvent) => {
             clearTooltipShowTimeout(el);
             if (!opts.always) {
-                tooltip.style.display = 'none';
+                hide(tooltip);
             }
         };
 
@@ -228,5 +237,8 @@ export const vTooltip: Directive<TooltipHostElement> = {
 
         el.__tooltip.tooltip.remove();
         el.__tooltip = undefined;
+        el.__mouseEnter = undefined;
+        el.__mouseLeave = undefined;
+        el.__click = undefined;
     },
 };

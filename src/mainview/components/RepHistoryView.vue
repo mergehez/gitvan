@@ -1,20 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { CommitSummary, CommitTag } from '../../shared/gitClient';
-import { useContextMenu } from '../composables/useContextMenu';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
+import type { ContextMenuEntry } from '../directives';
 import { readableDate } from '../lib/utils';
 import CenteredInputModal from './CenteredInputModal.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
 import DiffViewer from './DiffViewer.vue';
 import EtSplitter from './EtSplitter.vue';
-import FileTree, { FileTreeItem } from './FileTree.vue';
+import type { FileTreeItem } from './FileTree.vue';
+import FileTree from './FileTree.vue';
 import IconButton from './IconButton.vue';
-import type { ContextMenuEntry } from './contextMenuTypes';
 
-const contextMenu = useContextMenu();
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);
 const latestCommitSha = computed(() => repo.value.history?.commits[0]?.sha ?? undefined);
@@ -58,7 +57,13 @@ async function onUndoCommitItem(item: { id: string; isUnpushed?: boolean }) {
     await repo.value.undoSelectedCommit();
 }
 
-const treeItem = computed<FileTreeItem>(() => {
+type CommitListItem = Pick<CommitSummary, 'shortSha' | 'tags' | 'isUnpushed'> & {
+    id: string;
+    title: string;
+    by: string;
+    at: Date;
+};
+const treeItem = computed<FileTreeItem<CommitListItem, {}>>(() => {
     return {
         id: '-',
         title: '',
@@ -75,7 +80,7 @@ const treeItem = computed<FileTreeItem>(() => {
     };
 });
 
-const treeItemFiles = computed<FileTreeItem>(() => {
+const treeItemFiles = computed<FileTreeItem<{ status: string; hadConflict?: boolean }, {}>>(() => {
     return {
         id: repo.value.currCommit?.sha ?? '-',
         title: 'Files',
@@ -94,13 +99,6 @@ const treeItemFiles = computed<FileTreeItem>(() => {
 function tagBadgeClass(tag: CommitTag) {
     return tag.isUnpushed ? 'border-amber-300/35 bg-amber-400/12 text-amber-100' : 'border-blue-400 bg-blue-500 text-white';
 }
-
-type CommitListItem = Pick<CommitSummary, 'shortSha' | 'tags' | 'isUnpushed'> & {
-    id: string;
-    title: string;
-    by: string;
-    at: Date;
-};
 
 function tagsForCommit(commit: CommitSummary | undefined) {
     return repo.value.editableTagsForCommit(commit);
@@ -166,7 +164,18 @@ async function submitRenameTag() {
     closeRenameTagModal();
 }
 
-function buildCommitContextMenuEntries(commit: CommitSummary): ContextMenuEntry[] {
+function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[] {
+    const commit = {
+        sha: item.id,
+        shortSha: item.shortSha,
+        summary: item.title,
+        authorName: item.by,
+        authorEmail: '',
+        authoredAt: item.at instanceof Date ? item.at.toISOString() : String(item.at),
+        refs: [],
+        tags: item.tags,
+        isUnpushed: item.isUnpushed,
+    };
     const entries: ContextMenuEntry[] = [];
 
     if (commit.isUnpushed) {
@@ -241,31 +250,6 @@ function buildCommitContextMenuEntries(commit: CommitSummary): ContextMenuEntry[
 
     return entries;
 }
-
-async function onOpenCommitContextMenu(item: CommitListItem, event?: MouseEvent) {
-    if (repo.value.currCommitSha !== item.id) {
-        await repo.value.selectCommit(item.id);
-    }
-
-    if (!event) {
-        return;
-    }
-
-    contextMenu.openAtEvent(
-        event,
-        buildCommitContextMenuEntries({
-            sha: item.id,
-            shortSha: item.shortSha,
-            summary: item.title,
-            authorName: item.by,
-            authorEmail: '',
-            authoredAt: item.at instanceof Date ? item.at.toISOString() : String(item.at),
-            refs: [],
-            tags: item.tags,
-            isUnpushed: item.isUnpushed,
-        })
-    );
-}
 </script>
 
 <template>
@@ -285,7 +269,7 @@ async function onOpenCommitContextMenu(item: CommitListItem, event?: MouseEvent)
                 item-class="px-0!"
                 :selection="repo.currCommitSha"
                 :onSelect="(t) => repo.selectCommit(t.id)"
-                :onContextMenu="(t, event) => onOpenCommitContextMenu(t as CommitListItem, event)"
+                :get-context-menu-items="buildCommitContextMenuEntries"
             >
                 <template #item-leftIcon> </template>
                 <template #item-title="{ item }">
@@ -362,7 +346,11 @@ async function onOpenCommitContextMenu(item: CommitListItem, event?: MouseEvent)
                                 :onSelect="(t) => t.path && repo.selectCommitFile(t.path)"
                             >
                                 <template #before-status="{ item }">
-                                    <span v-if="item.hadConflict" class="icon icon-[mingcute--git-merge-fill] text-[11px] text-amber-300" v-tooltip="'Had merge conflicts'"></span>
+                                    <span
+                                        v-if="(item as any).hadConflict"
+                                        class="icon icon-[mingcute--git-merge-fill] text-[11px] text-amber-300"
+                                        v-tooltip="'Had merge conflicts'"
+                                    ></span>
                                 </template>
                             </ChangesFileTree>
                         </template>

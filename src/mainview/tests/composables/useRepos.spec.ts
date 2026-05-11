@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/gitClient';
-import type { ContextMenuEntry, ContextMenuItem } from '../../components/contextMenuTypes';
 import { _useRepositories } from '../../composables/useRepos';
+import type { ContextMenuEntry, ContextMenuItem } from '../../directives';
 
 const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, mockCoreState, mockContextMenu } = vi.hoisted(() => {
     const testEditor = 'Visual Studio Code.app';
@@ -98,7 +98,7 @@ vi.mock('../../composables/useSettings.ts', () => ({
     useSettings: () => mockSettings,
 }));
 
-vi.mock('../../composables/useContextMenu.ts', () => ({
+vi.mock('../../directives/useContextMenu.ts', () => ({
     useContextMenu: () => mockContextMenu,
 }));
 

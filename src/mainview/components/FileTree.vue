@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="TData, TRoot = {}">
 import { twMerge } from 'tailwind-merge';
 import { computed, reactive, ref } from 'vue';
+import type { ContextMenuEntry } from '../directives/contextMenuTypes';
 import IconButton from './IconButton.vue';
 
 export type FileTreeChild<TData = any> = {
@@ -39,8 +40,8 @@ const props = defineProps<{
     leftIcon?: (item: Item) => `icon-\[${string}`;
     rightIcon?: (item: Item) => `icon-\[${string}` | '' | undefined;
     onSelect: (item: Item, event?: MouseEvent) => void;
-    onContextMenu?: (item: Item, event?: MouseEvent) => void;
-    onHeaderContextMenu?: (item: FileTreeItem<TData, TRoot>, event?: MouseEvent) => void;
+    getContextMenuItems?: (item: Item) => ContextMenuEntry[];
+    getHeaderContextMenuItems?: (item: FileTreeItem<TData, TRoot>) => ContextMenuEntry[];
 }>();
 
 function clearTextSelection() {
@@ -54,25 +55,6 @@ function onMouseDown(event: MouseEvent) {
 
     event.preventDefault();
     clearTextSelection();
-}
-
-function onHeaderContextMenu(event: MouseEvent) {
-    if (!props.onHeaderContextMenu) {
-        return;
-    }
-
-    event.preventDefault();
-    clearTextSelection();
-    props.onHeaderContextMenu(props.item, event);
-}
-
-function onContextMenu(event: MouseEvent, item: Item) {
-    if (!props.onContextMenu) {
-        return;
-    }
-    event.preventDefault();
-    clearTextSelection();
-    props.onContextMenu(item, event);
 }
 
 function isSelected(entry: Item) {
@@ -145,7 +127,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
             class="flex items-center justify-between px-1 py-1 text-xs font-semibold tracking-[0.02em] text-default"
             :class="props.headerOutlined ? 'outline-1 -outline-offset-1 outline-white/35 bg-white/6' : undefined"
             @mousedown.capture="onMouseDown"
-            @contextmenu="onHeaderContextMenu"
+            v-menu="getHeaderContextMenuItems ? () => getHeaderContextMenuItems!(props.item) : undefined"
         >
             <div class="flex items-center uppercase gap-1 flex-1">
                 <IconButton severity="raised" smaller @click="collapsed = !collapsed" class="opacity-70" :icon="collapsed ? 'icon-[mdi--plus]' : 'icon-[mdi--minus]'" />
@@ -172,7 +154,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                     itemClass,
                 ]"
                 @mousedown.capture="onMouseDown"
-                @contextmenu="(e) => onContextMenu(e, entryState.item)"
+                v-menu="getContextMenuItems ? () => getContextMenuItems!(entryState.item) : undefined"
             >
                 <button
                     type="button"
