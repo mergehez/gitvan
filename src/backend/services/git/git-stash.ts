@@ -1,5 +1,6 @@
 import type { FileDiffData, RepoStashDetail, RepoStashEntry } from '../../../shared/gitClient.js';
-import { createRemoteGitEnv, GitRemoteAuth, runGit } from './git-common.js';
+import type { GitRemoteAuth } from './git-common.js';
+import { createRemoteGitEnv, runGit } from './git-common.js';
 import {
     buildDiffStats,
     buildImagePreview,
@@ -97,7 +98,7 @@ export const stashGit = {
             },
         };
     },
-    async stashRepoChanges(repoPath: string, auth: GitRemoteAuth | undefined = undefined) {
+    async stashRepoChanges(repoPath: string, auth?: GitRemoteAuth) {
         const env = await createRemoteGitEnv(repoPath, auth);
         const stashMessage = `stash-${new Date().toISOString().replace(/[:.]/g, '-')}`;
         await runGit(['stash', 'push', '--include-untracked', '-m', stashMessage], repoPath, [0], true, env);

@@ -3,7 +3,8 @@
     "rules": {
         "no-floating-promises": "allow",
         "no-unused-vars": "off",
-        "no-empty-file": "off"
+        "no-empty-file": "off",
+        "consistent-type-imports": "error"
     },
     "options": {
         "typeCheck": true,

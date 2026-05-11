@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ClassNameValue, twMerge } from 'tailwind-merge';
+import type { ClassNameValue } from 'tailwind-merge';
+import { twMerge } from 'tailwind-merge';
 
 const props = defineProps<{
     icon: `icon-\[${string}` | undefined;

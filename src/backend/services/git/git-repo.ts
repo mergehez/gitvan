@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname } from 'path';
 import type { BranchesData, BranchSummary, RemoteOperation } from '../../../shared/gitClient.js';
-import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, GitRemoteAuth, runGit } from './git-common.js';
+import type { GitRemoteAuth } from './git-common.js';
+import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, runGit } from './git-common.js';
 import { normalizeBranchName, parseTrackCounts } from './git-helpers.js';
 
 export const repoGit = {
@@ -76,7 +77,7 @@ export const repoGit = {
 
         return { name: basename(topLevelPath), path: topLevelPath };
     },
-    async cloneGitRepo(remoteUrl: string, destinationPath: string, auth: GitRemoteAuth | undefined = undefined) {
+    async cloneGitRepo(remoteUrl: string, destinationPath: string, auth?: GitRemoteAuth) {
         const normalizedRemoteUrl = remoteUrl.trim();
         const normalizedDestinationPath = destinationPath.trim();
 
@@ -175,7 +176,7 @@ export const repoGit = {
 
         await runGit(['switch', '-c', trimmedName], repoPath);
     },
-    async createRemoteRepoBranch(repoPath: string, branchName: string, auth: GitRemoteAuth | undefined = undefined) {
+    async createRemoteRepoBranch(repoPath: string, branchName: string, auth?: GitRemoteAuth) {
         const trimmedName = normalizeBranchName(branchName);
         if (!trimmedName) {
             throw new Error('Branch name is required.');
@@ -196,7 +197,7 @@ export const repoGit = {
         const env = await createRemoteGitEnv(repoPath, auth);
         await runGit(['push', '-u', remoteName, trimmedName], repoPath, [0], true, env);
     },
-    async publishRepoBranch(repoPath: string, auth: GitRemoteAuth | undefined = undefined) {
+    async publishRepoBranch(repoPath: string, auth?: GitRemoteAuth) {
         const [branchOutput, remotesOutput] = await Promise.all([runGit(['branch', '--show-current'], repoPath), runGit(['remote'], repoPath)]);
 
         const branchName = branchOutput.trim();
@@ -217,7 +218,7 @@ export const repoGit = {
         const env = await createRemoteGitEnv(repoPath, auth);
         await runGit(['push', '-u', remoteName, branchName], repoPath, [0], true, env);
     },
-    async runRepoRemoteOperation(repoPath: string, operation: RemoteOperation, auth: GitRemoteAuth | undefined = undefined) {
+    async runRepoRemoteOperation(repoPath: string, operation: RemoteOperation, auth?: GitRemoteAuth) {
         const env = await createRemoteGitEnv(repoPath, auth);
 
         switch (operation) {

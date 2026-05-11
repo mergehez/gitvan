@@ -2,8 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 import AppIntegratedTerminalModal from '../../components/AppIntegratedTerminalModal.vue';
-import { useRepos } from '../../composables/useRepos';
-import { useSettings } from '../../composables/useSettings';
+import type { useRepos } from '../../composables/useRepos';
+import type { useSettings } from '../../composables/useSettings';
 
 type ReposState = ReturnType<typeof useRepos>;
 type SettingsState = ReturnType<typeof useSettings>;

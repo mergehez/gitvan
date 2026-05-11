@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
 import type { AccountSummary } from '../../../shared/gitClient';
 import SettingsAccounts from '../../components/SettingsAccounts.vue';
-import { useAuth } from '../../composables/useAuth';
-import { useSettings } from '../../composables/useSettings';
-import { tasks } from '../../composables/useTasks';
+import type { useAuth } from '../../composables/useAuth';
+import type { useSettings } from '../../composables/useSettings';
+import type { tasks } from '../../composables/useTasks';
 
 type AuthState = ReturnType<typeof useAuth>;
 type SettingsState = ReturnType<typeof useSettings>;

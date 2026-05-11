@@ -4,7 +4,7 @@ import { defineComponent, reactive } from 'vue';
 import type { EditorSettings } from '../../../shared/gitClient';
 import DiffViewer from '../../components/DiffViewer.vue';
 import type { MonacoEditorActionZone } from '../../components/monacoEditorTypes';
-import { useSettings } from '../../composables/useSettings';
+import type { useSettings } from '../../composables/useSettings';
 
 type SettingsState = ReturnType<typeof useSettings>;
 type DiffViewerSettingsMock = Pick<SettingsState, 'state'>;

@@ -1,4 +1,4 @@
-import { ChangeStatus } from '../../shared/gitClient';
+import type { ChangeStatus } from '../../shared/gitClient';
 import { confirmation } from '../composables/useConfirmation';
 
 const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp']);

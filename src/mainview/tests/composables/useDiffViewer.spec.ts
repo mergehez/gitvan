@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, reactive } from 'vue';
 import type { EditorSettings, FileDiffData } from '../../../shared/gitClient';
 import { useDiffViewer } from '../../composables/useDiffViewer';
-import { useSettings } from '../../composables/useSettings';
+import type { useSettings } from '../../composables/useSettings';
 
 type SettingsState = ReturnType<typeof useSettings>;
 type DiffViewerSettingsMock = Pick<SettingsState, 'state'>;

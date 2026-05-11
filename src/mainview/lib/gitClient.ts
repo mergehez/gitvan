@@ -1,4 +1,4 @@
-import { GitClientRequestApi, GitClientRequestMap } from '../../electrobun';
+import type { GitClientRequestApi, GitClientRequestMap } from '../../electrobun';
 
 const request = new Proxy({} as GitClientRequestApi, {
     get(_target, propertyKey) {

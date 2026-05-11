@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 import type { AccountSummary, CloneableRepo } from '../../../shared/gitClient';
 import AppCloneRepositoryModal from '../../components/AppCloneRepositoryModal.vue';
-import { useAuth } from '../../composables/useAuth';
-import { useRepos } from '../../composables/useRepos';
-import { useSettings } from '../../composables/useSettings';
-import { tasks } from '../../composables/useTasks';
+import type { useAuth } from '../../composables/useAuth';
+import type { useRepos } from '../../composables/useRepos';
+import type { useSettings } from '../../composables/useSettings';
+import type { tasks } from '../../composables/useTasks';
 
 type ReposState = ReturnType<typeof useRepos>;
 type AuthState = ReturnType<typeof useAuth>;

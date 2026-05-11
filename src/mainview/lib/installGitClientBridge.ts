@@ -1,5 +1,5 @@
 import { Electroview } from 'electrobun/view';
-import { GitClientBridge, GitClientElectrobunRpc, GitClientRequestMap, RendererDiagnosticPayload } from '../../electrobun';
+import type { GitClientBridge, GitClientElectrobunRpc, GitClientRequestMap, RendererDiagnosticPayload } from '../../electrobun';
 import type { IntegratedTerminalEvent, NativeCommand } from '../../shared/gitClient';
 
 let installPromise: Promise<void> | undefined;

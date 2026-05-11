@@ -1,4 +1,4 @@
-import { SpawnOptions } from 'bun';
+import type { SpawnOptions } from 'bun';
 
 async function readText(stream: SpawnOptions.ReadableToIO<any>) {
     if (!stream) {

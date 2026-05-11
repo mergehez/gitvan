@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Icon from './Icon.vue';
-import Button, { TButtonSeverity } from './Button.vue';
+import type { TButtonSeverity } from './Button.vue';
+import Button from './Button.vue';
 
 const props = withDefaults(
     defineProps<{

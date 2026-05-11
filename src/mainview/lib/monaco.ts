@@ -7,12 +7,12 @@ import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { fileIconAndLanguageByPath } from './utils';
 
+type MonacoModule = typeof MonacoEditorModule;
+type MonacoWorkerFactory = new () => Worker;
+
 let monacoConfigured = false;
 let monacoEnvironmentConfigured = false;
 let monacoModulePromise: Promise<MonacoModule> | undefined = undefined;
-
-type MonacoModule = typeof import('monaco-editor');
-type MonacoWorkerFactory = new () => Worker;
 
 export function configureMonacoEnvironment() {
     if (monacoEnvironmentConfigured || typeof globalThis === 'undefined') {

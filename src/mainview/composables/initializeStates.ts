@@ -73,13 +73,12 @@ function createGitClientAppState() {
 type GitClientAppState = ReturnType<typeof createGitClientAppState>;
 
 type GitClientAppHotData = {
-    sharedState?: GitClientAppState | undefined;
     hasLoadedBootstrap?: boolean;
 };
 
 const hotData = import.meta.hot?.data as GitClientAppHotData | undefined;
 
-let sharedState: GitClientAppState | undefined = hotData?.sharedState;
+let sharedState: GitClientAppState | undefined;
 let consumerCount = 0;
 let pollingHandle: number | undefined = undefined;
 let hasLoadedBootstrap = hotData?.hasLoadedBootstrap ?? false;
@@ -134,12 +133,26 @@ function onDocumentVisibilityChange() {
     }
 }
 
+function teardownLifecycleEffects() {
+    clearForegroundRefresh();
+
+    if (pollingHandle !== undefined) {
+        window.clearInterval(pollingHandle);
+        pollingHandle = undefined;
+    }
+
+    window.removeEventListener('focus', onWindowFocus);
+    document.removeEventListener('visibilitychange', onDocumentVisibilityChange);
+}
+
 if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose((data) => {
         const nextData = data as GitClientAppHotData;
-        nextData.sharedState = sharedState;
         nextData.hasLoadedBootstrap = hasLoadedBootstrap;
+        teardownLifecycleEffects();
+        consumerCount = 0;
+        sharedState = undefined;
     });
 }
 
@@ -180,9 +193,7 @@ export function initializeStates() {
             return;
         }
 
-        clearForegroundRefresh();
-        window.removeEventListener('focus', onWindowFocus);
-        document.removeEventListener('visibilitychange', onDocumentVisibilityChange);
+        teardownLifecycleEffects();
     });
 
     return sharedState;

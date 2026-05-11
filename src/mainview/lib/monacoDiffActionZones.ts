@@ -1,9 +1,9 @@
 import type * as MonacoEditorModule from 'monaco-editor';
+import type * as MonacoModuleType from 'monaco-editor';
 import { ref, type Ref, type ShallowRef } from 'vue';
 import type { MonacoEditorActionZone } from '../components/monacoEditorTypes';
 import type { EditorLineRange, RenderedDiffBlock } from './monacoDiffMasking';
-
-type MonacoModule = typeof import('monaco-editor');
+type MonacoModule = typeof MonacoModuleType;
 
 type ActionZoneVisibility = 'always' | 'hover';
 type DiffEditorSide = 'original' | 'modified';

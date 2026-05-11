@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 import SettingsTerminals from '../../components/SettingsTerminals.vue';
-import { useSettings } from '../../composables/useSettings';
+import type { useSettings } from '../../composables/useSettings';
 
 type SettingsState = ReturnType<typeof useSettings>;
 

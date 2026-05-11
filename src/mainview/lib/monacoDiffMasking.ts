@@ -3,7 +3,8 @@ import { ref, type Ref, type ShallowRef } from 'vue';
 import { areEquivalentIgnoringDiffChars as areEquivalentIgnoringDiffCharsShared } from '../../shared/diffIgnoredChars';
 import { areEquivalentIgnoringDiffChars, normalizeDiffIgnoredChars } from './diffIgnoredChars';
 
-type MonacoModule = typeof import('monaco-editor');
+type MonacoModule = typeof MonacoEditorModule;
+
 const SIDES = ['original', 'modified'] as const;
 type Side = (typeof SIDES)[number];
 

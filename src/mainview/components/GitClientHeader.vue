@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NavigationView } from '../../shared/gitClient';
+import type { NavigationView } from '../../shared/gitClient';
 import { useAuth } from '../composables/useAuth';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';

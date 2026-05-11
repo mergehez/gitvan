@@ -8,8 +8,7 @@ import { useCosmeticDiffMasking } from '../lib/monacoDiffMasking';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
 import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
-type MonacoModule = typeof import('monaco-editor');
-
+type MonacoModule = typeof MonacoEditorModule;
 configureMonacoEnvironment();
 
 const modelValue = defineModel<string>();

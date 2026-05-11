@@ -4,9 +4,9 @@ import { computed, defineComponent, reactive } from 'vue';
 import type { EditorSettings, NativeCommand, NavigationView, Repo, SettingsPanel } from '../../shared/gitClient';
 import App from '../App.vue';
 import { useRepo, type RepositoryState } from '../composables/useRepo';
-import { useRepos } from '../composables/useRepos';
-import { useSettings } from '../composables/useSettings';
-import { tasks } from '../composables/useTasks';
+import type { useRepos } from '../composables/useRepos';
+import type { useSettings } from '../composables/useSettings';
+import type { tasks } from '../composables/useTasks';
 
 type SettingsState = ReturnType<typeof useSettings>;
 type ReposState = ReturnType<typeof useRepos>;

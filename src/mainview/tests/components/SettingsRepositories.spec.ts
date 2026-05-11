@@ -4,8 +4,8 @@ import { defineComponent, nextTick, reactive } from 'vue';
 import type { Repo } from '../../../shared/gitClient';
 import SettingsRepositories from '../../components/SettingsRepositories.vue';
 import { useRepo, type RepositoryState } from '../../composables/useRepo';
-import { useRepos } from '../../composables/useRepos';
-import { tasks } from '../../composables/useTasks';
+import type { useRepos } from '../../composables/useRepos';
+import type { tasks } from '../../composables/useTasks';
 
 type ReposState = ReturnType<typeof useRepos>;
 type TasksState = typeof tasks;

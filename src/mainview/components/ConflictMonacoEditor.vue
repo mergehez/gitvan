@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type * as MonacoEditorModule from 'monaco-editor';
+import type * as MonacoModuleType from 'monaco-editor';
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import type { MergeConflictBlock } from '../lib/mergeConflicts';
 import { parseMergeConflictBlocks, resolveMergeConflictBlock } from '../lib/mergeConflicts';
 import { configureMonaco, configureMonacoEnvironment, createMonacoOptions, getMonacoLanguage, getMonacoModule } from '../lib/monaco';
 import Button from './Button.vue';
 import MonacoEditor from './MonacoEditor.vue';
+type MonacoModule = typeof MonacoModuleType;
 
 const modelValue = defineModel<string>({ required: true });
 
@@ -32,7 +34,7 @@ configureMonacoEnvironment();
 const editorContainerRef = ref<HTMLDivElement>();
 const editorRef = shallowRef<MonacoEditorModule.editor.IStandaloneCodeEditor>();
 const modelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
-const monacoModuleRef = shallowRef<typeof import('monaco-editor')>();
+const monacoModuleRef = shallowRef<MonacoModule>();
 const decorationIdsRef = ref<string[]>([]);
 const zoneRefs = ref<ConflictActionZone[]>([]);
 const applyingExternalValue = ref(false);

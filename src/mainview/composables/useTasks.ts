@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue';
-import { GitClientRequestApi as Api } from '../../electrobun/index';
+import type { GitClientRequestApi as Api } from '../../electrobun/index';
 import { apiMethods } from '../../shared/apiMethods';
 import { gitClientRpc } from '../lib/gitClient';
 
