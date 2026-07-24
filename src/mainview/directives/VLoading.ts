@@ -38,7 +38,7 @@ export const vLoading: Directive<HTMLElement & { __loader: any }> = {
 
         const loader = document.createElement('span');
         loader.className = `v-loading ${size}`;
-        loader.style.zIndex = overlayState.increaseZIndex().toString();
+        loader.style.zIndex = '';
 
         const isBtn = el.tagName.toLowerCase() === 'button' || el.classList.contains('btn') || el.classList.contains('button');
         const icStyle = isBtn ? `style="width: calc(100% - 2px); height: calc(100% - 2px);"` : '';
@@ -57,7 +57,7 @@ export const vLoading: Directive<HTMLElement & { __loader: any }> = {
 
     unmounted(el, _binding: Bindings, _vnode) {
         if (el.__loader) {
-            overlayState.decreaseZIndex();
+            overlayState.releaseZIndex(el.__loader.__overlayZIndex);
             el.__loader.remove();
             el.__loader = undefined;
         }
@@ -70,7 +70,17 @@ function isButtonLikeElement(el: HTMLElement) {
 
 function toggleLoading(el: any, binding: Bindings) {
     const shouldShow = binding.value !== false && !(isButtonLikeElement(el) && isButtonLoadingIndicatorSilenced.value);
-    overlayState.toggleZIndex(shouldShow);
+
+    if (shouldShow) {
+        if (el.__loader.__overlayZIndex == null) {
+            el.__loader.__overlayZIndex = overlayState.claimZIndex();
+            el.__loader.style.zIndex = el.__loader.__overlayZIndex.toString();
+        }
+    } else if (el.__loader.__overlayZIndex != null) {
+        overlayState.releaseZIndex(el.__loader.__overlayZIndex);
+        el.__loader.__overlayZIndex = undefined;
+        el.__loader.style.zIndex = '';
+    }
 
     el.__loader.style.display = shouldShow ? 'flex' : 'none';
     el.style.pointerEvents = shouldShow ? 'none' : 'auto';

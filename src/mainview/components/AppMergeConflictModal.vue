@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
+import { useOverlaysState } from '../directives/useOverlaysState';
 import Button from './Button.vue';
 import ConflictMonacoEditor from './ConflictMonacoEditor.vue';
 import IconButton from './IconButton.vue';
@@ -10,11 +11,13 @@ import IconButton from './IconButton.vue';
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);
 const mergeState = useMergeHelper();
+const overlaysState = useOverlaysState();
 
 const conflictedFiles = computed(() => mergeState.mergeConflictState?.conflictedFiles ?? []);
 const mergedFiles = computed(() => mergeState.mergeConflictState?.mergedFiles ?? []);
 const inlineConflictCount = ref<number>();
 const mergeResolutionContent = ref('');
+const claimedZIndex = ref<number>();
 const isStandaloneConflictEditor = computed(() => !mergeState.mergeConflictState?.isMerging && Boolean(mergeState.activeMergeConflictEditor));
 const isConflictModalVisible = computed(() => mergeState.isMergeConflictModalOpen && (mergeState.mergeConflictState?.isMerging || mergeState.activeMergeConflictEditor));
 const modalTitle = computed(() => {
@@ -70,6 +73,22 @@ watch(
     },
     { immediate: true }
 );
+
+watch(
+    isConflictModalVisible,
+    (isOpen) => {
+        if (isOpen) {
+            if (claimedZIndex.value == null) {
+                claimedZIndex.value = overlaysState.claimZIndex();
+            }
+            return;
+        }
+
+        overlaysState.releaseZIndex(claimedZIndex.value);
+        claimedZIndex.value = undefined;
+    },
+    { immediate: true }
+);
 </script>
 
 <template>
@@ -81,7 +100,11 @@ watch(
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
     >
-        <div v-if="isConflictModalVisible" class="fixed inset-0 z-70 flex items-start justify-center bg-black/50 px-6 py-10 backdrop-blur-sm overflow-y-auto">
+        <div
+            v-if="isConflictModalVisible"
+            class="fixed inset-0 flex items-start justify-center bg-black/50 px-6 py-10 backdrop-blur-sm overflow-y-auto"
+            :style="{ zIndex: claimedZIndex?.toString() }"
+        >
             <div class="w-full max-w-6xl overflow-auto rounded-2xl border border-white/10 bg-x1 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
                 <div class="flex items-start justify-between border-b border-white/10 px-4 py-3">
                     <div>
@@ -115,11 +138,7 @@ watch(
                             </div>
 
                             <div v-else class="space-y-1">
-                                <div
-                                    v-for="file in [...conflictedFiles, ...conflictedFiles, ...conflictedFiles, ...conflictedFiles]"
-                                    :key="file.path"
-                                    class="rounded-xl border border-white/10 bg-x0 px-4 py-2"
-                                >
+                                <div v-for="file in conflictedFiles" :key="file.path" class="rounded-xl border border-white/10 bg-x0 px-4 py-2">
                                     <div class="flex flex-col">
                                         <div class="flex space-x-2 items-center flex-wrap">
                                             <p class="text-sm font-medium text-white">{{ file.path }}</p>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { twMerge } from 'tailwind-merge';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useOverlaysState } from '../directives/useOverlaysState';
 import IconButton from './IconButton.vue';
 
 const open = defineModel<boolean>('open', { required: true });
@@ -8,8 +9,10 @@ const props = defineProps<{
     title: string;
     contentClass?: string;
 }>();
+const overlaysState = useOverlaysState();
 
 const modalSurface = ref<HTMLElement | null>(null);
+const claimedZIndex = ref<number>();
 const dragOffset = reactive({ x: 0, y: 0 });
 const activeDrag = reactive({
     pointerId: -1,
@@ -23,6 +26,18 @@ const activeDrag = reactive({
 const modalStyle = computed(() => ({
     transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
 }));
+
+function syncOverlayClaim(isOpen: boolean) {
+    if (isOpen) {
+        if (claimedZIndex.value == null) {
+            claimedZIndex.value = overlaysState.claimZIndex();
+        }
+        return;
+    }
+
+    overlaysState.releaseZIndex(claimedZIndex.value);
+    claimedZIndex.value = undefined;
+}
 
 function clampOffset(nextX: number, nextY: number) {
     const surface = modalSurface.value;
@@ -89,18 +104,25 @@ function onHeaderPointerDown(event: PointerEvent) {
     activeDrag.isDragging = true;
 }
 
-watch(open, (isOpen) => {
-    if (!isOpen) {
-        stopDragging();
-        resetDragPosition();
-    }
-});
+watch(
+    open,
+    (isOpen) => {
+        syncOverlayClaim(isOpen);
+
+        if (!isOpen) {
+            stopDragging();
+            resetDragPosition();
+        }
+    },
+    { immediate: true }
+);
 
 window.addEventListener('pointermove', onWindowPointerMove);
 window.addEventListener('pointerup', onWindowPointerUp);
 window.addEventListener('pointercancel', onWindowPointerUp);
 
 onBeforeUnmount(() => {
+    syncOverlayClaim(false);
     window.removeEventListener('pointermove', onWindowPointerMove);
     window.removeEventListener('pointerup', onWindowPointerUp);
     window.removeEventListener('pointercancel', onWindowPointerUp);
@@ -116,7 +138,12 @@ onBeforeUnmount(() => {
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
     >
-        <div v-if="open" class="fixed inset-0 z-70 flex items-center justify-center overflow-y-auto bg-x0/70 px-6 py-10 backdrop-blur dark" @click.self="open = false">
+        <div
+            v-if="open"
+            class="fixed inset-0 flex items-center justify-center overflow-y-auto bg-x0/70 px-6 py-10 backdrop-blur dark"
+            :style="{ zIndex: claimedZIndex?.toString() }"
+            @click.self="open = false"
+        >
             <div
                 ref="modalSurface"
                 data-testid="centered-modal-surface"
