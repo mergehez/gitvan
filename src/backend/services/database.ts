@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { AccountSummary, GroupSummary } from '../../shared/gitClient.js';
@@ -30,9 +30,8 @@ function applyConnectionPragmas(db: Pick<DatabaseClient, 'exec'>) {
 function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?: boolean }): DatabaseClient {
     const db = new Database(databasePath, {
         readonly: options?.readOnly === true,
-        create: options?.readOnly !== true,
-        readwrite: options?.readOnly !== true,
-        strict: true,
+        fileMustExist: options?.readOnly === true,
+        timeout: 5000,
     });
 
     const client: DatabaseClient = {
@@ -40,10 +39,15 @@ function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?
             db.exec(sql);
         },
         prepare: (sql: string): DatabaseStatement => {
-            const statement = db.query(sql);
+            const statement = db.prepare(sql);
 
             return {
-                run: (...params: SQLInputValue[]) => statement.run(...params),
+                run: (...params: SQLInputValue[]) => {
+                    const result = statement.run(...params);
+                    return {
+                        lastInsertRowid: result.lastInsertRowid,
+                    } satisfies DatabaseRunResult;
+                },
                 get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => (statement.get(...params) ?? undefined) as T | undefined,
                 all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.all(...params) as T[],
             };

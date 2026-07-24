@@ -1,8 +1,9 @@
 /**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
- * Run with: bun run src/backend/devServer.ts
+ * Run with: tsx src/backend/devServer.ts
  */
 
+import express from 'express';
 import { homedir } from 'os';
 import { join } from 'path';
 import type { GitClientRequestApi as Api } from '../electrobun/index';
@@ -46,9 +47,24 @@ const methodMap: Record<string, (ps?: any) => any> = {
 console.log(Object.keys(methodMap));
 
 const REQUEST_TIMEOUT_MS = 65_000;
+const serverApp = express();
+
+serverApp.use(express.text({ type: '*/*', limit: '10mb' }));
+serverApp.use((_req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (_req.method === 'OPTIONS') {
+        res.status(204).end();
+        return;
+    }
+
+    next();
+});
 
 function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timeoutHandle: Timer | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
@@ -63,65 +79,41 @@ function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     });
 }
 
-Bun.serve({
-    port: PORT,
-    async fetch(req) {
-        // CORS for Vite dev server
-        if (req.method === 'OPTIONS') {
-            return new Response(null, {
-                headers: {
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type',
-                },
-            });
-        }
-
-        const url = new URL(req.url);
-
-        // Health check
-        if (url.pathname === '/health') {
-            return Response.json({ ok: true });
-        }
-
-        // API endpoint: POST /api/:method
-        if (url.pathname.startsWith('/api/') && req.method === 'POST') {
-            const method = url.pathname.slice('/api/'.length);
-            const handler = methodMap[method];
-
-            if (!handler) {
-                return new Response(JSON.stringify({ error: `Unknown method: ${method}` }), {
-                    status: 404,
-                    headers: { 'Content-Type': 'application/json' },
-                });
-            }
-
-            try {
-                let params: any = undefined;
-                const contentType = req.headers.get('content-type') || '';
-                if (contentType.includes('application/json')) {
-                    const text = await runWithTimeout(req.text(), REQUEST_TIMEOUT_MS);
-                    if (text.trim()) {
-                        params = JSON.parse(text);
-                    }
-                }
-
-                const result = await runWithTimeout(handler(params), REQUEST_TIMEOUT_MS);
-                return Response.json(result, {
-                    headers: { 'Access-Control-Allow-Origin': '*' },
-                });
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                console.error(`[devServer] ${method}:`, message);
-                return new Response(JSON.stringify({ error: message }), {
-                    status: 500,
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-                });
-            }
-        }
-
-        return new Response('Not found', { status: 404 });
-    },
+serverApp.get('/health', (_req, res) => {
+    res.json({ ok: true });
 });
 
-console.log(`[devServer] Backend API running at http://localhost:${PORT}`);
+serverApp.post('/api/:method', async (req, res) => {
+    const method = req.params.method;
+    const handler = method ? methodMap[method] : undefined;
+
+    if (!handler) {
+        res.status(404).json({ error: `Unknown method: ${method}` });
+        return;
+    }
+
+    try {
+        let params: any = undefined;
+        const contentType = req.header('content-type') || '';
+        const text = typeof req.body === 'string' ? req.body : '';
+        if (contentType.includes('application/json') && text.trim()) {
+            params = JSON.parse(text);
+        }
+
+        const result = await runWithTimeout(Promise.resolve(handler(params)), REQUEST_TIMEOUT_MS);
+        res.json(result);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[devServer] ${method}:`, message);
+        res.status(500).json({ error: message });
+    }
+});
+
+serverApp.use((_req, res) => {
+    res.status(404).send('Not found');
+});
+
+serverApp.listen(PORT, () => {
+    console.log(`[devServer] Backend API running at http://localhost:${PORT}`);
+});
+

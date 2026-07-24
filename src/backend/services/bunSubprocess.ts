@@ -1,30 +1,4 @@
-import type { SpawnOptions } from 'bun';
-
-async function readText(stream: SpawnOptions.ReadableToIO<any>) {
-    if (!stream) {
-        return '';
-    }
-
-    return await new Response(stream as ReadableStream).text();
-}
-
-async function readBuffer(stream: SpawnOptions.ReadableToIO<any>) {
-    if (!stream) {
-        return Buffer.alloc(0);
-    }
-
-    return Buffer.from(await new Response(stream as ReadableStream).arrayBuffer());
-}
-
-function writeInput(stdin: SpawnOptions.WritableToIO<any>, input: string | undefined) {
-    if (input === undefined || stdin === undefined || typeof stdin === 'number') {
-        return;
-    }
-
-    stdin.write(input);
-    stdin.flush?.();
-    stdin.end();
-}
+import { spawn } from 'child_process';
 
 type CommandParams = {
     command: string;
@@ -34,31 +8,71 @@ type CommandParams = {
     input?: string;
     detached?: boolean;
 };
+
 function spawnProcess(params: CommandParams) {
-    const child = Bun.spawn({
-        cmd: [params.command, ...params.args],
+    const child = spawn(params.command, params.args, {
         cwd: params.cwd,
         env: params.env,
-        stdin: params.input !== undefined ? 'pipe' : 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
+        detached: params.detached === true,
+        stdio: [params.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
 
     if (params.detached) {
         child.unref();
     }
 
-    writeInput(child.stdin, params.input);
+    if (params.input !== undefined && child.stdin) {
+        child.stdin.write(params.input);
+        child.stdin.end();
+    }
 
     return child;
 }
 
 export async function executeTextCommand(params: CommandParams) {
     const child = spawnProcess(params);
-    return await Promise.all([readText(child.stdout), readText(child.stderr), child.exited]);
+
+    return await new Promise<[string, string, number]>((resolve, reject) => {
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+
+        child.stdout?.on('data', (chunk: Buffer | string) => {
+            stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        child.stderr?.on('data', (chunk: Buffer | string) => {
+            stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        child.on('error', reject);
+        child.on('close', (code, signal) => {
+            resolve([
+                Buffer.concat(stdoutChunks).toString('utf8'),
+                Buffer.concat(stderrChunks).toString('utf8'),
+                code ?? (signal ? 1 : 0),
+            ]);
+        });
+    });
 }
 
 export async function executeBufferCommand(params: CommandParams) {
     const child = spawnProcess(params);
-    return await Promise.all([readBuffer(child.stdout), readText(child.stderr), child.exited]);
+
+    return await new Promise<[Buffer, string, number]>((resolve, reject) => {
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+
+        child.stdout?.on('data', (chunk: Buffer | string) => {
+            stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        child.stderr?.on('data', (chunk: Buffer | string) => {
+            stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        child.on('error', reject);
+        child.on('close', (code, signal) => {
+            resolve([
+                Buffer.concat(stdoutChunks),
+                Buffer.concat(stderrChunks).toString('utf8'),
+                code ?? (signal ? 1 : 0),
+            ]);
+        });
+    });
 }
