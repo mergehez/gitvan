@@ -40,11 +40,13 @@ const fileDiffRef = shallowRef<FileDiff>();
 const renderedNodeRef = shallowRef<HTMLElement>();
 const resizeObserverRef = shallowRef<ResizeObserver>();
 const shadowMutationObserverRef = shallowRef<MutationObserver>();
+const shadowScrollCleanupRef = shallowRef<Array<() => void>>([]);
 const centeredActionZoneLayouts = ref<CenteredActionZoneLayout[]>([]);
 const hoveredActionZoneId = ref<string>();
 const hoveringActionZone = ref(false);
 let pendingHoveredActionZoneClearTimeout: ReturnType<typeof setTimeout> | undefined;
 let pendingLayoutSyncFrame = 0;
+let pendingLayoutRetryTimeout: ReturnType<typeof setTimeout> | undefined;
 
 function clearPendingHoveredActionZoneClear() {
     if (pendingHoveredActionZoneClearTimeout !== undefined) {
@@ -153,6 +155,17 @@ const diffOptions = computed(() => {
     };
 });
 
+function scheduleRetrySync() {
+    if (pendingLayoutRetryTimeout !== undefined) {
+        clearTimeout(pendingLayoutRetryTimeout);
+    }
+
+    pendingLayoutRetryTimeout = setTimeout(() => {
+        pendingLayoutRetryTimeout = undefined;
+        scheduleActionZoneLayoutSync();
+    }, 120);
+}
+
 const hostStyle = computed(() => ({
     '--diffs-font-size': `${settings.state.diffFontSize}px`,
     '--diffs-font-family': 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
@@ -217,9 +230,11 @@ function syncActionZoneLayouts() {
     }
 
     const rootRect = root.getBoundingClientRect();
+    const scrollTop = root.scrollTop;
     const originalRect = originalColumn.getBoundingClientRect();
     const modifiedRect = modifiedColumn.getBoundingClientRect();
     const seamCenterLeft = Math.round((originalRect.right - rootRect.left + (modifiedRect.left - rootRect.left)) / 2);
+    let hasMissingNodes = false;
     const nextLayouts = (props.actionZones ?? [])
         .filter((zone) => zone.actions.length > 0)
         .map((zone) => {
@@ -229,10 +244,14 @@ function syncActionZoneLayouts() {
             const originalEnd = Math.max(originalStart, zone.originalEndLineNumber ?? zone.originalStartLineNumber ?? zone.endLineNumber ?? originalStart);
             const originalCenter = getViewportCenterForRange('original', originalStart, originalEnd);
             const modifiedCenter = getViewportCenterForRange('modified', modifiedStart, modifiedEnd);
-            const top =
+            if (originalCenter === undefined || modifiedCenter === undefined) {
+                hasMissingNodes = true;
+            }
+            const visibleTop =
                 originalCenter !== undefined && modifiedCenter !== undefined
                     ? Math.round((originalCenter + modifiedCenter) / 2)
                     : Math.round(originalCenter ?? modifiedCenter ?? -9999);
+            const top = visibleTop + scrollTop;
 
             return {
                 id: zone.id,
@@ -241,9 +260,13 @@ function syncActionZoneLayouts() {
                 zone,
             } satisfies CenteredActionZoneLayout;
         })
-        .filter((layout) => layout.top >= -24 && layout.top <= root.clientHeight + 24);
+        .filter((layout) => layout.top - scrollTop >= -24 && layout.top - scrollTop <= root.clientHeight + 24);
 
     centeredActionZoneLayouts.value = nextLayouts;
+
+    if (hasMissingNodes) {
+        scheduleRetrySync();
+    }
 
     if (hoveredActionZoneId.value && !nextLayouts.some((layout) => layout.id === hoveredActionZoneId.value)) {
         hoveredActionZoneId.value = undefined;
@@ -258,6 +281,51 @@ function scheduleActionZoneLayoutSync() {
     pendingLayoutSyncFrame = requestAnimationFrame(() => syncActionZoneLayouts());
 }
 
+function onShadowScroll() {
+    scheduleActionZoneLayoutSync();
+}
+
+function clearShadowScrollListeners() {
+    shadowScrollCleanupRef.value.forEach((cleanup) => {
+        cleanup();
+    });
+    shadowScrollCleanupRef.value = [];
+}
+
+function attachShadowScrollListeners(node: HTMLElement) {
+    clearShadowScrollListeners();
+
+    const shadowRoot = node.shadowRoot;
+    const cleanup: Array<() => void> = [];
+
+    const addScrollListener = (target: EventTarget | undefined, options?: AddEventListenerOptions) => {
+        if (!target) {
+            return;
+        }
+
+        target.addEventListener('scroll', onShadowScroll, options);
+        cleanup.push(() => target.removeEventListener('scroll', onShadowScroll, options));
+    };
+
+    addScrollListener(node, { passive: true, capture: true });
+    addScrollListener(rootRef.value, { passive: true, capture: true });
+
+    if (shadowRoot) {
+        addScrollListener(shadowRoot, { passive: true, capture: true });
+
+        const scrollTargets = [
+            ...shadowRoot.querySelectorAll<HTMLElement>('[data-deletions], [data-additions], [data-unified]'),
+            ...shadowRoot.querySelectorAll<HTMLElement>('pre'),
+        ].filter((target, index, targets) => targets.indexOf(target) === index);
+
+        scrollTargets.forEach((target) => {
+            addScrollListener(target, { passive: true, capture: true });
+        });
+    }
+
+    shadowScrollCleanupRef.value = cleanup;
+}
+
 function disconnectShadowObserver() {
     shadowMutationObserverRef.value?.disconnect();
     shadowMutationObserverRef.value = undefined;
@@ -265,12 +333,14 @@ function disconnectShadowObserver() {
 
 function attachShadowObserver(node: HTMLElement) {
     disconnectShadowObserver();
+    attachShadowScrollListeners(node);
 
     if (!node.shadowRoot) {
         return;
     }
 
     shadowMutationObserverRef.value = new MutationObserver(() => {
+        attachShadowScrollListeners(node);
         scheduleActionZoneLayoutSync();
     });
     shadowMutationObserverRef.value.observe(node.shadowRoot, {
@@ -343,10 +413,15 @@ onUnmounted(() => {
     if (pendingLayoutSyncFrame !== 0) {
         cancelAnimationFrame(pendingLayoutSyncFrame);
     }
+    if (pendingLayoutRetryTimeout !== undefined) {
+        clearTimeout(pendingLayoutRetryTimeout);
+        pendingLayoutRetryTimeout = undefined;
+    }
     clearPendingHoveredActionZoneClear();
     rootRef.value?.removeEventListener('scroll', handleRootScroll);
     resizeObserverRef.value?.disconnect();
     resizeObserverRef.value = undefined;
+    clearShadowScrollListeners();
     disconnectShadowObserver();
     cleanUpInstance();
 });
@@ -374,7 +449,7 @@ watch(
 </script>
 
 <template>
-    <div ref="rootRef" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
+    <div ref="rootRef" data-testid="diffs-diff-editor-root" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
         <div ref="renderHostRef" class="min-h-full gitvan-diffs-host" />
         <div class="monaco-diff-actions-overlay">
             <div
@@ -391,7 +466,13 @@ watch(
                     scheduleHoveredActionZoneClear();
                 "
             >
-                <button type="button" class="monaco-diff-actions-trigger" :title="layout.zone.label ?? 'Change actions'" @mousedown.prevent.stop>
+                <button
+                    type="button"
+                    data-testid="diff-hunk-action-trigger"
+                    class="monaco-diff-actions-trigger"
+                    :title="layout.zone.label ?? 'Change actions'"
+                    @mousedown.prevent.stop
+                >
                     <span class="icon icon-[mdi--dots-horizontal] text-[11px]"></span>
                 </button>
 
@@ -421,7 +502,7 @@ watch(
 .monaco-diff-actions-overlay {
     position: absolute;
     inset: 0;
-    overflow: hidden;
+    /* overflow: hidden; */
     pointer-events: none;
     z-index: 55;
 }
