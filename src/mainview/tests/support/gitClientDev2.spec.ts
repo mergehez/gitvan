@@ -13,7 +13,7 @@ describe('gitClientDev2', () => {
     });
 
     it('builds a direct backend url from the current hostname by default', () => {
-        expect(resolveDev2ApiBase()).toBe(`http://${window.location.hostname}:5174/api`);
+        expect(resolveDev2ApiBase()).toBe(`http://${window.location.hostname}:5176/api`);
     });
 
     it('uses the configured backend base when provided', () => {

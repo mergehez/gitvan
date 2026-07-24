@@ -10,7 +10,7 @@ import { apiMethods } from '../shared/apiMethods';
 import { app } from './services/app';
 import { useDb } from './services/database';
 
-const PORT = parseInt(process.env.API_PORT || '5174', 10);
+const PORT = parseInt(process.env.API_PORT || '5176', 10);
 
 // Initialize database (normally done by the Electrobun entrypoint)
 const userDataDir = process.env.GITVAN_DATA_DIR || join(homedir(), 'Library', 'Application Support', 'gitvan');

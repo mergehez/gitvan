@@ -17,7 +17,7 @@ export function resolveDev2ApiBase() {
         return trimTrailingSlash(configuredBase);
     }
 
-    const apiPort = import.meta.env.VITE_DEV2_API_PORT?.trim() || '5174';
+    const apiPort = import.meta.env.VITE_DEV2_API_PORT?.trim() || '5176';
     const hostname = window.location.hostname || '127.0.0.1';
     return `http://${hostname}:${apiPort}/api`;
 }
