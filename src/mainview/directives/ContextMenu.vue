@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import ContextMenuPanel from './ContextMenuPanel.vue';
-import type { useContextMenu } from './useContextMenu';
+import { useContextMenu } from './useContextMenu';
 
 const props = defineProps<{
     state: ReturnType<typeof useContextMenu>;

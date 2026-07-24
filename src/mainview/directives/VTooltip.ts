@@ -1,6 +1,6 @@
+import { useOverlaysState } from './useOverlaysState';
 import { twMerge } from 'tailwind-merge';
 import type { Directive, DirectiveBinding } from 'vue';
-import { useOverlaysState } from './useOverlaysState';
 
 export interface TooltipDirectiveModifiers {
     right?: boolean | undefined;
@@ -85,24 +85,15 @@ function applyOptions(elems: Elems, options: ComputedOptions) {
 function show(tooltip: HTMLElement) {
     tooltip.style.position = 'fixed';
     tooltip.style.visibility = 'visible';
-    const host = (tooltip as HTMLElement & { __tooltipHost?: TooltipHostElement }).__tooltipHost;
-    const nextZIndex = overlayState.claimZIndex();
-
-    if (host?.__tooltip) {
-        host.__tooltip.zIndex = nextZIndex;
-    }
-
-    tooltip.style.zIndex = nextZIndex.toString();
+    const zIndex = overlayState.claimZIndex();
+    tooltip.style.zIndex = zIndex.toString();
+    tooltip.dataset.overlayZIndex = String(zIndex);
 }
 
 function hide(tooltip: HTMLElement) {
     tooltip.style.display = 'none';
-    const host = (tooltip as HTMLElement & { __tooltipHost?: TooltipHostElement }).__tooltipHost;
-    overlayState.releaseZIndex(host?.__tooltip?.zIndex);
-
-    if (host?.__tooltip) {
-        host.__tooltip.zIndex = undefined;
-    }
+    overlayState.releaseZIndex(Number(tooltip.dataset.overlayZIndex));
+    delete tooltip.dataset.overlayZIndex;
 }
 
 function positionTooltip(el: TooltipHostElement) {
@@ -154,7 +145,7 @@ function positionTooltip(el: TooltipHostElement) {
 }
 
 type TooltipHostElement = HTMLElement & {
-    __tooltip: { tooltip: HTMLElement; arrow: HTMLElement; text: HTMLElement; placement: Placement; zIndex?: number | undefined } | undefined;
+    __tooltip: { tooltip: HTMLElement; arrow: HTMLElement; text: HTMLElement; placement: Placement } | undefined;
     __mouseEnter: (() => void) | undefined;
     __mouseLeave: (() => void) | undefined;
     __click: ((event: MouseEvent) => void) | undefined;
@@ -184,10 +175,9 @@ export const vTooltip: Directive<TooltipHostElement> = {
 
         tooltip.appendChild(text);
         tooltip.appendChild(arrow);
-        (tooltip as HTMLElement & { __tooltipHost?: TooltipHostElement }).__tooltipHost = el;
         document.body.appendChild(tooltip);
 
-        el.__tooltip = { tooltip, arrow, text, placement: opts.placement, zIndex: undefined };
+        el.__tooltip = { tooltip, arrow, text, placement: opts.placement };
         el.__tooltipShowTimeout = undefined;
 
         el.__mouseEnter = () => {

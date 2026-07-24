@@ -1,6 +1,6 @@
-import { computed, reactive, ref } from 'vue';
 import type { ContextMenuEntry } from './contextMenuTypes';
 import { useOverlaysState } from './useOverlaysState';
+import { computed, reactive, ref } from 'vue';
 
 type ContextMenuPosition = {
     x: number;
@@ -33,8 +33,8 @@ export function _useContextMenu() {
     const overlayState = useOverlaysState();
 
     function closeMenu() {
-        overlayState.releaseZIndex(state.value.zIndex);
         state.value = getDefaultState();
+        overlayState.releaseZIndex(state.value.zIndex);
     }
 
     function openAtPosition(position: ContextMenuPosition, items: ContextMenuEntry[], element?: HTMLElement, options?: ContextMenuOpenOptions) {
@@ -74,16 +74,6 @@ export function _useContextMenu() {
         }
 
         openAtPosition({ x: event.clientX, y: event.clientY }, items, event.currentTarget as HTMLElement, options);
-    }
-
-    function openAtViewportCenter(items: ContextMenuEntry[]) {
-        openAtPosition(
-            {
-                x: Math.round(window.innerWidth / 2),
-                y: Math.round(window.innerHeight / 2),
-            },
-            items
-        );
     }
 
     function getElementPosition(element: HTMLElement, placement: ContextMenuPlacement): ContextMenuPosition {
@@ -132,6 +122,15 @@ export function _useContextMenu() {
 
         openAtPosition(getElementPosition(element, placement), items, element, options);
     }
+    function openAtViewportCenter(items: ContextMenuEntry[]) {
+        openAtPosition(
+            {
+                x: Math.round(window.innerWidth / 2),
+                y: Math.round(window.innerHeight / 2),
+            },
+            items
+        );
+    }
 
     return reactive({
         open: computed(() => state.value.open),
@@ -147,8 +146,8 @@ export function _useContextMenu() {
         isKeyOpen: isKeyOpen,
         openAtEvent: openAtEvent,
         openAtPosition: openAtPosition,
-        openAtElement: openAtElement,
         openAtViewportCenter: openAtViewportCenter,
+        openAtElement: openAtElement,
         updateItems: updateItems,
     });
 }

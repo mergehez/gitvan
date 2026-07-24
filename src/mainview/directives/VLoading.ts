@@ -1,9 +1,8 @@
-import type { Directive, DirectiveBinding } from 'vue';
 import { isButtonLoadingIndicatorSilenced } from './loadingIndicatorState';
 import { useOverlaysState } from './useOverlaysState';
+import type { Directive, DirectiveBinding } from 'vue';
 
 export interface LoadingDirectiveModifiers {
-    xs?: boolean | undefined;
     sm?: boolean | undefined;
     md?: boolean | undefined;
     lg?: boolean | undefined;
@@ -17,36 +16,28 @@ export type VLoadingDirectiveBinding = Bindings;
 
 const overlayState = useOverlaysState();
 
-export const vLoading: Directive<HTMLElement & { __loader: any }> = {
+export const vLoading: Directive<HTMLElement & { __loader: any; __loaderZIndex: any }> = {
     mounted(el, binding: Bindings, _vnode) {
         const position = window.getComputedStyle(el).position;
         if (position === 'static' || position === '') {
             el.style.position = 'relative';
         }
 
-        const size = binding.modifiers?.xs
-            ? 'v-loading-xs'
-            : binding.modifiers?.sm
-              ? 'v-loading-sm'
-              : binding.modifiers?.md
-                ? 'v-loading-md'
-                : binding.modifiers?.lg
-                  ? 'v-loading-lg'
-                  : binding.modifiers?.xl
-                    ? 'v-loading-xl'
-                    : 'v-loading-md';
+        const size = binding.modifiers?.sm ? 'v-loading-xs' : binding.modifiers?.lg ? 'v-loading-lg' : binding.modifiers?.xl ? 'v-loading-xl' : 'v-loading-md';
 
         const loader = document.createElement('span');
         loader.className = `v-loading ${size}`;
-        loader.style.zIndex = '';
+        const loaderZIndex = overlayState.claimZIndex();
+        loader.style.zIndex = loaderZIndex.toString();
 
         const isBtn = el.tagName.toLowerCase() === 'button' || el.classList.contains('btn') || el.classList.contains('button');
-        const icStyle = isBtn ? `style="width: calc(100% - 2px); height: calc(100% - 2px);"` : '';
+        const icStyle = isBtn ? `style="width: ${el.clientWidth - 1}px; height: ${el.clientHeight - 1}px;"` : '';
         loader.innerHTML = `<i class="v-arg-icon v-loading-icon" ${icStyle}></i>`;
 
         el.appendChild(loader);
 
         el.__loader = loader;
+        el.__loaderZIndex = loaderZIndex;
 
         toggleLoading(el, binding);
     },
@@ -57,9 +48,10 @@ export const vLoading: Directive<HTMLElement & { __loader: any }> = {
 
     unmounted(el, _binding: Bindings, _vnode) {
         if (el.__loader) {
-            overlayState.releaseZIndex(el.__loader.__overlayZIndex);
+            overlayState.releaseZIndex(el.__loaderZIndex);
             el.__loader.remove();
             el.__loader = undefined;
+            el.__loaderZIndex = undefined;
         }
     },
 };
@@ -70,17 +62,7 @@ function isButtonLikeElement(el: HTMLElement) {
 
 function toggleLoading(el: any, binding: Bindings) {
     const shouldShow = binding.value !== false && !(isButtonLikeElement(el) && isButtonLoadingIndicatorSilenced.value);
-
-    if (shouldShow) {
-        if (el.__loader.__overlayZIndex == null) {
-            el.__loader.__overlayZIndex = overlayState.claimZIndex();
-            el.__loader.style.zIndex = el.__loader.__overlayZIndex.toString();
-        }
-    } else if (el.__loader.__overlayZIndex != null) {
-        overlayState.releaseZIndex(el.__loader.__overlayZIndex);
-        el.__loader.__overlayZIndex = undefined;
-        el.__loader.style.zIndex = '';
-    }
+    overlayState.toggleZIndex(shouldShow, el.__loaderZIndex);
 
     el.__loader.style.display = shouldShow ? 'flex' : 'none';
     el.style.pointerEvents = shouldShow ? 'none' : 'auto';
