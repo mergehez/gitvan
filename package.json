@@ -19,7 +19,8 @@
         "dev": "tsx src/backend/devServer.ts & sleep 2 && VITE_DEV2=true vp dev --port 5173",
         "build:canary": "electrobun build --env=canary",
         "build:stable": "electrobun build --env=stable",
-        "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit"
+        "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit",
+        "test:e2e": "playwright test"
     },
     "dependencies": {
         "@guolao/vue-monaco-editor": "^1.6.0",
@@ -40,6 +41,7 @@
         "@types/express": "^5.0.6",
         "@types/node": "^26.1.1",
         "@types/three": "^0.185.1",
+        "@playwright/test": "^1.61.1",
         "@vitejs/plugin-vue": "^6.0.8",
         "@vue/test-utils": "^2.4.11",
         "concurrently": "^9.2.4",
