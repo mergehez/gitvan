@@ -43,8 +43,8 @@ const iconButtonStub = {
     template: '<button type="button" @click="$emit(\'click\')"><slot /></button>',
 };
 
-const monacoEditorStub = defineComponent({
-    name: 'MonacoEditor',
+const diffsDiffEditorStub = defineComponent({
+    name: 'DiffsDiffEditor',
     emits: ['visible-diff-change'],
     props: {
         actionZones: {
@@ -56,7 +56,7 @@ const monacoEditorStub = defineComponent({
             default: '',
         },
     },
-    template: '<div data-testid="monaco-editor" :data-action-zone-count="actionZones.length" :data-diff-ignored-chars="diffIgnoredChars">Monaco</div>',
+    template: '<div data-testid="diffs-diff-editor" :data-action-zone-count="actionZones.length" :data-diff-ignored-chars="diffIgnoredChars">Diffs</div>',
 });
 
 const monacoEditorSettingsButtonStub = {
@@ -85,7 +85,7 @@ function mountDiffViewer(onlyWhitespaceChanges: boolean, noActualChange = false,
             stubs: {
                 Alert: alertStub,
                 IconButton: iconButtonStub,
-                MonacoEditor: monacoEditorStub,
+                DiffsDiffEditor: diffsDiffEditorStub,
                 MonacoEditorSettingsButton: monacoEditorSettingsButtonStub,
             },
         },
@@ -119,7 +119,7 @@ describe('DiffViewer', () => {
         expect(wrapper.text()).toContain('no actual change');
     });
 
-    it('shows the no-actual-change badge when Monaco reports no visible changes', async () => {
+    it('shows the no-actual-change badge when the diff renderer reports no visible changes', async () => {
         const wrapper = mountDiffViewer(false, false, [
             {
                 id: 'hunk-1',
@@ -136,13 +136,13 @@ describe('DiffViewer', () => {
             },
         ]);
 
-        wrapper.getComponent(monacoEditorStub).vm.$emit('visible-diff-change', false);
+        wrapper.getComponent(diffsDiffEditorStub).vm.$emit('visible-diff-change', false);
         await wrapper.vm.$nextTick();
 
         expect(wrapper.text()).toContain('no actual change');
     });
 
-    it('passes Monaco action zones through to the editor', () => {
+    it('passes action zones through to the diff renderer', () => {
         const wrapper = mountDiffViewer(false, false, [
             {
                 id: 'hunk-1',
@@ -159,14 +159,14 @@ describe('DiffViewer', () => {
             },
         ]);
 
-        expect(wrapper.get('[data-testid="monaco-editor"]').attributes('data-action-zone-count')).toBe('1');
+        expect(wrapper.get('[data-testid="diffs-diff-editor"]').attributes('data-action-zone-count')).toBe('1');
     });
 
-    it('passes ignored diff characters through to the editor', () => {
+    it('passes ignored diff characters through to the diff renderer', () => {
         mockSettings.state.diffIgnoredChars = ',;"\'';
 
         const wrapper = mountDiffViewer(false);
 
-        expect(wrapper.get('[data-testid="monaco-editor"]').attributes('data-diff-ignored-chars')).toBe(',;"\'');
+        expect(wrapper.get('[data-testid="diffs-diff-editor"]').attributes('data-diff-ignored-chars')).toBe(',;"\'');
     });
 });

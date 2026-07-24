@@ -1,10 +1,11 @@
 <script setup lang="ts">
+//safdsf
 import { computed, ref, watch } from 'vue';
 import type { DiffViewerState } from '../composables/useDiffViewer';
 import { useSettings } from '../composables/useSettings';
 import Alert from './Alert.vue';
+import DiffsDiffEditor from './DiffsDiffEditor.vue';
 import IconButton from './IconButton.vue';
-import MonacoEditor from './MonacoEditor.vue';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
 import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
@@ -109,9 +110,8 @@ function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
                 </div>
             </section>
         </div>
-        <MonacoEditor
+        <DiffsDiffEditor
             v-else
-            no-head
             :original="state?.original"
             :modified="state?.modified"
             :path-for-language="state?.pathForLanguage"

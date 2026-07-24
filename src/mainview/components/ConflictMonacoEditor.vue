@@ -6,7 +6,7 @@ import type { MergeConflictBlock } from '../lib/mergeConflicts';
 import { parseMergeConflictBlocks, resolveMergeConflictBlock } from '../lib/mergeConflicts';
 import { configureMonaco, configureMonacoEnvironment, createMonacoOptions, getMonacoLanguage, getMonacoModule } from '../lib/monaco';
 import Button from './Button.vue';
-import MonacoEditor from './MonacoEditor.vue';
+import DiffsDiffEditor from './DiffsDiffEditor.vue';
 type MonacoModule = typeof MonacoModuleType;
 
 const modelValue = defineModel<string>({ required: true });
@@ -367,19 +367,21 @@ onUnmounted(() => {
 <template>
     <div class="flex h-full min-h-0 flex-col gap-2">
         <div ref="editorContainerRef" class="min-h-0 flex-1 border border-x7 rounded-sm" />
-        <div v-if="comparedBlock" class="border border-x7 bg-x2 rounded-sm min-h-40">
-            <MonacoEditor
-                title="Compare my and incoming changes for this conflict"
+        <div v-if="comparedBlock" class="min-h-40 overflow-hidden rounded-sm border border-x7 bg-x2">
+            <div class="flex items-center gap-2 border-b border-x7 px-2 py-1.5 text-xs font-medium">
+                <div class="flex-1 text-white">Compare my and incoming changes for this conflict</div>
+                <Button severity="light" smaller @click="comparedBlockIndex = undefined"> Close Compare </Button>
+            </div>
+            <DiffsDiffEditor
                 :original="comparedBlock.current"
                 :modified="comparedBlock.incoming"
                 :path-for-language="props.pathForLanguage"
-                :font-size="props.fontSize"
+                diff-view-mode="full-file"
+                diff-ignored-chars=""
+                :show-whitespace-changes="true"
                 readonly
-            >
-                <template #before-settings-button>
-                    <Button severity="light" smaller @click="comparedBlockIndex = undefined"> Close Compare </Button>
-                </template>
-            </MonacoEditor>
+                class="min-h-40"
+            />
         </div>
     </div>
 </template>
