@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
-import { Terminal } from 'xterm';
-import 'xterm/css/xterm.css';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { gitClientRpc } from '../lib/gitClient';
