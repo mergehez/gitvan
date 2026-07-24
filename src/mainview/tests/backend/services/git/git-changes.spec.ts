@@ -266,6 +266,60 @@ describe('changesGit partial file operations', () => {
         expect(unstagedDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([3, 10]);
     });
 
+    it('stages the fourth, then second, then fifth separated hunk in sequence', async () => {
+        const repo = createRepoWithContent([
+            'line 1',
+            'line 2 changed',
+            'line 3',
+            'line 4',
+            'line 5',
+            'line 6 changed',
+            'line 7',
+            'line 8',
+            'line 9',
+            'line 10 changed',
+            'line 11',
+            'line 12',
+            'line 13',
+            'line 14 changed',
+            'line 15',
+            'line 16',
+            'line 17',
+            'line 18 changed',
+            'line 19',
+            'line 20',
+        ]);
+        cleanups.push(() => repo.cleanup());
+
+        const firstDiff = await changesGit.getFileDiff(repo.repoPath, 'story.txt', 'unstaged');
+
+        expect(firstDiff.entry.hunks).toHaveLength(5);
+        expect(firstDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([2, 6, 10, 14, 18]);
+
+        await changesGit.stageRepoFileHunks(repo.repoPath, 'story.txt', [firstDiff.entry.hunks[3]!.id]);
+
+        const secondDiff = await changesGit.getFileDiff(repo.repoPath, 'story.txt', 'unstaged');
+        expect(secondDiff.entry.hunks).toHaveLength(4);
+        expect(secondDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([2, 6, 10, 18]);
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await changesGit.stageRepoFileHunks(repo.repoPath, 'story.txt', [secondDiff.entry.hunks[1]!.id]);
+
+        const thirdDiff = await changesGit.getFileDiff(repo.repoPath, 'story.txt', 'unstaged');
+        expect(thirdDiff.entry.hunks).toHaveLength(3);
+        expect(thirdDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([2, 10, 18]);
+
+        await changesGit.stageRepoFileHunks(repo.repoPath, 'story.txt', [thirdDiff.entry.hunks[2]!.id]);
+
+        const stagedDiff = await changesGit.getFileDiff(repo.repoPath, 'story.txt', 'staged');
+        const unstagedDiff = await changesGit.getFileDiff(repo.repoPath, 'story.txt', 'unstaged');
+
+        expect(stagedDiff.entry.hunks).toHaveLength(3);
+        expect(stagedDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([6, 14, 18]);
+        expect(unstagedDiff.entry.hunks).toHaveLength(2);
+        expect(unstagedDiff.entry.hunks.map((hunk) => hunk.newStart)).toEqual([2, 10]);
+    });
+
     it('unstages a later addition-only hunk without requiring earlier staged additions', async () => {
         const repo = createRepoWithContent([
             'line 1',

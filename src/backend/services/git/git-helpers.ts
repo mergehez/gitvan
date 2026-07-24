@@ -524,6 +524,9 @@ function countPatchLineChanges(patch: string) {
 
 function parseUnifiedPatch(patch: string): ParsedUnifiedPatch {
     const lines = patch.split('\n');
+    if (lines.at(-1) === '') {
+        lines.pop();
+    }
     const headerLines: string[] = [];
     const hunks: ParsedPatchHunk[] = [];
     let index = 0;
