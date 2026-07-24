@@ -49,12 +49,14 @@ vi.mock('../../lib/gitClient', () => ({
     },
 }));
 
-vi.mock('xterm', () => {
+vi.mock('@xterm/xterm', () => {
     class MockTerminal {
         cols = 80;
         rows = 24;
         open() {}
-        loadAddon() {}
+        loadAddon(addon: { activate?: (terminal: MockTerminal) => void }) {
+            addon.activate?.(this);
+        }
         onData() {
             return { dispose() {} };
         }
@@ -68,7 +70,9 @@ vi.mock('xterm', () => {
 
 vi.mock('@xterm/addon-fit', () => ({
     FitAddon: class {
+        activate() {}
         fit() {}
+        dispose() {}
     },
 }));
 

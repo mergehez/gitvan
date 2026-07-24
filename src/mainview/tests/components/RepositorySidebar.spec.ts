@@ -215,7 +215,11 @@ const fileTreeStub = defineComponent({
             type: Object,
             required: true,
         },
-        onContextMenu: {
+        onSelect: {
+            type: Function,
+            required: true,
+        },
+        getContextMenuItems: {
             type: Function,
             required: false,
         },
@@ -228,11 +232,16 @@ const fileTreeStub = defineComponent({
                 :key="entry.id"
                 type="button"
                 :data-testid="'repo-item-' + entry.id"
-                @contextmenu.prevent="onContextMenu && onContextMenu(entry, $event)">
+                @contextmenu.prevent="useContextMenu().openAtEvent($event, getContextMenuItems ? getContextMenuItems(entry) : [])">
                 {{ entry.title }}
             </button>
         </section>
     `,
+    setup() {
+        return {
+            useContextMenu,
+        };
+    },
 });
 
 const centeredInputModalStub = defineComponent({
@@ -289,11 +298,7 @@ const sidebarHost = defineComponent({
         <div>
             <SidebarRepositories />
             <ContextMenu
-                :open="contextMenu.open"
-                :items="contextMenu.items"
-                :x="contextMenu.x"
-                :y="contextMenu.y"
-                @close="contextMenu.closeMenu" />
+                :state="contextMenu" />
         </div>
     `,
 });

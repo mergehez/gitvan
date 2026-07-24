@@ -5,6 +5,7 @@ import RepHistoryView from '../../components/RepHistoryView.vue';
 import type { useRepos } from '../../composables/useRepos';
 import type { tasks as tasksType } from '../../composables/useTasks';
 import type { ContextMenuEntry, ContextMenuItem, useContextMenu } from '../../directives';
+import { useContextMenu as useContextMenuRuntime } from '../../directives/useContextMenu';
 
 type ReposState = ReturnType<typeof useRepos>;
 type ContextMenuState = ReturnType<typeof useContextMenu>;
@@ -79,7 +80,7 @@ const fileTreeStub = defineComponent({
             type: Object,
             required: true,
         },
-        onContextMenu: {
+        getContextMenuItems: {
             type: Function,
             default: undefined,
         },
@@ -91,13 +92,18 @@ const fileTreeStub = defineComponent({
                 :key="child.id"
                 type="button"
                 :data-testid="'history-item-' + child.id"
-                @contextmenu.prevent="onContextMenu?.(child, $event)"
+                @contextmenu.prevent="useContextMenuRuntime().openAtEvent($event, getContextMenuItems?.(child) ?? [])"
             >
                 {{ child.title }}
                 <slot name="item-rightIcon" :item="child" />
             </button>
         </section>
     `,
+    setup() {
+        return {
+            useContextMenuRuntime,
+        };
+    },
 });
 
 function isMenuItem(entry: ContextMenuEntry | undefined): entry is ContextMenuItem {
@@ -191,7 +197,7 @@ describe('RepHistoryView', () => {
 
         await wrapper.get('[data-testid="history-item-abc123"]').trigger('contextmenu');
 
-        expect(selectedRepo.selectCommit).toHaveBeenCalledWith('abc123');
+        expect(selectedRepo.selectCommit).not.toHaveBeenCalled();
         expect(mockContextMenu.openAtEvent).toHaveBeenCalledTimes(1);
 
         const openAtEventMock = mockContextMenu.openAtEvent as ReturnType<typeof vi.fn>;
