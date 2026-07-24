@@ -3,7 +3,6 @@
 @import './alerts.css';
 @import './scrollbar.css';
 @import '../directives/directive-styles.css';
-@source "../directives";
 
 :root {
     color-scheme: dark;

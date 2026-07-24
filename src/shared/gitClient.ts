@@ -177,6 +177,8 @@ export type FileChangeEntry = {
 export type RepoChangesData = {
     staged: FileChangeEntry[];
     unstaged: FileChangeEntry[];
+    stagedStats: { addedLines: number; removedLines: number };
+    unstagedStats: { addedLines: number; removedLines: number };
 };
 
 export type RepoStashEntry = {

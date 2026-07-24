@@ -202,9 +202,32 @@ export const changesGit = {
             })
         );
 
+        const stagedNumstat = await runGit(['diff', '--staged', '--numstat', '--'], repoPath).catch(() => '');
+        const unstagedNumstat = await runGit(['diff', '--numstat', '--'], repoPath).catch(() => '');
+
+        function parseNumstatTotals(output: string) {
+            let addedLines = 0;
+            let removedLines = 0;
+
+            for (const line of output.split('\n')) {
+                const parts = line.trim().split('\t');
+                if (parts.length < 3) continue;
+
+                const added = Number(parts[0]);
+                const removed = Number(parts[1]);
+
+                if (!Number.isNaN(added)) addedLines += added;
+                if (!Number.isNaN(removed)) removedLines += removed;
+            }
+
+            return { addedLines, removedLines };
+        }
+
         return {
             staged: entries.filter((entry) => entry.stagedStatus !== 'clean'),
             unstaged: entries.filter((entry) => entry.unstagedStatus !== 'clean'),
+            stagedStats: parseNumstatTotals(stagedNumstat),
+            unstagedStats: parseNumstatTotals(unstagedNumstat),
         };
     },
     async getFileDiff(repoPath: string, filePath: string, kind: FileDiffRequestKind): Promise<FileDiffData> {

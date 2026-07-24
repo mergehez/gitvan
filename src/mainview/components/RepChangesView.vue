@@ -820,6 +820,25 @@ onUnmounted(() => {
                             :onSelect="(t, event) => onSelectChangeEntry(t as ChangeTreeEntry, event)"
                         >
                             <template #header-actions="{ item }">
+                                <span
+                                    class="mr-1 text-xs flex items-center gap-1 tracking-tight"
+                                    v-tooltip="
+                                        item.isStaged && repo.changes?.stagedStats
+                                            ? 'Diff: +{{ repo.changes.stagedStats.addedLines }} -{{ repo.changes.stagedStats.removedLines }}'
+                                            : !item.isStaged && repo.changes?.unstagedStats
+                                              ? 'Diff: +{{ repo.changes.unstagedStats.addedLines }} -{{ repo.changes.unstagedStats.removedLines }}'
+                                              : 'No changes'
+                                    "
+                                >
+                                    <template v-if="item.isStaged && repo.changes?.stagedStats">
+                                        <span class="text-green-400">+{{ repo.changes.stagedStats.addedLines }}</span>
+                                        <span class="text-red-400">-{{ repo.changes.stagedStats.removedLines }}</span>
+                                    </template>
+                                    <template v-else-if="!item.isStaged && repo.changes?.unstagedStats">
+                                        <span class="text-green-400">+{{ repo.changes.unstagedStats.addedLines }}</span>
+                                        <span class="text-red-400">-{{ repo.changes.unstagedStats.removedLines }}</span>
+                                    </template>
+                                </span>
                                 <IconButton
                                     v-if="item.isStaged"
                                     severity="raised"
