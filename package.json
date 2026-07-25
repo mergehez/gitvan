@@ -16,7 +16,7 @@
         "release:mac:signed": "bun run ./scripts/build.ts --signed",
         "release:mac:notarize": "bun run ./scripts/build.ts --notarize",
         "dev2": "pkill -f electrobun 2>/dev/null && pkill -f \"bun run\" 2>/dev/null && rm -rf dist/ || true && concurrently \"vp dev --port 5173\" \"vp build && electrobun dev --watch\" --names \"Vite,Electron\" --prefix-colors \"blue,green\"",
-        "dev": "tsx src/backend/devServer.ts & sleep 2 && VITE_DEV2=true vp dev --port 5173",
+        "dev": "concurrently -k \"node --import tsx --watch src/backend/devServer.ts\" \"sleep 2 && VITE_DEV2=true vp dev --port 5173\"",
         "build:canary": "electrobun build --env=canary",
         "build:stable": "electrobun build --env=stable",
         "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit",

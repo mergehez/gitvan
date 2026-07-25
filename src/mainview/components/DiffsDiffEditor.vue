@@ -1,22 +1,50 @@
 <script setup lang="ts">
-import { FileDiff, parseDiffFromFile, type FileContents, type FileDiffMetadata } from '@pierre/diffs';
+import {
+    FileDiff,
+    UnresolvedFile,
+    parseDiffFromFile,
+    type ChangeContent,
+    type FileContents,
+    type FileDiffMetadata,
+    type FileDiffOptions,
+    type UnresolvedFileOptions,
+} from '@pierre/diffs';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { useSettings } from '../composables/useSettings';
 import { normalizeComparableDiffText } from '../lib/diffIgnoredChars';
-import type { MonacoEditorActionZone } from './monacoEditorTypes';
+type HunkActionTone = 'default' | 'danger';
 
-type ActionZoneVisibility = 'always' | 'hover';
-
-type CenteredActionZoneLayout = {
+export type HunkActionButton = {
     id: string;
-    left: number;
-    top: number;
-    zone: MonacoEditorActionZone;
+    label: string;
+    title?: string;
+    busy?: boolean;
+    disabled?: boolean;
+    tone?: HunkActionTone;
+    onClick: () => void;
+};
+
+export type HunkActionZone = {
+    id: string;
+    startLineNumber: number;
+    originalStartLineNumber: number;
+    hunkSpecs?: string;
+    actions: HunkActionButton[];
 };
 
 const emit = defineEmits<{
     visibleDiffChange: [hasVisibleChanges: boolean | undefined];
 }>();
+
+export type HunkActionsConfig = {
+    kind: 'staged' | 'unstaged';
+    oldSizeBytes: number;
+    newSizeBytes: number;
+    patch: string;
+    onStage?: (patch: string) => void;
+    onUnstage?: (patch: string) => void;
+    onDiscard?: (patch: string) => void;
+};
 
 const props = defineProps<{
     readonly?: boolean;
@@ -24,29 +52,22 @@ const props = defineProps<{
     pathForLanguage?: string;
     original?: string;
     modified?: string;
+    conflictFile?: string;
     diffViewMode?: 'changes' | 'full-file';
     diffIgnoredChars?: string;
     showWhitespaceChanges?: boolean;
     revealLine?: number;
-    actionZones?: MonacoEditorActionZone[];
-    actionZoneVisibility?: ActionZoneVisibility;
+    hunkActionsConfig?: HunkActionsConfig;
 }>();
 
 const settings = useSettings();
 
-const rootRef = ref<HTMLDivElement>();
 const renderHostRef = ref<HTMLDivElement>();
-const fileDiffRef = shallowRef<FileDiff>();
+const fileDiffRef = shallowRef<FileDiff | UnresolvedFile>();
 const renderedNodeRef = shallowRef<HTMLElement>();
-const resizeObserverRef = shallowRef<ResizeObserver>();
-const shadowMutationObserverRef = shallowRef<MutationObserver>();
-const shadowScrollCleanupRef = shallowRef<Array<() => void>>([]);
-const centeredActionZoneLayouts = ref<CenteredActionZoneLayout[]>([]);
 const hoveredActionZoneId = ref<string>();
 const hoveringActionZone = ref(false);
 let pendingHoveredActionZoneClearTimeout: ReturnType<typeof setTimeout> | undefined;
-let pendingLayoutSyncFrame = 0;
-let pendingLayoutRetryTimeout: ReturnType<typeof setTimeout> | undefined;
 
 function clearPendingHoveredActionZoneClear() {
     if (pendingHoveredActionZoneClearTimeout !== undefined) {
@@ -78,48 +99,49 @@ function setHoveredActionZone(nextZoneId: string | undefined) {
     hoveredActionZoneId.value = nextZoneId;
 }
 
-function getActionZoneVisibility(): ActionZoneVisibility {
-    return props.actionZoneVisibility ?? 'always';
-}
-
 function createFile(name: string, contents: string): FileContents {
     return { name, contents };
 }
 
 function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean) {
-    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified));
     const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, !showWhitespaceChanges);
     const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, !showWhitespaceChanges);
-    const visibleDiff = parseDiffFromFile(createFile(name, normalizedOriginal), createFile(name, normalizedModified));
 
-    if (visibleDiff.hunks.length === 0) {
-        return {
-            renderedDiff: rawDiff,
-            hasVisibleChanges: false,
-            hideDecorations: original !== modified,
-        };
+    const hasVisibleChanges = normalizedOriginal !== normalizedModified;
+    const hideDecorations = original !== modified && !hasVisibleChanges;
+
+    if (!hasVisibleChanges) {
+        return { renderedDiff: null, hasVisibleChanges: false, hideDecorations };
     }
 
-    const renderedDiff: FileDiffMetadata = {
-        ...visibleDiff,
-        name: rawDiff.name,
-        prevName: rawDiff.prevName,
-        lang: rawDiff.lang,
-        newObjectId: rawDiff.newObjectId,
-        prevObjectId: rawDiff.prevObjectId,
-        mode: rawDiff.mode,
-        prevMode: rawDiff.prevMode,
-        type: rawDiff.type,
+    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified));
+
+    const rawHunks: (ChangeContent & { hunkSpecs: string; diffsHunkIdx: number })[] = [];
+
+    for (let hunkIdx = 0; hunkIdx < rawDiff.hunks.length; hunkIdx++) {
+        const hunk = rawDiff.hunks[hunkIdx];
+
+        for (const line of hunk.hunkContent) {
+            if (line.type === 'context') continue;
+
+            const change = line as ChangeContent;
+            const entry = {
+                ...change,
+                hunkSpecs: `${change.deletions > 0 ? '-' : ''}${change.deletionLineIndex + 1},${change.deletions} ${change.additions > 0 ? '+' : ''}${change.additionLineIndex + 1},${change.additions}`,
+                diffsHunkIdx: hunkIdx,
+            };
+            rawHunks.push(entry);
+        }
+    }
+
+    const renderedDiff: FileDiffMetadata & { rawHunks: typeof rawHunks } = {
+        ...rawDiff,
+        rawHunks,
         additionLines: rawDiff.additionLines,
         deletionLines: rawDiff.deletionLines,
-        cacheKey: rawDiff.cacheKey,
     };
 
-    return {
-        renderedDiff,
-        hasVisibleChanges: true,
-        hideDecorations: false,
-    };
+    return { renderedDiff, hasVisibleChanges: true, hideDecorations: false };
 }
 
 const diffState = computed(() => {
@@ -130,10 +152,12 @@ const diffState = computed(() => {
     return createRenderedDiff(name, original, modified, props.diffIgnoredChars ?? '', props.showWhitespaceChanges ?? false);
 });
 
-const diffOptions = computed(() => {
+type DiffOptions = UnresolvedFileOptions<undefined> & Pick<FileDiffOptions<undefined>, 'diffStyle'>;
+const diffOptions = computed<DiffOptions>(() => {
     const shouldHideDecorations = diffState.value.hideDecorations;
+    const isConflict = Boolean(props.conflictFile);
 
-    return {
+    const base: DiffOptions = {
         theme: 'pierre-dark' as const,
         themeType: 'dark' as const,
         diffStyle: 'split' as const,
@@ -146,225 +170,226 @@ const diffOptions = computed(() => {
         diffIndicators: shouldHideDecorations ? ('none' as const) : ('bars' as const),
         disableBackground: shouldHideDecorations,
         useTokenTransformer: true,
-        onPostRender(node: HTMLElement) {
+        onPostRender(node: HTMLElement, _instance?: unknown) {
             renderedNodeRef.value = node;
-            attachShadowObserver(node);
-            scheduleActionZoneLayoutSync();
             void revealTargetLine();
         },
+        renderAnnotation: undefined,
     };
+
+    if (isConflict) {
+        return {
+            ...base,
+            mergeConflictActionsType: 'none' as const,
+            maxContextLines: 3,
+        };
+    }
+
+    return base;
 });
 
-function scheduleRetrySync() {
-    if (pendingLayoutRetryTimeout !== undefined) {
-        clearTimeout(pendingLayoutRetryTimeout);
-    }
+let hunkActionsWrapper: HTMLElement;
 
-    pendingLayoutRetryTimeout = setTimeout(() => {
-        pendingLayoutRetryTimeout = undefined;
-        scheduleActionZoneLayoutSync();
-    }, 120);
+/** Extract a single hunk from a unified diff patch by splitting at `@@` headers. */
+function extractNthHunkPatch(fullPatch: string, hunkIndex: number): string {
+    if (!fullPatch) return '';
+    // Split at each hunk header — parts[0] is the file header, parts[N+1] is the Nth hunk
+    const parts = fullPatch.split(/^@@ /m);
+    const targetIdx = hunkIndex + 1;
+    if (targetIdx >= parts.length) return '';
+    return parts[0] + '@@ ' + parts[targetIdx];
 }
 
-const hostStyle = computed(() => ({
-    '--diffs-font-size': `${settings.state.diffFontSize}px`,
-    '--diffs-font-family': 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-    '--diffs-header-font-family': 'ui-sans-serif, system-ui, sans-serif',
-    '--diffs-line-height': '1.5',
-}));
+function onHunkButtonHover(e: MouseEvent) {
+    const btn = e.currentTarget as HTMLElement;
+    const i = parseInt(btn.getAttribute('data-hunk-index') ?? '0');
+    hoveringActionZone.value = true;
+    setHoveredActionZone(`${i}`);
 
-function getCodeColumn(side: 'original' | 'modified') {
-    const shadowRoot = renderedNodeRef.value?.shadowRoot;
-    if (!shadowRoot) {
-        return undefined;
-    }
+    hunkActionsWrapper.innerHTML = '';
 
-    return shadowRoot.querySelector<HTMLElement>(side === 'original' ? '[data-deletions]' : '[data-additions]') ?? undefined;
-}
+    const lbl = document.createElement('span');
+    lbl.textContent = btn.getAttribute('data-hunk-label') ?? `#${i}`;
+    lbl.style.cssText = `
+        font-size:12px;
+        font-weight:700;
+        padding:0 5px;
+        width:100%;
+        text-align:center;
+    `;
+    hunkActionsWrapper.appendChild(lbl);
 
-function getLineElementsWithinRange(side: 'original' | 'modified', startLineNumber: number, endLineNumber: number) {
-    const codeColumn = getCodeColumn(side);
-    if (!codeColumn) {
-        return [];
-    }
-
-    const lineElements: HTMLElement[] = [];
-    for (let lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber += 1) {
-        const lineElement = codeColumn.querySelector<HTMLElement>(`[data-line="${lineNumber}"]`);
-        if (lineElement) {
-            lineElements.push(lineElement);
-        }
-    }
-
-    return lineElements;
-}
-
-function getViewportCenterForRange(side: 'original' | 'modified', startLineNumber: number, endLineNumber: number) {
-    const root = rootRef.value;
-    const lineElements = getLineElementsWithinRange(side, startLineNumber, endLineNumber);
-
-    if (!root || lineElements.length === 0) {
-        return undefined;
-    }
-
-    const rootRect = root.getBoundingClientRect();
-    const firstRect = lineElements[0]!.getBoundingClientRect();
-    const lastRect = lineElements[lineElements.length - 1]!.getBoundingClientRect();
-
-    const top = firstRect.top - rootRect.top;
-    const bottom = lastRect.bottom - rootRect.top;
-
-    return top + (bottom - top) / 2;
-}
-
-function syncActionZoneLayouts() {
-    pendingLayoutSyncFrame = 0;
-
-    const root = rootRef.value;
-    const originalColumn = getCodeColumn('original');
-    const modifiedColumn = getCodeColumn('modified');
-
-    if (!root || !originalColumn || !modifiedColumn || diffState.value.hasVisibleChanges === false) {
-        centeredActionZoneLayouts.value = [];
-        return;
-    }
-
-    const rootRect = root.getBoundingClientRect();
-    const scrollTop = root.scrollTop;
-    const originalRect = originalColumn.getBoundingClientRect();
-    const modifiedRect = modifiedColumn.getBoundingClientRect();
-    const seamCenterLeft = Math.round((originalRect.right - rootRect.left + (modifiedRect.left - rootRect.left)) / 2);
-    let hasMissingNodes = false;
-    const nextLayouts = (props.actionZones ?? [])
-        .filter((zone) => zone.actions.length > 0)
-        .map((zone) => {
-            const modifiedStart = Math.max(1, zone.startLineNumber ?? zone.afterLineNumber + 1);
-            const modifiedEnd = Math.max(modifiedStart, zone.endLineNumber ?? modifiedStart);
-            const originalStart = Math.max(1, zone.originalStartLineNumber ?? zone.startLineNumber ?? zone.afterLineNumber + 1);
-            const originalEnd = Math.max(originalStart, zone.originalEndLineNumber ?? zone.originalStartLineNumber ?? zone.endLineNumber ?? originalStart);
-            const originalCenter = getViewportCenterForRange('original', originalStart, originalEnd);
-            const modifiedCenter = getViewportCenterForRange('modified', modifiedStart, modifiedEnd);
-            if (originalCenter === undefined || modifiedCenter === undefined) {
-                hasMissingNodes = true;
-            }
-            const visibleTop =
-                originalCenter !== undefined && modifiedCenter !== undefined
-                    ? Math.round((originalCenter + modifiedCenter) / 2)
-                    : Math.round(originalCenter ?? modifiedCenter ?? -9999);
-            const top = visibleTop + scrollTop;
-
-            return {
-                id: zone.id,
-                left: seamCenterLeft,
-                top,
-                zone,
-            } satisfies CenteredActionZoneLayout;
-        })
-        .filter((layout) => layout.top - scrollTop >= -24 && layout.top - scrollTop <= root.clientHeight + 24);
-
-    centeredActionZoneLayouts.value = nextLayouts;
-
-    if (hasMissingNodes) {
-        scheduleRetrySync();
-    }
-
-    if (hoveredActionZoneId.value && !nextLayouts.some((layout) => layout.id === hoveredActionZoneId.value)) {
-        hoveredActionZoneId.value = undefined;
-    }
-}
-
-function scheduleActionZoneLayoutSync() {
-    if (pendingLayoutSyncFrame !== 0) {
-        cancelAnimationFrame(pendingLayoutSyncFrame);
-    }
-
-    pendingLayoutSyncFrame = requestAnimationFrame(() => syncActionZoneLayouts());
-}
-
-function onShadowScroll() {
-    scheduleActionZoneLayoutSync();
-}
-
-function clearShadowScrollListeners() {
-    shadowScrollCleanupRef.value.forEach((cleanup) => {
-        cleanup();
-    });
-    shadowScrollCleanupRef.value = [];
-}
-
-function attachShadowScrollListeners(node: HTMLElement) {
-    clearShadowScrollListeners();
-
-    const shadowRoot = node.shadowRoot;
-    const cleanup: Array<() => void> = [];
-
-    const addScrollListener = (target: EventTarget | undefined, options?: AddEventListenerOptions) => {
-        if (!target) {
-            return;
-        }
-
-        target.addEventListener('scroll', onShadowScroll, options);
-        cleanup.push(() => target.removeEventListener('scroll', onShadowScroll, options));
+    const mkBtn = (label: string, danger: boolean, onClick: () => void) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = `
+            border:0;
+            border-radius:5px;
+            background:${danger ? '#9f0712' : '#016630'};
+            cursor:pointer;
+            font-size:11px;
+            line-height:1;
+            flex:1;
+            padding:5px 8px;`;
+        b.addEventListener('mouseenter', () => {
+            b.style.background = danger ? '#82181a' : '#0d542b';
+        });
+        b.addEventListener('mouseleave', () => {
+            b.style.background = danger ? '#9f0712' : '#016630';
+        });
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onClick();
+        });
+        return b;
     };
 
-    addScrollListener(node, { passive: true, capture: true });
-    addScrollListener(rootRef.value, { passive: true, capture: true });
+    const cfg = props.hunkActionsConfig!;
+    const canStage = cfg.kind === 'unstaged';
+    const canUnstage = cfg.kind === 'staged';
+    const canDiscard = cfg.kind === 'unstaged';
+    const btnWrapper = document.createElement('div');
+    btnWrapper.style.cssText = `
+        display:flex;
+        gap:2px;
+        width:100%;
+    `;
+    const hunkPatch = btn.getAttribute('data-hunk-patch') ?? '';
+    if (canStage && cfg.onStage) btnWrapper.appendChild(mkBtn('Stage Change', false, () => cfg.onStage!(hunkPatch)));
+    if (canUnstage && cfg.onUnstage) btnWrapper.appendChild(mkBtn('Unstage Change', false, () => cfg.onUnstage!(hunkPatch)));
+    if (canDiscard && cfg.onDiscard) btnWrapper.appendChild(mkBtn('Discard Change', true, () => cfg.onDiscard!(hunkPatch)));
 
-    if (shadowRoot) {
-        addScrollListener(shadowRoot, { passive: true, capture: true });
+    hunkActionsWrapper.appendChild(btnWrapper);
 
-        const scrollTargets = [
-            ...shadowRoot.querySelectorAll<HTMLElement>('[data-deletions], [data-additions], [data-unified]'),
-            ...shadowRoot.querySelectorAll<HTMLElement>('pre'),
-        ].filter((target, index, targets) => targets.indexOf(target) === index);
-
-        scrollTargets.forEach((target) => {
-            addScrollListener(target, { passive: true, capture: true });
-        });
-    }
-
-    shadowScrollCleanupRef.value = cleanup;
+    hunkActionsWrapper.style.display = 'flex';
+    const btnRect = btn.getBoundingClientRect();
+    hunkActionsWrapper.style.top = `${btnRect.top}px`;
+    hunkActionsWrapper.style.left = `${btnRect.left + btnRect.width / 2}px`;
+    console.log('hover', { btnRect, actionsRect: hunkActionsWrapper.getBoundingClientRect() });
 }
 
-function disconnectShadowObserver() {
-    shadowMutationObserverRef.value?.disconnect();
-    shadowMutationObserverRef.value = undefined;
+function addHunkElsToDom(label: string, addLine: HTMLElement, i: number) {
+    const rendered = diffState.value.renderedDiff;
+    const rawHunk = rendered?.rawHunks[i];
+    const diffsHunkIdx = rawHunk?.diffsHunkIdx ?? 0;
+    const fullPatch = props.hunkActionsConfig?.patch ?? '';
+    const hunkPatch = extractNthHunkPatch(fullPatch, diffsHunkIdx);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '⋯';
+    btn.className = 'gitvan-hunk-button';
+    btn.setAttribute('data-hunk-index', `${i}`);
+    btn.setAttribute('data-hunk-label', label);
+    btn.setAttribute('data-hunk-patch', hunkPatch);
+    btn.style.cssText = `
+        position:absolute;
+        z-index:55;
+        top:0;
+        bottom:0;
+        border:1px solid #00fff4;
+        border-radius:999px;
+        background:#00fff4;
+        color:black;
+        cursor:pointer;
+        width:18px;
+        height:18px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:11px;
+        box-shadow:0 8px 24px rgba(0,0,0,0.28);
+    `;
+
+    btn.addEventListener('mouseenter', (e) => {
+        onHunkButtonHover(e);
+    });
+    btn.addEventListener('mouseleave', (e) => {
+        hoveringActionZone.value = false;
+        scheduleHoveredActionZoneClear();
+        // if mouse is not moved up, hide the actions wrapper directly
+        const movedUp = e.clientY < (e.currentTarget as HTMLElement).getBoundingClientRect().top;
+
+        setTimeout(
+            () => {
+                if (!hunkActionsWrapper.matches(':hover')) hunkActionsWrapper.style.display = 'none';
+            },
+            movedUp ? 200 : 0
+        );
+    });
+
+    addLine.querySelectorAll('.gitvan-hunk-button').forEach((el) => el.remove());
+    addLine.appendChild(btn);
 }
+function setHunkAnchors() {
+    const sr = renderedNodeRef.value?.shadowRoot;
+    const host = sr?.querySelector<HTMLElement>('pre[data-diff]');
+    const cfg = props.hunkActionsConfig;
+    if (!sr || !host || !cfg || cfg.oldSizeBytes <= 0 || cfg.newSizeBytes <= 0) return;
 
-function attachShadowObserver(node: HTMLElement) {
-    disconnectShadowObserver();
-    attachShadowScrollListeners(node);
+    // we add actions wrapper only once, and populate its content on button hover, so that we don't have 100+ action wrappers in the DOM for large diffs
+    let actions = host.querySelector<HTMLElement>('.gitvan-hunk-actions');
+    if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'gitvan-hunk-actions';
+        actions.style.cssText = `
+            display: none;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 2px;
+            background: #03A9F4;
+            color: black;
+            border: 1px solid #4cc7ff;
+            border-radius: 5px;
+            position: fixed;
+            z-index: 5006;
+            box-shadow: rgba(0, 0, 0, 0.25) 0px 10px 30px;
+            width: min-content;
+            transform: translate(-50%, calc(-100% - 8px));
+            padding: 3px 5px;
+            top: 642px;
+            left: 1008.53px;
+        `;
 
-    if (!node.shadowRoot) {
-        return;
+        actions.onmouseenter = (e) => ((e.target as HTMLElement)!.style.display = 'flex');
+        actions.onmouseleave = (e) => ((e.target as HTMLElement)!.style.display = 'none');
+
+        host.appendChild(actions);
     }
+    hunkActionsWrapper = actions;
 
-    shadowMutationObserverRef.value = new MutationObserver(() => {
-        attachShadowScrollListeners(node);
-        scheduleActionZoneLayoutSync();
-    });
-    shadowMutationObserverRef.value.observe(node.shadowRoot, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-    });
+    const gutter = sr.querySelector<HTMLElement>('[data-additions] > [data-gutter]');
+    const adds = gutter?.querySelectorAll<HTMLElement>(':scope > div');
+    if (!gutter || !adds?.length) return;
+
+    const hunks = diffState.value.renderedDiff?.rawHunks ?? [];
+    for (let i = 0; i < hunks.length; i++) {
+        const hunk = hunks[i];
+        const addLine = gutter.querySelector<HTMLElement>(`:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`);
+        if (!addLine) {
+            console.warn('addLine not found for hunk', { i, hunk, hunks });
+            continue;
+        }
+        addHunkElsToDom(`#${i + 1} (${hunk.hunkSpecs})`, addLine, i);
+    }
 }
 
 async function revealTargetLine() {
     await nextTick();
+    setHunkAnchors();
 
     const revealLine = props.revealLine;
-    if (!revealLine || revealLine <= 0) {
-        return;
-    }
+    if (!revealLine || revealLine <= 0) return;
 
-    const lineElement = getCodeColumn('modified')?.querySelector<HTMLElement>(`[data-line="${revealLine}"]`);
+    const shadowRoot = renderedNodeRef.value?.shadowRoot;
+    const lineElement =
+        shadowRoot?.querySelector<HTMLElement>(`[data-additions] [data-line="${revealLine}"]`) ?? shadowRoot?.querySelector<HTMLElement>(`[data-line="${revealLine}"]`);
     lineElement?.scrollIntoView({ block: 'center', inline: 'nearest' });
 }
 
 function ensureDiffInstance() {
     if (!fileDiffRef.value) {
-        fileDiffRef.value = new FileDiff(diffOptions.value);
+        const opts = diffOptions.value;
+        fileDiffRef.value = props.conflictFile ? new UnresolvedFile(opts) : new FileDiff(opts);
     }
 
     return fileDiffRef.value;
@@ -377,14 +402,31 @@ function renderDiff() {
     }
 
     const instance = ensureDiffInstance();
-    instance.setOptions(diffOptions.value);
-    instance.render({
-        fileDiff: diffState.value.renderedDiff,
+    // const opts = diffOptions.value;
+    // instance.setOptions(opts);
+
+    if (props.conflictFile) {
+        const name = props.pathForLanguage || 'conflict.txt';
+        (instance as UnresolvedFile).render({
+            file: { name, contents: props.conflictFile },
+            containerWrapper: host,
+            forceRender: true,
+        });
+        emit('visibleDiffChange', true);
+        void revealTargetLine();
+        return;
+    }
+
+    const renderedDiff = diffState.value.renderedDiff;
+    if (!renderedDiff) return;
+
+    (instance as FileDiff).render({
+        fileDiff: renderedDiff,
         containerWrapper: host,
         forceRender: true,
     });
+
     emit('visibleDiffChange', diffState.value.hasVisibleChanges);
-    scheduleActionZoneLayoutSync();
     void revealTargetLine();
 }
 
@@ -394,35 +436,12 @@ function cleanUpInstance() {
     renderedNodeRef.value = undefined;
 }
 
-function handleRootScroll() {
-    scheduleActionZoneLayoutSync();
-}
-
 onMounted(() => {
-    resizeObserverRef.value = new ResizeObserver(() => {
-        scheduleActionZoneLayoutSync();
-    });
-    if (rootRef.value) {
-        resizeObserverRef.value.observe(rootRef.value);
-        rootRef.value.addEventListener('scroll', handleRootScroll, { passive: true });
-    }
     renderDiff();
 });
 
 onUnmounted(() => {
-    if (pendingLayoutSyncFrame !== 0) {
-        cancelAnimationFrame(pendingLayoutSyncFrame);
-    }
-    if (pendingLayoutRetryTimeout !== undefined) {
-        clearTimeout(pendingLayoutRetryTimeout);
-        pendingLayoutRetryTimeout = undefined;
-    }
     clearPendingHoveredActionZoneClear();
-    rootRef.value?.removeEventListener('scroll', handleRootScroll);
-    resizeObserverRef.value?.disconnect();
-    resizeObserverRef.value = undefined;
-    clearShadowScrollListeners();
-    disconnectShadowObserver();
     cleanUpInstance();
 });
 
@@ -440,167 +459,74 @@ watch(
     }
 );
 
-watch(
-    () => [props.actionZones, props.actionZoneVisibility],
-    () => {
-        scheduleActionZoneLayoutSync();
-    }
-);
+const hostStyle = computed(() => ({
+    '--diffs-font-size': `${settings.state.diffFontSize}px`,
+    '--diffs-font-family': 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+    '--diffs-header-font-family': 'ui-sans-serif, system-ui, sans-serif',
+    '--diffs-line-height': '1.5',
+}));
 </script>
 
 <template>
-    <div ref="rootRef" data-testid="diffs-diff-editor-root" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
+    <div data-testid="diffs-diff-editor-root" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
         <div ref="renderHostRef" class="min-h-full gitvan-diffs-host" />
-        <div class="monaco-diff-actions-overlay">
-            <div
-                v-for="layout in centeredActionZoneLayouts"
-                :key="layout.id"
-                class="monaco-diff-actions-anchor"
-                :style="{ left: `${layout.left}px`, top: `${layout.top}px` }"
-                @mouseenter="
-                    hoveringActionZone = true;
-                    setHoveredActionZone(layout.id);
-                "
-                @mouseleave="
-                    hoveringActionZone = false;
-                    scheduleHoveredActionZoneClear();
-                "
-            >
-                <button
-                    type="button"
-                    data-testid="diff-hunk-action-trigger"
-                    class="monaco-diff-actions-trigger"
-                    :title="layout.zone.label ?? 'Change actions'"
-                    @mousedown.prevent.stop
-                >
-                    <span class="icon icon-[mdi--dots-horizontal] text-[11px]"></span>
-                </button>
-
-                <div v-if="getActionZoneVisibility() === 'always' || hoveredActionZoneId === layout.id" class="monaco-diff-actions-popover" @mousedown.prevent.stop>
-                    <div v-if="layout.zone.label" class="monaco-diff-actions__label">{{ layout.zone.label }}</div>
-                    <div v-if="layout.zone.meta" class="monaco-diff-actions__meta">{{ layout.zone.meta }}</div>
-                    <button
-                        v-for="action in layout.zone.actions"
-                        :key="action.id"
-                        type="button"
-                        :class="['monaco-diff-actions__button', action.tone === 'danger' ? 'monaco-diff-actions__button--danger' : '']"
-                        :title="action.title ?? action.label"
-                        :disabled="Boolean(action.disabled)"
-                        :data-busy="Boolean(action.busy)"
-                        @mousedown.prevent.stop
-                        @click.prevent.stop="action.disabled ? undefined : action.onClick()"
-                    >
-                        {{ action.label }}
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
 </template>
 
 <style>
-.monaco-diff-actions-overlay {
+.gitvan-diffs-host {
+    min-height: 100%;
+}
+/* .gitvan-hunk-button {
     position: absolute;
-    inset: 0;
-    /* overflow: hidden; */
-    pointer-events: none;
     z-index: 55;
-}
-
-.monaco-diff-actions-anchor {
-    position: absolute;
-    pointer-events: auto;
-    transform: translate(-50%, -50%);
-}
-
-.monaco-diff-actions-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    top: 0;
+    bottom: 0;
+    border: 1px solid #00fff4;
+    border-radius: 999px;
+    background: #00fff4;
+    color: black;
+    cursor: pointer;
     width: 18px;
     height: 18px;
-    border: 1px solid #1274cf;
-    border-radius: 999px;
-    background: #0b4983;
-    color: rgba(255, 255, 255, 0.88);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-    cursor: pointer;
-}
-
-.monaco-diff-actions-trigger:hover {
-    background: #0f5ca7;
-}
-
-.monaco-diff-actions-popover {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 0.2rem;
+    justify-content: center;
+    font-size: 11px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.gitvan-hunk-actions {
+    align-items: center;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
     flex-wrap: wrap;
     background: #0b4983;
     border: 1px solid #1274cf;
-    border-radius: 0.35rem;
-    pointer-events: auto;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    z-index: 56;
+    border-radius: 5px;
+    position: fixed;
+    z-index: 5006;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
     width: max-content;
     transform: translate(-50%, calc(-100% - 8px));
     padding: 1px;
 }
-
-.monaco-diff-actions__label {
+.gitvan-hunk-label {
     color: rgba(255, 255, 255, 0.88);
+    text-align: center;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    padding: 0 0.35rem;
+    padding: 0 5px;
     text-transform: uppercase;
+    grid-column: span 2;
 }
-
-.monaco-diff-actions__meta {
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 10px;
-    line-height: 1;
-    padding-right: 0.25rem;
-    white-space: nowrap;
-}
-
-.monaco-diff-actions__button {
+.gitvan-hunk-action-button {
     border: 0;
     border-radius: 5px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.82);
     cursor: pointer;
     font-size: 11px;
     line-height: 1;
-    padding: 0.35rem 0.55rem !important;
-    pointer-events: auto;
-}
-
-.monaco-diff-actions__button:hover {
-    background: #008cff;
-    color: #fff4e6;
-}
-
-.monaco-diff-actions__button--danger:hover {
-    background: #cf5a35;
-    color: #fff4e6;
-}
-
-.monaco-diff-actions__button:disabled,
-.monaco-diff-actions__button[data-busy='true'] {
-    cursor: default;
-    opacity: 0.45;
-}
-
-.monaco-diff-actions__button:disabled:hover,
-.monaco-diff-actions__button[data-busy='true']:hover {
-    background: transparent;
-}
-
-.gitvan-diffs-host {
-    min-height: 100%;
-}
+    padding: 5px 8px;
+} */
 </style>

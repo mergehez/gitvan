@@ -8,7 +8,6 @@ import {
     applyPartialFilePatch,
     buildDiffStats,
     buildImagePreview,
-    buildPartialFilePatch,
     fileTooBigPreviewMessage,
     isImagePath,
     isPreviewTooLarge,
@@ -16,7 +15,6 @@ import {
     normalizeGitIgnoreEntry,
     parseNameStatusOutput,
     parsePorcelainTrackedEntries,
-    parseUnifiedDiffHunks,
     readGitRevisionFile,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
@@ -240,9 +238,6 @@ export const changesGit = {
             if (stagedPatch) {
                 const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `HEAD:${filePath}`), readGitRevisionFileSize(repoPath, `:${filePath}`)]);
                 const stats = buildDiffStats(stagedPatch, originalSize, modifiedSize);
-                const partialPatch = await runGit(['diff', '--staged', '--unified=0', '--', filePath], repoPath);
-                const hunks = parseUnifiedDiffHunks(partialPatch || stagedPatch);
-                const partialCapabilities = buildPartialCapabilities('staged', stats.oldSizeBytes, stats.newSizeBytes, hunks);
 
                 if (isPreviewTooLarge(originalSize, modifiedSize)) {
                     entry = {
@@ -252,10 +247,6 @@ export const changesGit = {
                         original: '',
                         modified: '',
                         stats,
-                        hunks,
-                        supportsPartialStage: partialCapabilities.supportsPartialStage,
-                        supportsPartialUnstage: partialCapabilities.supportsPartialUnstage,
-                        supportsPartialDiscard: partialCapabilities.supportsPartialDiscard,
                         previewMessage: fileTooBigPreviewMessage,
                     };
                 } else {
@@ -273,10 +264,6 @@ export const changesGit = {
                         original: originalBuffer ? '' : original,
                         modified: modifiedBuffer ? '' : modified,
                         stats,
-                        hunks,
-                        supportsPartialStage: partialCapabilities.supportsPartialStage,
-                        supportsPartialUnstage: partialCapabilities.supportsPartialUnstage,
-                        supportsPartialDiscard: partialCapabilities.supportsPartialDiscard,
                         nonCodePreview: buildImagePreview(filePath, originalBuffer, modifiedBuffer),
                     };
                 }
@@ -287,9 +274,6 @@ export const changesGit = {
             if (unstagedPatch) {
                 const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFileSize(absolutePath))]);
                 const stats = buildDiffStats(unstagedPatch, originalSize, modifiedSize);
-                const partialPatch = await runGit(['diff', '--unified=0', '--', filePath], repoPath);
-                const hunks = parseUnifiedDiffHunks(partialPatch || unstagedPatch);
-                const partialCapabilities = buildPartialCapabilities('unstaged', stats.oldSizeBytes, stats.newSizeBytes, hunks);
 
                 if (isPreviewTooLarge(originalSize, modifiedSize)) {
                     entry = {
@@ -299,10 +283,6 @@ export const changesGit = {
                         original: '',
                         modified: '',
                         stats,
-                        hunks,
-                        supportsPartialStage: partialCapabilities.supportsPartialStage,
-                        supportsPartialUnstage: partialCapabilities.supportsPartialUnstage,
-                        supportsPartialDiscard: partialCapabilities.supportsPartialDiscard,
                         previewMessage: fileTooBigPreviewMessage,
                     };
                 } else {
@@ -320,10 +300,6 @@ export const changesGit = {
                         original: originalBuffer ? '' : original,
                         modified: modifiedBuffer ? '' : modified,
                         stats,
-                        hunks,
-                        supportsPartialStage: partialCapabilities.supportsPartialStage,
-                        supportsPartialUnstage: partialCapabilities.supportsPartialUnstage,
-                        supportsPartialDiscard: partialCapabilities.supportsPartialDiscard,
                         nonCodePreview: buildImagePreview(filePath, originalBuffer, modifiedBuffer),
                     };
                 }
@@ -333,7 +309,6 @@ export const changesGit = {
                 if (untrackedPatch) {
                     const modifiedSize = readWorkingTreeFileSize(absolutePath);
                     const stats = buildDiffStats(untrackedPatch, 0, modifiedSize);
-                    const hunks = parseUnifiedDiffHunks(untrackedPatch);
 
                     if (isPreviewTooLarge(modifiedSize)) {
                         entry = {
@@ -343,10 +318,6 @@ export const changesGit = {
                             original: '',
                             modified: '',
                             stats,
-                            hunks,
-                            supportsPartialStage: false,
-                            supportsPartialUnstage: false,
-                            supportsPartialDiscard: false,
                             previewMessage: fileTooBigPreviewMessage,
                         };
                     } else {
@@ -359,10 +330,6 @@ export const changesGit = {
                             original: '',
                             modified: modifiedText,
                             stats: buildDiffStats(untrackedPatch, 0, modifiedBuffer ? modifiedSize : textByteSize(modifiedText)),
-                            hunks,
-                            supportsPartialStage: false,
-                            supportsPartialUnstage: false,
-                            supportsPartialDiscard: false,
                             nonCodePreview: buildImagePreview(filePath, undefined, modifiedBuffer),
                         };
                     }
@@ -378,10 +345,6 @@ export const changesGit = {
                 original: '',
                 modified: 'No diff content was returned for this file.',
                 stats: buildDiffStats('', 0, 0),
-                hunks: [],
-                supportsPartialStage: false,
-                supportsPartialUnstage: false,
-                supportsPartialDiscard: false,
             };
         }
 
@@ -389,10 +352,6 @@ export const changesGit = {
     },
     async stageRepoFile(repoPath: string, filePath: string) {
         await runGit(['add', '--', filePath], repoPath);
-    },
-    async stageRepoFileHunks(repoPath: string, filePath: string, hunkIds: string[]) {
-        const patch = await runGit(['diff', '--unified=0', '--', filePath], repoPath, [0], false);
-        await applyPartialFilePatch(repoPath, buildPartialFilePatch(patch, hunkIds, 'stage'), 'stage');
     },
     async stageRepoFiles(repoPath: string, filePaths: string[]) {
         if (!filePaths.length) {
@@ -405,10 +364,6 @@ export const changesGit = {
     },
     async unstageRepoFile(repoPath: string, filePath: string) {
         await runGit(['restore', '--staged', '--', filePath], repoPath);
-    },
-    async unstageRepoFileHunks(repoPath: string, filePath: string, hunkIds: string[]) {
-        const patch = await runGit(['diff', '--staged', '--unified=0', '--', filePath], repoPath, [0], false);
-        await applyPartialFilePatch(repoPath, buildPartialFilePatch(patch, hunkIds, 'unstage'), 'unstage');
     },
     async unstageRepoFiles(repoPath: string, filePaths: string[]) {
         if (!filePaths.length) {
@@ -426,10 +381,6 @@ export const changesGit = {
 
         await runGit(['clean', '-fd', '--', filePath], repoPath);
     },
-    async discardRepoFileHunks(repoPath: string, filePath: string, hunkIds: string[]) {
-        const patch = await runGit(['diff', '--unified=0', '--', filePath], repoPath, [0], false);
-        await applyPartialFilePatch(repoPath, buildPartialFilePatch(patch, hunkIds, 'discard'), 'discard');
-    },
     async discardRepoFiles(repoPath: string, filePaths: string[]) {
         for (const filePath of filePaths) {
             await this.discardRepoFile(repoPath, filePath);
@@ -437,6 +388,14 @@ export const changesGit = {
     },
     async unstageAllRepoFiles(repoPath: string) {
         await runGit(['restore', '--staged', '--', '.'], repoPath);
+    },
+    async applyPatch(repoPath: string, patch: string, mode: 'stage' | 'unstage' | 'discard') {
+        try {
+            await applyPartialFilePatch(repoPath, patch, mode);
+        } catch (error) {
+            console.log(`Failed to apply patch in ${mode} mode:\n${patch}`);
+            throw error;
+        }
     },
     async discardAllRepoChanges(repoPath: string) {
         await runGit(['restore', '--worktree', '--', '.'], repoPath);
@@ -529,14 +488,4 @@ async function hasNoActualChangeForKind(
     const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFile(absolutePath))]);
 
     return areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false));
-}
-
-function buildPartialCapabilities(kind: 'staged' | 'unstaged', oldSizeBytes: number, newSizeBytes: number, hunks: FileDiffEntry['hunks']) {
-    const supportsPartialHunks = hunks.length > 1 && oldSizeBytes > 0 && newSizeBytes > 0;
-
-    return {
-        supportsPartialStage: kind === 'unstaged' && supportsPartialHunks,
-        supportsPartialUnstage: kind === 'staged' && supportsPartialHunks,
-        supportsPartialDiscard: kind === 'unstaged' && supportsPartialHunks,
-    };
 }

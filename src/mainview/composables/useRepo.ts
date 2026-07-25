@@ -154,12 +154,6 @@ const _useRepository = (repo: Repo) => {
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('File staged.');
         },
-        async stageFileHunks(path: string, hunkIds: string[]) {
-            const nextBootstrap = await tasks.stageFileHunks.run({ repoId: this.id, path, hunkIds }, `${path}:${hunkIds.join(',')}`);
-
-            await applyMutation(nextBootstrap);
-            toast.showSuccessToast(hunkIds.length === 1 ? 'Change staged.' : `${hunkIds.length} changes staged.`);
-        },
         async openFileInEditor(path: string) {
             await settings.openRepoPathInEditor({ repoId: this.id, path }, path);
         },
@@ -189,12 +183,6 @@ const _useRepository = (repo: Repo) => {
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('File unstaged.');
         },
-        async unstageFileHunks(path: string, hunkIds: string[]) {
-            const nextBootstrap = await tasks.unstageFileHunks.run({ repoId: this.id, path, hunkIds }, `${path}:${hunkIds.join(',')}`);
-
-            await applyMutation(nextBootstrap);
-            toast.showSuccessToast(hunkIds.length === 1 ? 'Change unstaged.' : `${hunkIds.length} changes unstaged.`);
-        },
         async unstageFiles(paths: string[]) {
             const finalPaths = [...new Set(paths)];
             if (!finalPaths.length) {
@@ -208,6 +196,12 @@ const _useRepository = (repo: Repo) => {
 
             await applyMutation(nextBootstrap);
             toast.showSuccessToast(finalPaths.length === 1 ? 'File unstaged.' : `${finalPaths.length} files unstaged.`);
+        },
+        async applyPatch(patch: string, mode: 'stage' | 'unstage' | 'discard', label: string) {
+            const nextBootstrap = await tasks.applyPatch.run({ repoId: this.id, patch, mode }, `${mode}:${label}`);
+            await applyMutation(nextBootstrap);
+            const verb = mode === 'stage' ? 'staged' : mode === 'unstage' ? 'unstaged' : 'discarded';
+            toast.showSuccessToast(`Change ${verb}.`);
         },
         async discardFile(path: string) {
             const confirmed = await confirmAction({
@@ -225,23 +219,6 @@ const _useRepository = (repo: Repo) => {
 
             await applyMutation(nextBootstrap);
             toast.showSuccessToast('File discarded.');
-        },
-        async discardFileHunks(path: string, hunkIds: string[]) {
-            const confirmed = await confirmAction({
-                title: 'Discard selected change',
-                message: hunkIds.length === 1 ? `Discard the selected change in '${path}'?` : `Discard ${hunkIds.length} selected changes in '${path}'?`,
-                detail: 'This permanently removes the selected uncommitted changes from the file.',
-                confirmLabel: 'Discard change',
-            });
-
-            if (!confirmed) {
-                return;
-            }
-
-            const nextBootstrap = await tasks.discardFileHunks.run({ repoId: this.id, path, hunkIds }, `${path}:${hunkIds.join(',')}`);
-
-            await applyMutation(nextBootstrap);
-            toast.showSuccessToast(hunkIds.length === 1 ? 'Change discarded.' : `${hunkIds.length} changes discarded.`);
         },
         async discardFiles(paths: string[]) {
             const finalPaths = [...new Set(paths)];

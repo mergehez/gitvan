@@ -45,10 +45,7 @@ function createDiff(original: string, modified: string): FileDiffData {
                 addedLines: 0,
                 removedLines: 0,
             },
-            hunks: [],
-            supportsPartialStage: false,
-            supportsPartialUnstage: false,
-            supportsPartialDiscard: false,
+            // hunks and partial support removed
         },
     };
 }

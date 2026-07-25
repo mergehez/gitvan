@@ -17,7 +17,7 @@ This folder contains an isolated script that rebuilds a nested dummy Git reposit
 Run the reset script from the project root:
 
 ```bash
-zsh ./sandbox/merge-conflict-lab/reset-conflict-repo.sh
+node ./sandbox/merge-conflict-lab/reset-conflict-repo.mjs
 ```
 
 After it finishes, the repository at `sandbox/merge-conflict-lab/repo` will be in a merge-conflict state and ready for testing.

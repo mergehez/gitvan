@@ -8,7 +8,6 @@ import {
     isImagePath,
     isPreviewTooLarge,
     parseCommitFilesWithConflicts,
-    parseUnifiedDiffHunks,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
 } from './git-helpers.js';
@@ -48,7 +47,6 @@ export const stashGit = {
         ]);
 
         const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
-        const hunks = parseUnifiedDiffHunks(patch || '');
 
         if (isPreviewTooLarge(originalSize, modifiedSize)) {
             return {
@@ -60,10 +58,6 @@ export const stashGit = {
                     original: '',
                     modified: '',
                     stats,
-                    hunks,
-                    supportsPartialStage: false,
-                    supportsPartialUnstage: false,
-                    supportsPartialDiscard: false,
                     previewMessage: fileTooBigPreviewMessage,
                 },
             };
@@ -90,10 +84,6 @@ export const stashGit = {
                 original,
                 modified,
                 stats,
-                hunks,
-                supportsPartialStage: false,
-                supportsPartialUnstage: false,
-                supportsPartialDiscard: false,
                 nonCodePreview,
             },
         };

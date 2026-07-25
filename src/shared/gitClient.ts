@@ -252,10 +252,6 @@ export type FileDiffEntry = {
     original: string;
     modified: string;
     stats: FileDiffStats;
-    hunks: FileDiffHunk[];
-    supportsPartialStage: boolean;
-    supportsPartialUnstage: boolean;
-    supportsPartialDiscard: boolean;
     nonCodePreview?: FileDiffNonCodePreview;
     previewMessage?: string;
 };

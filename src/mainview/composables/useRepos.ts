@@ -97,16 +97,18 @@ export function _useRepositories() {
             this.isCreateRepoModalOpen = false;
             toast.showSuccessToast('Repository created.');
         },
-        async resetSandboxRepos() {
-            const confirmed = await confirmAction({
-                title: 'Reset sandboxes',
-                message: 'Reset both sandbox repositories?',
-                detail: 'This recreates the sandbox repositories from scratch and discards any changes inside them.',
-                confirmLabel: 'Reset sandboxes',
-            });
+        async resetSandboxRepos(ask = true) {
+            if (ask) {
+                const confirmed = await confirmAction({
+                    title: 'Reset sandboxes',
+                    message: 'Reset both sandbox repositories?',
+                    detail: 'This recreates the sandbox repositories from scratch and discards any changes inside them.',
+                    confirmLabel: 'Reset sandboxes',
+                });
 
-            if (!confirmed) {
-                return;
+                if (!confirmed) {
+                    return;
+                }
             }
 
             const nextBootstrap = await tasks.resetSandboxRepos.run(undefined);

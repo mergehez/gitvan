@@ -4,16 +4,15 @@ import { computed, ref, watch } from 'vue';
 import type { DiffViewerState } from '../composables/useDiffViewer';
 import { useSettings } from '../composables/useSettings';
 import Alert from './Alert.vue';
+import type { HunkActionsConfig } from './DiffsDiffEditor.vue';
 import DiffsDiffEditor from './DiffsDiffEditor.vue';
 import IconButton from './IconButton.vue';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
-import type { MonacoEditorActionZone } from './monacoEditorTypes';
 
 const props = defineProps<{
     state?: DiffViewerState;
     focusLine?: number;
-    actionZones?: MonacoEditorActionZone[];
-    actionZoneVisibility?: 'always' | 'hover';
+    hunkActionsConfig?: HunkActionsConfig;
 }>();
 const emit = defineEmits<{
     visibleDiffChange: [hasVisibleChanges: boolean | undefined];
@@ -119,8 +118,7 @@ function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
             :diff-ignored-chars="settings.state.diffIgnoredChars"
             :show-whitespace-changes="settings.state.showWhitespaceChanges"
             :reveal-line="props.focusLine"
-            :action-zones="props.actionZones"
-            :action-zone-visibility="props.actionZoneVisibility"
+            :hunk-actions-config="props.hunkActionsConfig"
             :readonly="true"
             class="overflow-y-auto text-xs leading-6 text-white/85"
             @visible-diff-change="onVisibleDiffChange"

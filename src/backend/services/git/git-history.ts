@@ -10,7 +10,6 @@ import {
     parseCommitFilesWithConflicts,
     parseCommitTags,
     parseRefs,
-    parseUnifiedDiffHunks,
     readGitRevisionFile,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
@@ -257,7 +256,6 @@ export const historyGit = {
             readGitRevisionFileSize(repoPath, `${commitSha}:${filePath}`),
         ]);
         const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
-        const hunks = parseUnifiedDiffHunks(patch || '');
 
         if (isPreviewTooLarge(originalSize, modifiedSize)) {
             return {
@@ -269,10 +267,6 @@ export const historyGit = {
                     original: '',
                     modified: '',
                     stats,
-                    hunks,
-                    supportsPartialStage: false,
-                    supportsPartialUnstage: false,
-                    supportsPartialDiscard: false,
                     previewMessage: fileTooBigPreviewMessage,
                 },
             };
@@ -299,10 +293,6 @@ export const historyGit = {
                 original,
                 modified,
                 stats,
-                hunks,
-                supportsPartialStage: false,
-                supportsPartialUnstage: false,
-                supportsPartialDiscard: false,
                 nonCodePreview,
             },
         };

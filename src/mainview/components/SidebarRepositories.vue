@@ -669,6 +669,7 @@ function fetchGroupRepos(groupId: number) {
                 <span class="icon icon-[mdi--flask-outline] mr-1.5 text-sm"></span>
                 <span>Reset Sandboxes</span>
             </Button>
+            <button id="hidden-reset-sandboxes" class="w-0 h-0 p-0 opacity-0" @click="repos.resetSandboxRepos(false)"></button>
         </div>
     </aside>
     <Teleport to="body">

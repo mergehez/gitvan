@@ -38,12 +38,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..', '..');
 const sandboxResetScripts = [
     {
-        scriptPath: join(projectRoot, 'sandbox', 'merge-conflict-lab', 'reset-conflict-repo.sh'),
-        repoPath: join(projectRoot, 'sandbox', 'merge-conflict-lab', 'repo'),
+        folder: 'merge-conflict',
+        script: 'reset-conflict-repo.mjs',
     },
     {
-        scriptPath: join(projectRoot, 'sandbox', 'pull-conflict-lab', 'reset-pull-conflict-repo.sh'),
-        repoPath: join(projectRoot, 'sandbox', 'pull-conflict-lab', 'repo'),
+        folder: 'pull-conflict',
+        script: 'reset-pull-conflict-repo.mjs',
+    },
+    {
+        folder: 'partial-changes',
+        script: 'reset-partial-repo.mjs',
     },
 ] as const;
 
@@ -659,10 +663,24 @@ export const app = {
         return buildBootstrap();
     },
     resetSandboxRepos: async () => {
+        let groupSandbox = db.getGroupByName('Sandbox');
+        if (!groupSandbox) {
+            db.createGroup('Sandbox');
+            groupSandbox = db.getGroupByName('Sandbox');
+        }
+        // delete all repos in the sandbox group
+        const reposInSandbox = db.listRepos().filter((repo: RepoRow) => repo.group_id === groupSandbox!.id);
+        for (const repo of reposInSandbox) {
+            db.removeRepo(repo.id);
+        }
         for (const sandbox of sandboxResetScripts) {
-            await runProcess('zsh', [sandbox.scriptPath], projectRoot);
-            const repo = await git.resolveGitRepo(sandbox.repoPath);
-            db.upsertRepo(repo.path, repo.name);
+            const folderPath = join(projectRoot, 'sandbox', sandbox.folder + '-lab');
+            const repoPath = join(folderPath, 'repo');
+            const scriptPath = join(folderPath, sandbox.script);
+            console.log('running: node', [scriptPath], repoPath);
+            await runProcess('node', [scriptPath], repoPath);
+            const repo = await git.resolveGitRepo(repoPath);
+            db.upsertRepo(repo.path, sandbox.folder, groupSandbox!.id);
         }
 
         return buildBootstrap();
@@ -988,10 +1006,6 @@ export const app = {
         await git.stageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
         return buildBootstrap();
     },
-    stageFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
-        await git.stageRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
-        return buildBootstrap();
-    },
     stageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.stageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
         return buildBootstrap();
@@ -1004,10 +1018,6 @@ export const app = {
         await git.unstageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
         return buildBootstrap();
     },
-    unstageFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
-        await git.unstageRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
-        return buildBootstrap();
-    },
     unstageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.unstageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
         return buildBootstrap();
@@ -1016,8 +1026,8 @@ export const app = {
         await git.discardRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
         return buildBootstrap();
     },
-    discardFileHunks: async (ps: { repoId: number; path: string; hunkIds: string[] }) => {
-        await git.discardRepoFileHunks(db.getRepo(ps.repoId)!.path, ps.path, ps.hunkIds);
+    applyPatch: async (ps: { repoId: number; patch: string; mode: 'stage' | 'unstage' | 'discard' }) => {
+        await git.applyPatch(db.getRepo(ps.repoId)!.path, ps.patch, ps.mode);
         return buildBootstrap();
     },
     discardRepoFiles: async (ps: { repoId: number; paths: string[] }) => {

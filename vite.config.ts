@@ -30,7 +30,7 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         include: ['**/*.spec.ts'],
-        exclude: ['**/App.real.spec.ts'],
+        exclude: ['**/App.real.spec.ts', '**/playwright/**'],
         setupFiles: ['./tests/setup.ts'],
     },
 });

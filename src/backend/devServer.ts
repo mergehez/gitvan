@@ -44,7 +44,7 @@ const methodMap: Record<string, (ps?: any) => any> = {
     onIntegratedTerminalEvent: () => () => {},
 };
 
-console.log(Object.keys(methodMap));
+// console.log(Object.keys(methodMap));
 
 const REQUEST_TIMEOUT_MS = 65_000;
 const serverApp = express();
@@ -116,4 +116,3 @@ serverApp.use((_req, res) => {
 serverApp.listen(PORT, () => {
     console.log(`[devServer] Backend API running at http://localhost:${PORT}`);
 });
-

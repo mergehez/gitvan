@@ -20,7 +20,7 @@ That combination makes the first `git pull --no-rebase` fail with Git's "local c
 Run the reset script from the project root:
 
 ```bash
-zsh ./sandbox/pull-conflict-lab/reset-pull-conflict-repo.sh
+node ./sandbox/pull-conflict-lab/reset-pull-conflict-repo.mjs
 ```
 
 After it finishes, add `sandbox/pull-conflict-lab/repo` to Gitvan and click Pull.
