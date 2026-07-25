@@ -13,9 +13,8 @@ test.describe('partial hunk actions', () => {
             if (btn) btn.click();
         });
 
-        // Wait for sandbox repos to be registered - the "Reset Sandboxes" button
-        // being enabled again is a good signal.
-        await page.waitForTimeout(2000);
+        // Wait for sandbox repos to be registered
+        await page.waitForTimeout(3000);
         await ensureRepoOpen(page);
     }
     async function ensureRepoOpen(page: any) {

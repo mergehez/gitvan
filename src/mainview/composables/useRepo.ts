@@ -25,6 +25,28 @@ import { useSettings } from './useSettings.ts';
 import { tasks } from './useTasks.ts';
 import { toast } from './useToast.ts';
 
+const LOCKED_FILES_KEY_PREFIX = 'gitvan-locked-files-';
+
+function loadLockedFiles(repoId: number): Set<string> {
+    try {
+        const raw = localStorage.getItem(`${LOCKED_FILES_KEY_PREFIX}${repoId}`);
+        if (raw) {
+            return new Set(JSON.parse(raw) as string[]);
+        }
+    } catch {
+        // ignore parse errors
+    }
+    return new Set<string>();
+}
+
+function saveLockedFiles(repoId: number, files: Set<string>) {
+    try {
+        localStorage.setItem(`${LOCKED_FILES_KEY_PREFIX}${repoId}`, JSON.stringify([...files]));
+    } catch {
+        // ignore storage errors
+    }
+}
+
 export type ChangeSelection = {
     path: string;
     kind: FileDiffRequestKind;
@@ -110,6 +132,20 @@ const _useRepository = (repo: Repo) => {
             this.commitForm.summary = '';
             this.commitForm.description = '';
             this.commitForm.amend = false;
+        },
+
+        // Per-file locking to prevent accidental staging (persisted in localStorage)
+        lockedFiles: loadLockedFiles(repo.id),
+        isFileLocked(path: string) {
+            return this.lockedFiles.has(path);
+        },
+        lockFile(path: string) {
+            this.lockedFiles.add(path);
+            saveLockedFiles(this.id, this.lockedFiles);
+        },
+        unlockFile(path: string) {
+            this.lockedFiles.delete(path);
+            saveLockedFiles(this.id, this.lockedFiles);
         },
 
         branches: undefined as BranchesData | undefined,
@@ -397,6 +433,19 @@ const _useRepository = (repo: Repo) => {
             });
 
             this.changes = nextChanges;
+
+            // Remove locked files that no longer exist in the repo
+            const currentPaths = new Set([...nextChanges.staged.map((e) => e.path), ...nextChanges.unstaged.map((e) => e.path)]);
+            let lockedChanged = false;
+            for (const lockedPath of this.lockedFiles) {
+                if (!currentPaths.has(lockedPath)) {
+                    this.lockedFiles.delete(lockedPath);
+                    lockedChanged = true;
+                }
+            }
+            if (lockedChanged) {
+                saveLockedFiles(this.id, this.lockedFiles);
+            }
 
             const nextSelection = ((): ChangeSelection | undefined => {
                 const hasChangeForSelection = (s: ChangeSelection) => nextChanges[s.kind].some((entry) => entry.path === s.path);

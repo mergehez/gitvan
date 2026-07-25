@@ -163,6 +163,9 @@ const hunkActionsConfig = computed<HunkActionsConfig | undefined>(() => {
     if (!entry) return undefined;
     if (entry.kind === 'untracked') return undefined;
 
+    // If the file is locked, don't show any hunk action buttons
+    if (repo.value.isFileLocked(repo.value.curDiff!.path)) return undefined;
+
     return {
         kind: entry.kind,
         oldSizeBytes: entry.stats.oldSizeBytes,
@@ -182,12 +185,19 @@ const hunkActionsConfig = computed<HunkActionsConfig | undefined>(() => {
             console.log('[onDiscard]', { patchLen: hunkPatch.length, preview: hunkPatch.slice(0, 200) });
             await repo.value.applyPatch(hunkPatch, 'discard', 'hunk');
         },
-
     };
 });
 
 function isFileOperationRunning(action: 'openFileInEditor' | 'discardFile' | 'stageFile' | 'unstageFile', path: string) {
     return tasks.isOperationRunning(`${action}:${path}`);
+}
+
+function stageAllUnlockedFiles() {
+    const unstaged = repo.value.changes?.unstaged ?? [];
+    const unlockedPaths = unstaged.filter((e) => !repo.value.isFileLocked(e.path)).map((e) => e.path);
+    if (unlockedPaths.length > 0) {
+        repo.value.stageFiles(unlockedPaths);
+    }
 }
 
 function isStashOperationRunning(action: 'restoreStash' | 'discardStash', stashRef: string) {
@@ -329,6 +339,7 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     const statuses = new Set(items.map((item) => item.status));
     const hasSingleSelection = items.length === 1;
     const onlyStatus = statuses.size === 1 ? items[0]!.status : undefined;
+
     const primaryAction = (() => {
         if (onlyStatus === 'deleted') {
             return 'revert-deletion';
@@ -374,8 +385,26 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
         : undefined;
 
     const entries: ContextMenuEntry[] = [];
+    const canAddSeperator = () => entries.length > 0 && entries[entries.length - 1]?.type !== 'separator';
 
-    if (primaryAction && primaryActionLabel) {
+    // Skip destructive/staging actions when this specific file is locked
+    const isLocked = !isStaged && (firstItem.path ? repo.value.isFileLocked(firstItem.path) : false);
+
+    // Lock/unlock toggle
+    if (!isStaged) {
+        entries.push({
+            id: `change-lock:${firstItem.id}`,
+            label: isLocked ? 'Unlock file (enable staging)' : 'Lock file (disable staging)',
+            action: async () => {
+                if (isLocked) {
+                    repo.value.unlockFile(firstItem.path);
+                } else {
+                    repo.value.lockFile(firstItem.path);
+                }
+            },
+        });
+    }
+    if (!isLocked && primaryAction && primaryActionLabel) {
         entries.push({
             id: `change-primary:${firstItem.id}`,
             label: primaryActionLabel,
@@ -385,21 +414,29 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
         });
     }
 
-    entries.push({
-        id: `change-stage:${firstItem.id}`,
-        label: stageActionLabel,
-        action: async () => {
-            await runChangeContextAction(items, { kind: isStaged ? 'unstage-files' : 'stage-files' });
-        },
-    });
+    if (!isLocked) {
+        entries.push({
+            id: `change-stage:${firstItem.id}`,
+            label: stageActionLabel,
+            action: async () => {
+                await runChangeContextAction(items, { kind: isStaged ? 'unstage-files' : 'stage-files' });
+            },
+        });
+    }
 
     if (!isStaged) {
-        entries.push({ type: 'separator', id: `change-separator-cosmetic:${firstItem.id}` });
-        entries.push(...buildBulkChangeClassificationMenuEntries('unstaged'));
+        if (canAddSeperator()) {
+            entries.push({ type: 'separator', id: `change-separator-cosmetic:${firstItem.id}` });
+        }
+        if (!isLocked) {
+            entries.push(...buildBulkChangeClassificationMenuEntries('unstaged'));
+        }
     }
 
     if (hasSingleSelection && !isStaged && firstItem.status !== 'deleted') {
-        entries.push({ type: 'separator', id: `change-separator-ignore:${firstItem.id}` });
+        if (canAddSeperator()) {
+            entries.push({ type: 'separator', id: `change-separator-ignore:${firstItem.id}` });
+        }
         entries.push({
             id: `change-ignore:${firstItem.id}`,
             label: 'Ignore...',
@@ -418,7 +455,10 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     }
 
     if (hasSingleSelection) {
-        entries.push({ type: 'separator', id: `change-separator-file:${firstItem.id}` });
+        if (canAddSeperator()) {
+            entries.push({ type: 'separator', id: `change-separator-file:${firstItem.id}` });
+        }
+
         entries.push({
             id: `change-copy-path:${firstItem.id}`,
             label: 'Copy File Path',
@@ -474,8 +514,8 @@ function buildChangeHeaderContextMenuEntries(item: ChangeTreeHeaderItem): Contex
 }
 
 function buildBulkChangeClassificationMenuEntries(kind: 'unstaged'): ContextMenuEntry[] {
-    const noActualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange === true);
-    const actualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange !== true);
+    const noActualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange === true && !repo.value.isFileLocked(entry.path));
+    const actualChangeEntries = entriesForKind(kind).filter((entry) => entry.noActualChange !== true && !repo.value.isFileLocked(entry.path));
     const noActualChangePaths = noActualChangeEntries.map((entry) => entry.path);
     const actualChangePaths = actualChangeEntries.map((entry) => entry.path);
 
@@ -755,13 +795,20 @@ onUnmounted(() => {
                                     v-show="item.children.length > 0"
                                     v-tooltip="item.isStaged ? 'Unstage all files' : 'Stage all files'"
                                     v-loading="tasks.isOperationRunning(item.isStaged ? 'unstageAllFiles' : 'stageAllFiles')"
-                                    @click="item.isStaged ? repo.unstageAllFiles() : repo.stageAllFiles()"
+                                    @click="item.isStaged ? repo.unstageAllFiles() : stageAllUnlockedFiles()"
                                     :icon="item.isStaged ? 'icon-[mdi--minus]' : 'icon-[mdi--plus]'"
                                 />
                             </template>
+                            <template #before-status="{ item }">
+                                <span
+                                    v-if="item.path && repo.isFileLocked(item.path)"
+                                    class="icon icon-[mdi--lock] text-xs opacity-50"
+                                    v-tooltip="'Staging disabled for this file'"
+                                ></span>
+                            </template>
                             <template #item-actions="{ item }">
                                 <IconButton
-                                    v-if="!item.isStaged"
+                                    v-if="!item.isStaged && !(item.path && repo.isFileLocked(item.path))"
                                     class="focus:opacity-100 p-px text-xs"
                                     v-tooltip="'Discard change'"
                                     v-loading="isFileOperationRunning('discardFile', item.path!)"
@@ -769,6 +816,7 @@ onUnmounted(() => {
                                     icon="icon-[codicon--discard]"
                                 />
                                 <IconButton
+                                    v-if="!(item.path && repo.isFileLocked(item.path))"
                                     class="focus:opacity-100 p-px text-xs"
                                     v-tooltip="item.isStaged ? 'Unstage file' : 'Stage file'"
                                     v-loading="item.isStaged ? isFileOperationRunning('unstageFile', item.path!) : isFileOperationRunning('stageFile', item.path!)"
