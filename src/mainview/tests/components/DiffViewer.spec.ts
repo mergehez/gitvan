@@ -25,6 +25,7 @@ function createMockSettings() {
             diffFontSize: 12,
             diffViewMode: 'full-file',
             diffIgnoredChars: '',
+            diffIgnoredCharsEnabled: true,
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
@@ -48,6 +49,7 @@ const diffsDiffEditorStub = defineComponent({
     emits: ['visible-diff-change'],
     props: {
         diffIgnoredChars: {
+            diffIgnoredCharsEnabled: true,
             type: String,
             default: '',
         },

@@ -73,7 +73,8 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
             });
         }
 
-        const noActualChange = hasNoActualDiffChanges(currentDiff, settings.state.diffIgnoredChars, settings.state.showWhitespaceChanges);
+        const effectiveIgnored = settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '';
+        const noActualChange = hasNoActualDiffChanges(currentDiff, effectiveIgnored, settings.state.showWhitespaceChanges);
 
         return {
             title: currentDiff.path,

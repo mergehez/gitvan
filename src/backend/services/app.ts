@@ -96,6 +96,7 @@ const defaultEditorSettings: EditorSettings = {
     diffFontSize: 12,
     diffViewMode: 'full-file',
     diffIgnoredChars: '',
+    diffIgnoredCharsEnabled: true,
     showWhitespaceChanges: false,
     activeView: 'changes',
     showBranches: false,
@@ -182,6 +183,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         diffFontSize?: number;
         diffViewMode?: EditorSettings['diffViewMode'];
         diffIgnoredChars?: string;
+        diffIgnoredCharsEnabled?: boolean;
         showWhitespaceChanges?: boolean;
         activeView?: NavigationView;
         lastEditorPath?: string | undefined;
@@ -239,6 +241,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         })(),
         diffViewMode: raw.diffViewMode === 'changes' ? 'changes' : 'full-file',
         diffIgnoredChars: normalizeDiffIgnoredChars(raw.diffIgnoredChars),
+        diffIgnoredCharsEnabled: raw.diffIgnoredCharsEnabled !== false,
         showWhitespaceChanges: raw.showWhitespaceChanges === true,
         activeView: raw.activeView === 'history' || raw.activeView === 'explorer' ? raw.activeView : 'changes',
         showBranches: raw.showBranches === true,

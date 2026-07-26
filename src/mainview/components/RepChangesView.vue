@@ -122,7 +122,7 @@ const selectedDiffViewerState = computed(() => {
 });
 
 watch(
-    () => [repo.value.id, settings.state.diffIgnoredChars, settings.state.showWhitespaceChanges],
+    () => [repo.value.id, settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '', settings.state.showWhitespaceChanges],
     () => {
         void repo.value.loadChanges();
     },
@@ -385,7 +385,12 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
         : undefined;
 
     const entries: ContextMenuEntry[] = [];
-    const canAddSeperator = () => entries.length > 0 && entries[entries.length - 1]?.type !== 'separator';
+    const canAddSeperator = () => {
+        const last = entries.at(-1);
+        if (!last) return false;
+        if ('type' in last && last.type === 'separator') return false;
+        return true;
+    };
 
     // Skip destructive/staging actions when this specific file is locked
     const isLocked = !isStaged && (firstItem.path ? repo.value.isFileLocked(firstItem.path) : false);

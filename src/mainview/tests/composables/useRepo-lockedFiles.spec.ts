@@ -6,6 +6,7 @@ vi.mock('../../composables/useSettings', () => ({
     useSettings: () => ({
         state: {
             diffIgnoredChars: '',
+            diffIgnoredCharsEnabled: true,
             showWhitespaceChanges: false,
             activeView: 'changes',
         },

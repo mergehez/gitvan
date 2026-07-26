@@ -402,8 +402,8 @@ function renderDiff() {
     }
 
     const instance = ensureDiffInstance();
-    // const opts = diffOptions.value;
-    // instance.setOptions(opts);
+    const opts = diffOptions.value;
+    instance.setOptions(opts);
 
     if (props.conflictFile) {
         const name = props.pathForLanguage || 'conflict.txt';

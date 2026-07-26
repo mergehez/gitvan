@@ -37,6 +37,7 @@ export function _useSettings() {
             diffFontSize: 12,
             diffViewMode: 'full-file',
             diffIgnoredChars: '',
+            diffIgnoredCharsEnabled: true,
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
@@ -168,6 +169,7 @@ export function _useSettings() {
                     diffFontSize: settings.diffFontSize,
                     diffViewMode: settings.diffViewMode,
                     diffIgnoredChars: settings.diffIgnoredChars,
+                    diffIgnoredCharsEnabled: settings.diffIgnoredCharsEnabled,
                     showWhitespaceChanges: settings.showWhitespaceChanges,
                     activeView: settings.activeView,
                     showBranches: settings.showBranches,
@@ -276,6 +278,9 @@ export function _useSettings() {
         },
         async setDiffIgnoredChars(diffIgnoredChars: string) {
             await this._patchEditorSettings({ diffIgnoredChars: normalizeDiffIgnoredChars(diffIgnoredChars) });
+        },
+        async setDiffIgnoredCharsEnabled(diffIgnoredCharsEnabled: boolean) {
+            await this._patchEditorSettings({ diffIgnoredCharsEnabled });
         },
         async setShowWhitespaceChanges(showWhitespaceChanges: boolean) {
             await this._patchEditorSettings({ showWhitespaceChanges });

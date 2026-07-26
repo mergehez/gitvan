@@ -371,6 +371,7 @@ export type EditorSettings = {
     diffFontSize: number;
     diffViewMode: DiffViewMode;
     diffIgnoredChars: string;
+    diffIgnoredCharsEnabled: boolean;
     showWhitespaceChanges: boolean;
     activeView: NavigationView;
     showBranches: boolean;

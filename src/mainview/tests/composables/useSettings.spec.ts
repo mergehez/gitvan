@@ -93,6 +93,7 @@ describe('useSettings openRepoPathInEditor', () => {
         mockTasks.updateEditorSettings.run.mockResolvedValue({
             ...settings.state,
             diffIgnoredChars: ',;"\'',
+            diffIgnoredCharsEnabled: true,
         });
 
         await settings.setDiffIgnoredChars(',;"\'');
@@ -100,6 +101,7 @@ describe('useSettings openRepoPathInEditor', () => {
         expect(mockTasks.updateEditorSettings.run).toHaveBeenCalledWith({
             settings: expect.objectContaining({
                 diffIgnoredChars: ',;"\'',
+                diffIgnoredCharsEnabled: true,
             }),
         });
         expect(settings.state.diffIgnoredChars).toBe(',;"\'');
@@ -110,6 +112,7 @@ describe('useSettings openRepoPathInEditor', () => {
         mockTasks.updateEditorSettings.run.mockResolvedValue({
             ...settings.state,
             diffIgnoredChars: ',;"\'',
+            diffIgnoredCharsEnabled: true,
         });
 
         await settings.setDiffIgnoredChars(', ; " \t\'');
@@ -117,6 +120,7 @@ describe('useSettings openRepoPathInEditor', () => {
         expect(mockTasks.updateEditorSettings.run).toHaveBeenCalledWith({
             settings: expect.objectContaining({
                 diffIgnoredChars: ',;"\'',
+                diffIgnoredCharsEnabled: true,
             }),
         });
     });

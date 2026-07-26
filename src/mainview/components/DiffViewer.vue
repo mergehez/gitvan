@@ -115,7 +115,7 @@ function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
             :modified="state?.modified"
             :path-for-language="state?.pathForLanguage"
             :diff-view-mode="settings.state.diffViewMode"
-            :diff-ignored-chars="settings.state.diffIgnoredChars"
+            :diff-ignored-chars="settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : ''"
             :show-whitespace-changes="settings.state.showWhitespaceChanges"
             :reveal-line="props.focusLine"
             :hunk-actions-config="props.hunkActionsConfig"

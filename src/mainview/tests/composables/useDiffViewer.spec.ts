@@ -23,6 +23,7 @@ function createMockSettings() {
             diffFontSize: 12,
             diffViewMode: 'full-file',
             diffIgnoredChars: '',
+            diffIgnoredCharsEnabled: true,
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
