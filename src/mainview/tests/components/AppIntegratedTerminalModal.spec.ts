@@ -126,11 +126,11 @@ describe('AppIntegratedTerminalModal', () => {
             disconnect() {}
         } as unknown as typeof ResizeObserver;
 
-        window.gitClient = {
+        window.electronAPI = {
             invoke: vi.fn(),
             onNativeCommand: vi.fn(() => () => undefined),
             onIntegratedTerminalEvent: () => () => undefined,
-        };
+        } as any;
     });
 
     it('persists the repo terminal selection and restarts the session with the selected shell', async () => {

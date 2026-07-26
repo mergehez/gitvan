@@ -127,10 +127,10 @@ The macOS release wrapper now drives Electrobun's native signing and notarizatio
 
 Preferred environment variables:
 
-- `ELECTROBUN_DEVELOPER_ID`
-- `ELECTROBUN_TEAMID`
-- `ELECTROBUN_APPLEID`
-- `ELECTROBUN_APPLEIDPASS`
+- `ELECTRON_DEVELOPER_ID`
+- `ELECTRON_TEAMID`
+- `ELECTRON_APPLEID`
+- `ELECTRON_APPLEIDPASS`
 
 Unsigned builds remain useful for local testing, but they are not suitable for internet distribution because Gatekeeper will quarantine them.
 

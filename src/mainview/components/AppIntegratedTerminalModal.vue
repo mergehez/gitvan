@@ -180,7 +180,7 @@ function onTerminalSelectionChange(event: Event) {
     void applySelectedTerminal(value);
 }
 
-disposeTerminalEventListener = window.gitClient.onIntegratedTerminalEvent((event) => {
+disposeTerminalEventListener = window.electronAPI?.onIntegratedTerminalEvent?.((event) => {
     if (event.sessionId !== sessionIdRef.value) {
         return;
     }

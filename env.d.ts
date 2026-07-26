@@ -1,18 +1,16 @@
 /// <reference types="vite/client" />
 
-import type { GitClientBridge, GitClientRequestMap } from './src/electrobun';
-
 declare module '*.vue' {
     import type { DefineComponent } from 'vue';
     const component: DefineComponent<object, object, unknown>;
     export default component;
 }
 
+import type { ElectronAPI } from './src/electron/preload.ts';
+
 declare global {
     interface Window {
-        gitClient: GitClientBridge<GitClientRequestMap>;
-        __electrobunWindowId?: number;
-        __electrobunWebviewId?: number;
+        electronAPI?: ElectronAPI;
     }
 }
 

@@ -252,7 +252,7 @@ describe('App', () => {
     beforeEach(() => {
         document.title = 'Initial Title';
         nativeCommandListener = undefined;
-        window.gitClient = {
+        window.electronAPI = {
             invoke: vi.fn(),
             onIntegratedTerminalEvent: vi.fn(() => () => {}),
             onNativeCommand: vi.fn((listener: (command: NativeCommand) => void) => {
@@ -263,6 +263,7 @@ describe('App', () => {
                     }
                 };
             }),
+            sendDiagnostic: vi.fn(),
         };
         mockSettings = createMockSettings();
         mockRepos = createMockRepos();

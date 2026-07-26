@@ -16,8 +16,8 @@ const assetsDir = join(projectRoot, 'assets');
 const iconSvgPath = join(assetsDir, 'icon.svg');
 const iconIcnsPath = join(assetsDir, 'icon.icns');
 const iconsetDir = join(assetsDir, 'icon.iconset');
-const buildTargetDir = join(projectRoot, 'build', `stable-macos-${process.arch}`);
-const artifactsDir = join(projectRoot, 'artifacts');
+const buildTargetDir = join(projectRoot, 'build', `mac-${process.arch}`);
+const artifactsDir = join(projectRoot, 'build');
 const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as {
     name: string;
     productName?: string;
@@ -69,7 +69,7 @@ function readEnvFile(filePath: string): EnvMap {
 }
 
 function cleanValue(value: string | undefined) {
-    return value?.replace(/^ELECTROBUN_DEVELOPER_ID:\s*/, '').trim() || '';
+    return value?.replace(/^ELECTRON_DEVELOPER_ID:\s*/, '').trim() || '';
 }
 
 function combineEnv() {
@@ -120,9 +120,9 @@ async function findArtifact(extension: string) {
         throw new Error(`Artifacts directory not found at ${artifactsDir}.`);
     }
 
-    const prefix = `stable-macos-${process.arch}-`;
+    const suffix = `-macos-${process.arch}${extension}`;
     const entries = await readdir(artifactsDir, { withFileTypes: true });
-    const matches = entries.filter((entry) => entry.isFile() && entry.name.startsWith(prefix) && entry.name.endsWith(extension)).map((entry) => join(artifactsDir, entry.name));
+    const matches = entries.filter((entry) => entry.isFile() && entry.name.endsWith(suffix)).map((entry) => join(artifactsDir, entry.name));
 
     if (matches.length !== 1) {
         throw new Error(`Expected exactly one ${extension} artifact in ${artifactsDir}, found ${matches.length}.`);
@@ -234,33 +234,38 @@ async function ensureMacIconset() {
     return iconsetDir;
 }
 
-function prepareElectrobunEnv(shouldSign: boolean, shouldNotarize: boolean) {
+function prepareElectronEnv(shouldSign: boolean, shouldNotarize: boolean) {
     const env = combineEnv();
-    const developerId = cleanValue(env.ELECTROBUN_DEVELOPER_ID);
-    const teamId = env.ELECTROBUN_TEAMID || '';
-    const appleId = env.ELECTROBUN_APPLEID || '';
-    const appleIdPass = env.ELECTROBUN_APPLEIDPASS || '';
+    const developerId = cleanValue(env.ELECTRON_DEVELOPER_ID || env.CSC_LINK || '');
+    const teamId = env.ELECTRON_TEAMID || env.APPLE_TEAM_ID || '';
+    const appleId = env.ELECTRON_APPLEID || env.APPLE_ID || '';
+    const appleIdPass = env.ELECTRON_APPLEIDPASS || env.APPLE_APP_SPECIFIC_PASSWORD || '';
 
-    env.ELECTROBUN_MAC_ICONS = iconsetDir;
-    env.ELECTROBUN_CREATE_DMG = 'true';
-    env.ELECTROBUN_CODESIGN = shouldSign ? 'true' : 'false';
-    env.ELECTROBUN_NOTARIZE = shouldNotarize ? 'true' : 'false';
+    // For electron-builder
+    env.CSC_LINK = env.CSC_LINK || (shouldSign && developerId ? developerId : '');
+    env.APPLE_ID = appleId;
+    env.APPLE_APP_SPECIFIC_PASSWORD = appleIdPass;
+    env.APPLE_TEAM_ID = teamId;
 
     if (!shouldSign) {
-        delete env.ELECTROBUN_DEVELOPER_ID;
-        delete env.ELECTROBUN_TEAMID;
-        delete env.ELECTROBUN_APPLEID;
-        delete env.ELECTROBUN_APPLEIDPASS;
+        delete env.ELECTRON_DEVELOPER_ID;
+        delete env.ELECTRON_TEAMID;
+        delete env.ELECTRON_APPLEID;
+        delete env.ELECTRON_APPLEIDPASS;
+        delete env.ELECTRON_MAC_ICONS;
+        delete env.ELECTRON_CREATE_DMG;
+        delete env.ELECTRON_CODESIGN;
+        delete env.ELECTRON_NOTARIZE;
+        delete env.CSC_LINK;
+        delete env.CSC_KEY_PASSWORD;
+        delete env.APPLE_ID;
+        delete env.APPLE_APP_SPECIFIC_PASSWORD;
+        delete env.APPLE_TEAM_ID;
         return env;
     }
 
     if (!developerId) {
-        throw new Error('Signing requires ELECTROBUN_DEVELOPER_ID in the environment or .env file.');
-    }
-
-    env.ELECTROBUN_DEVELOPER_ID = developerId;
-    if (teamId) {
-        env.ELECTROBUN_TEAMID = teamId;
+        throw new Error('Signing requires ELECTRON_DEVELOPER_ID or CSC_LINK in the environment or .env file.');
     }
 
     if (!shouldNotarize) {
@@ -268,12 +273,8 @@ function prepareElectrobunEnv(shouldSign: boolean, shouldNotarize: boolean) {
     }
 
     if (!appleId || !appleIdPass || !teamId) {
-        throw new Error('Notarization requires ELECTROBUN_APPLEID, ELECTROBUN_APPLEIDPASS, and ELECTROBUN_TEAMID.');
+        throw new Error('Notarization requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID.');
     }
-
-    env.ELECTROBUN_APPLEID = appleId;
-    env.ELECTROBUN_APPLEIDPASS = appleIdPass;
-    env.ELECTROBUN_TEAMID = teamId;
 
     return env;
 }
@@ -284,14 +285,14 @@ async function main() {
     const shouldInstall = !process.argv.includes('--no-install');
 
     await ensureMacIconset();
-    const env = prepareElectrobunEnv(shouldSign, shouldNotarize);
+    const env = prepareElectronEnv(shouldSign, shouldNotarize);
 
     if (shouldNotarize) {
-        console.log('Building a signed and notarized macOS release with Electrobun.');
+        console.log('Building a signed and notarized macOS release with Electron.');
     } else if (shouldSign) {
-        console.log('Building a signed macOS release with Electrobun.');
+        console.log('Building a signed macOS release with Electron.');
     } else {
-        console.log('Building an unsigned macOS release with Electrobun.');
+        console.log('Building an unsigned macOS release with Electron.');
     }
 
     await runCommand('bun', ['run', 'build:stable'], env);

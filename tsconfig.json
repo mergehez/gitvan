@@ -19,7 +19,7 @@
         "moduleResolution": "bundler",
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
-        "types": ["bun", "vite/client"]
+        "types": ["node", "vite/client"]
     },
     "include": ["src", "env.d.ts", "vite-export-api-methods.ts", "playwright/diff-hunk-overlay.spec.ts"],
     "exclude": ["node_modules", "dist", "build", "../../package/dist"]

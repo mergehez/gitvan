@@ -34,7 +34,7 @@ import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessTo
 
 const db = useDb();
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..', '..');
 const sandboxResetScripts = [
     {

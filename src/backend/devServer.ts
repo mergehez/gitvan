@@ -6,7 +6,7 @@
 import express from 'express';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { GitClientRequestApi as Api } from '../electrobun/index';
+import type { GitClientRequestApi as Api } from '../electron/bridge.ts';
 import { apiMethods } from '../shared/apiMethods';
 import { app } from './services/app';
 import { useDb } from './services/database';
@@ -113,6 +113,9 @@ serverApp.use((_req, res) => {
     res.status(404).send('Not found');
 });
 
-serverApp.listen(PORT, () => {
-    console.log(`[devServer] Backend API running at http://localhost:${PORT}`);
+export const ready = new Promise<void>((resolve) => {
+    serverApp.listen(PORT, () => {
+        console.log(`[devServer] Backend API running at http://localhost:${PORT}`);
+        resolve();
+    });
 });

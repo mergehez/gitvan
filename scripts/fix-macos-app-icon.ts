@@ -2,8 +2,8 @@ import { existsSync } from 'fs';
 import { copyFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
-const buildDir = process.env.ELECTROBUN_BUILD_DIR;
-const wrapperBundlePath = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
+const buildDir = process.env.ELECTRON_BUILD_DIR;
+const wrapperBundlePath = process.env.ELECTRON_WRAPPER_BUNDLE_PATH;
 const sourceIconPath = join(process.cwd(), 'assets', 'icon.icns');
 
 async function ensureAppIcon(appBundlePath: string) {
@@ -17,7 +17,7 @@ async function ensureAppIcon(appBundlePath: string) {
 
 async function main() {
     // if dev return
-    if (process.env.ELECTROBUN_BUILD_ENV === 'dev') {
+    if (process.env.ELECTRON_IS_DEV === 'true') {
         console.log('Development mode detected, skipping app icon fix.');
         return;
     }
@@ -36,7 +36,7 @@ async function main() {
     }
 
     if (!buildDir) {
-        throw new Error('ELECTROBUN_BUILD_DIR is not set.');
+        throw new Error('ELECTRON_BUILD_DIR is not set.');
     }
 
     const appBundlePath = join(buildDir, 'Gitvan.app');

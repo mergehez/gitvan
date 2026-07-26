@@ -39,7 +39,7 @@ watchEffect(() => {
 let disposeNativeCommandListener: (() => void) | undefined = undefined;
 
 onMounted(() => {
-    disposeNativeCommandListener = window.gitClient.onNativeCommand(async (command) => {
+    disposeNativeCommandListener = window.electronAPI?.onNativeCommand?.(async (command: any) => {
         if (command.kind === 'open-settings') {
             await settings.openSettingsWindow(command.panel);
         }
