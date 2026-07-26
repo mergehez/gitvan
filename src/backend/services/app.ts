@@ -49,6 +49,10 @@ const sandboxResetScripts = [
         folder: 'partial-changes',
         script: 'reset-partial-repo.mjs',
     },
+    {
+        folder: 'cosmetics',
+        script: 'reset-cosmetics-repo.mjs',
+    },
 ] as const;
 
 type RepoRemoteAuth = {
