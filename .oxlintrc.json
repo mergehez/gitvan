@@ -1,5 +1,6 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "unicorn", "oxc", "vue", "promise", "node", "import"],
     "rules": {
         "no-floating-promises": "allow",
         "no-unused-vars": "off",
