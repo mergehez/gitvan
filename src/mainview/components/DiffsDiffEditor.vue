@@ -364,7 +364,8 @@ function setHunkAnchors() {
     const hunks = diffState.value.renderedDiff?.rawHunks ?? [];
     for (let i = 0; i < hunks.length; i++) {
         const hunk = hunks[i];
-        const addLine = gutter.querySelector<HTMLElement>(`:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`);
+        const selector = hunk.additionLineIndex == 0 ? `:scope > div` : `:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`;
+        const addLine = gutter.querySelector<HTMLElement>(selector);
         if (!addLine) {
             console.warn('addLine not found for hunk', { i, hunk, hunks });
             continue;
