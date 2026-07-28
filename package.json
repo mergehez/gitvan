@@ -20,8 +20,8 @@
         "release:mac:notarize": "bun run ./scripts/build.ts --notarize",
         "dev2": "pkill -f electron 2>/dev/null && pkill -f \"bun run\" 2>/dev/null && rm -rf dist/ || true && bun run build:electron && concurrently \"vite dev --port 5173\" \"vite build && electron .\" --names \"Vite,Electron\" --prefix-colors \"blue,green\"",
         "dev": "concurrently -k \"node --import tsx --watch src/backend/devServer.ts\" \"sleep 2 && VITE_DEV2=true vite dev --port 5173\"",
-        "build:canary": "electron-builder build --config electron-builder.yml --arm64",
-        "build:stable": "electron-builder build --config electron-builder.yml --arm64",
+        "build:canary": "electron-builder build --config electron.config.js --arm64",
+        "build:stable": "electron-builder build --config electron.config.js --arm64",
         "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit",
         "test:e2e": "playwright test"
     },

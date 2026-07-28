@@ -307,7 +307,7 @@ async function main() {
     const buildEnv = { ...env, PATH: `${dirname(process.execPath)}:${env.PATH ?? ''}` };
 
     await runCommand('vite', ['build'], buildEnv);
-    await runCommand(electronBuilder, ['build', '--config', 'electron-builder.yml', '--arm64'], buildEnv);
+    await runCommand(electronBuilder, ['build', '--config', 'electron.config.js', '--arm64'], buildEnv);
 
     const builtAppPath = await findAppBundle(buildTargetDir);
     const dmgPath = await findArtifact('.dmg');
