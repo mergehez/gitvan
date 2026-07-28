@@ -14,8 +14,8 @@ const electronApiMethods: PluginOption = {
         // Extract backend method names from app.ts: methodName: async (ps) => {
         // Exclude getter/IIFE patterns where name: (() => { ... })()
         const appContent = fs.readFileSync(appPath, 'utf-8');
-        const appLines = appContent.split('\n');
-        const backendMethodMatches = [...appContent.matchAll(/^\s+([a-zA-Z]+):\s+(async\s+)?\(/gm)];
+        const appLines = appContent.split('export const app = {').pop()!.split('\n');
+        const backendMethodMatches = [...appContent.matchAll(/^    ([a-zA-Z]+):\s+(async\s+)?\(/gm)];
         const backendMethods = backendMethodMatches
             .filter((m) => {
                 const lineIndex = appContent.substring(0, m.index).split('\n').length - 1;
