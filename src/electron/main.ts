@@ -1,62 +1,16 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from 'electron';
+import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'fs';
-import { createRequire } from 'module';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 import type { app as AppService } from '../backend/services/app.ts';
+import { executeCommand } from '../backend/services/subprocess.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
+import { createElectronHelpers, type CreateGitClientRequestApi } from './helpers.ts';
 
-// __dirname: CJS provides it directly; ESM needs fileURLToPath(import.meta.url)
-const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, '..');
-const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
-const API_PORT = process.env.API_PORT || '5176';
+const helpers = createElectronHelpers('Gitvan', '5176');
 
-let mainWindow: BrowserWindow | null = null;
-
-// ── Backend (run in-process) ──
-
-const _require = createRequire(typeof __filename !== 'undefined' ? __filename : import.meta.url);
-
-function startBackend(): Promise<void> {
-    const mod = _require('./backend.cjs') as { ready?: Promise<void> };
-    return mod.ready ?? Promise.resolve();
-}
-
-function stopBackend() {}
-
-// ── Backend API proxy ──
-
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
-
-async function apiPost(method: string, params?: unknown): Promise<unknown> {
-    const response = await fetch(`${API_BASE}/api/${method}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: params !== undefined ? JSON.stringify(params) : undefined,
-    });
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Backend error (${response.status}): ${text}`);
-    }
-    return response.json();
-}
-// ── Backend handler factory ──
-
-type AppServiceType = typeof AppService;
-type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
-type BackendHandlers = {
-    [K in AppMethodKeys]: (ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
-};
-function createHandlers(getWindow: () => BrowserWindow | null) {
-    const handlers: any = {};
-    for (const name of apiMethods) {
-        handlers[name] = async (ps?: unknown) => apiPost(name, ps);
-    }
-    return {
-        ...(handlers as BackendHandlers),
+function createHandlers(mainWindow: BrowserWindow) {
+    return helpers.generateHandlers<typeof AppService>(apiMethods).mergeWithNative((apiPost) => ({
         pickEditorApplication: async () => {
-            const result = await dialog.showOpenDialog(getWindow()!, {
+            const result = await dialog.showOpenDialog(mainWindow, {
                 defaultPath: process.platform === 'darwin' ? '/Applications' : require('os').homedir(),
                 filters: process.platform === 'darwin' ? [{ name: 'Applications', extensions: ['app'] }] : undefined,
                 properties: ['openFile'],
@@ -69,7 +23,7 @@ function createHandlers(getWindow: () => BrowserWindow | null) {
         },
 
         pickTerminalApplication: async () => {
-            const result = await dialog.showOpenDialog(getWindow()!, {
+            const result = await dialog.showOpenDialog(mainWindow, {
                 defaultPath:
                     process.platform === 'darwin' ? '/bin' : process.platform === 'win32' ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32` : require('os').homedir(),
                 properties: ['openFile'],
@@ -82,7 +36,7 @@ function createHandlers(getWindow: () => BrowserWindow | null) {
         },
 
         pickDirectory: async (ps?: { defaultPath?: string; title?: string; buttonLabel?: string }) => {
-            const result = await dialog.showOpenDialog(getWindow()!, {
+            const result = await dialog.showOpenDialog(mainWindow, {
                 defaultPath: ps?.defaultPath || require('os').homedir(),
                 properties: ['openDirectory'],
             });
@@ -130,7 +84,7 @@ function createHandlers(getWindow: () => BrowserWindow | null) {
             return createIntegratedTerminalSession(
                 {
                     emitIntegratedTerminalEvent(event: any) {
-                        getWindow()?.webContents.send('integrated-terminal-event', event);
+                        mainWindow.webContents.send('integrated-terminal-event', event);
                     },
                 },
                 repoPath,
@@ -153,136 +107,46 @@ function createHandlers(getWindow: () => BrowserWindow | null) {
             const { closeIntegratedTerminalSession } = await import('./integratedTerminal.ts');
             return closeIntegratedTerminalSession(ps);
         },
-    };
+    }));
 }
+
 export type HandlersMap = ReturnType<typeof createHandlers>;
+export type GitClientRequestApi = CreateGitClientRequestApi<HandlersMap>;
 
-export type GitClientRequestApi = {
-    [K in keyof HandlersMap]: undefined extends Parameters<HandlersMap[K]>[0]
-        ? (params?: Parameters<HandlersMap[K]>[0]) => Promise<Awaited<ReturnType<HandlersMap[K]>>>
-        : (params: Parameters<HandlersMap[K]>[0]) => Promise<Awaited<ReturnType<HandlersMap[K]>>>;
-};
-
-export type RendererDiagnosticPayload = {
-    type: 'console-error' | 'window-error' | 'unhandled-rejection';
-    message: string;
-    details?: string;
-};
-
-// ── IPC handler registration ──
-
-function registerIpcHandlers() {
-    const handlers = createHandlers(() => mainWindow);
-
-    for (const [name, handler] of Object.entries(handlers)) {
-        ipcMain.handle(name, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
-    }
-
-    ipcMain.on('renderer-diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
-        const header = `[renderer:${diagnostic.type}] ${diagnostic.message}`;
-        if (diagnostic.details) {
-            console.error(header);
-            console.error(diagnostic.details);
-        } else {
-            console.error(header);
-        }
-    });
-}
-
-// ── Menu ──
-
-function buildMenu() {
-    const template: Electron.MenuItemConstructorOptions[] = [
-        {
-            label: 'Gitvan',
-            submenu: [
-                { role: 'about' },
-                { label: 'Open Settings', accelerator: 'CmdOrCtrl+,', click: () => mainWindow?.webContents.send('native-command', { kind: 'open-settings' }) },
-                { type: 'separator' },
-                { role: 'hide' },
-                { role: 'hideOthers' },
-                {
-                    label: 'Show All',
-                    click: () => {
-                        for (const win of BrowserWindow.getAllWindows()) win.show();
+helpers.start({
+    createHandlers,
+    getMenu: (mainWindow: BrowserWindow) => {
+        const template: Electron.MenuItemConstructorOptions[] = [
+            {
+                label: 'Gitvan',
+                submenu: [
+                    { role: 'about' },
+                    { label: 'Open Settings', accelerator: 'CmdOrCtrl+,', click: () => mainWindow?.webContents.send('native-command', { kind: 'open-settings' }) },
+                    { type: 'separator' },
+                    { role: 'hide' },
+                    { role: 'hideOthers' },
+                    {
+                        label: 'Show All',
+                        click: () => {
+                            for (const win of BrowserWindow.getAllWindows()) win.show();
+                        },
                     },
-                },
-                { type: 'separator' },
-                { role: 'quit' },
-            ],
-        },
-        {
-            label: 'Edit',
-            submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
-        },
-        {
-            label: 'View',
-            submenu: [
-                { label: 'Toggle Developer Tools', accelerator: 'CmdOrCtrl+Alt+I', click: () => mainWindow?.webContents.toggleDevTools() },
-                { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => mainWindow?.webContents.reload() },
-            ],
-        },
-    ];
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-}
-
-// ── Window ──
-
-async function createWindow() {
-    buildMenu();
-    registerIpcHandlers();
-
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const width = 1440,
-        height = 920;
-    const x = Math.round(primaryDisplay.workArea.x + (primaryDisplay.workArea.width - width) / 2);
-    const y = Math.round(primaryDisplay.workArea.y + (primaryDisplay.workArea.height - height) / 2);
-
-    mainWindow = new BrowserWindow({
-        title: 'Gitvan',
-        x,
-        y,
-        width,
-        height,
-        webPreferences: {
-            preload: join(__dirname, 'preload.cjs'),
-            contextIsolation: true,
-            nodeIntegration: false,
-        },
-    });
-
-    if (isDev) {
-        try {
-            await fetch('http://127.0.0.1:5173', { method: 'HEAD' });
-            await mainWindow.loadURL('http://127.0.0.1:5173');
-            console.log('Using Vite dev server');
-            return;
-        } catch {
-            /* fall through */
-        }
-    }
-
-    const indexPath = join(projectRoot, 'dist', 'index.html');
-    if (existsSync(indexPath)) await mainWindow.loadFile(indexPath);
-    else throw new Error(`Frontend build not found at ${indexPath}. Run 'vp build' first.`);
-}
-
-// ── App lifecycle ──
-
-app.whenReady().then(async () => {
-    console.log('Starting backend server...');
-    await startBackend();
-    console.log('Backend started. Creating window...');
-    await createWindow();
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
-});
-
-app.on('window-all-closed', () => {
-    stopBackend();
-    if (process.platform !== 'darwin') app.quit();
-});
-app.on('will-quit', () => {
-    stopBackend();
+                    { type: 'separator' },
+                    { role: 'quit' },
+                ],
+            },
+            {
+                label: 'Edit',
+                submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
+            },
+            {
+                label: 'View',
+                submenu: [
+                    { label: 'Toggle Developer Tools', accelerator: 'CmdOrCtrl+Alt+I', click: () => mainWindow?.webContents.toggleDevTools() },
+                    { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => mainWindow?.webContents.reload() },
+                ],
+            },
+        ];
+        return template;
+    },
 });
