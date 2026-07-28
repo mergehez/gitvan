@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { spawn, type IPty } from 'node-pty';
 import { homedir } from 'os';
 import type { IntegratedTerminalEvent, IntegratedTerminalSession } from '../shared/gitClient.js';
 
@@ -11,8 +12,7 @@ const terminalSessions = new Map<
     {
         id: string;
         target: TerminalEventTarget;
-        process: Bun.Subprocess;
-        terminal: Bun.Terminal;
+        process: IPty;
         shellPath: string;
     }
 >();
@@ -55,7 +55,7 @@ export function createIntegratedTerminalSession(
     size?: { cols?: number; rows?: number }
 ): IntegratedTerminalSession {
     if (process.platform === 'win32') {
-        throw new Error('Integrated terminal PTY sessions are not supported on Windows in the Electrobun runtime.');
+        throw new Error('Integrated terminal PTY sessions are not supported on Windows.');
     }
 
     const sessionId = crypto.randomUUID();
@@ -67,11 +67,8 @@ export function createIntegratedTerminalSession(
             COLORTERM: process.env.COLORTERM || 'truecolor',
         }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
     );
-    const decoder = new TextDecoder();
-
     let shellPath = '';
-    let terminal: Bun.Terminal | undefined;
-    let processHandle: Bun.Subprocess | undefined;
+    let processHandle: IPty | undefined;
     let lastError: unknown;
 
     const candidates = [preferredShellPath, process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter((value, index, items): value is string => {
@@ -83,43 +80,31 @@ export function createIntegratedTerminalSession(
         }
 
         try {
-            const spawnedProcess = Bun.spawn({
-                cmd: [candidate, ...resolveShellArgs(candidate)],
+            const spawnedProcess = spawn(candidate, resolveShellArgs(candidate), {
                 cwd: terminalCwd,
                 env,
-                onExit(_subprocess, exitCode, signalCode, error) {
-                    if (error) {
-                        lastError = error;
-                    }
-
-                    emitData(target, sessionId, decoder.decode());
-
-                    emitExit(sessionId, exitCode ?? (signalCode ? 1 : 0));
-                },
-                terminal: {
-                    name: 'xterm-256color',
-                    cols: Math.max(20, size?.cols ?? 80),
-                    rows: Math.max(5, size?.rows ?? 24),
-                    data(_terminal, data) {
-                        emitData(target, sessionId, decoder.decode(data, { stream: true }));
-                    },
-                },
+                name: 'xterm-256color',
+                cols: Math.max(20, size?.cols ?? 80),
+                rows: Math.max(5, size?.rows ?? 24),
             });
 
-            if (!spawnedProcess.terminal) {
-                throw new Error('Bun did not attach a PTY terminal to the spawned process.');
-            }
+            spawnedProcess.onData((data: string) => {
+                emitData(target, sessionId, data);
+            });
+
+            spawnedProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+                emitExit(sessionId, exitCode ?? (signal ? 1 : 0));
+            });
 
             shellPath = candidate;
             processHandle = spawnedProcess;
-            terminal = spawnedProcess.terminal;
             break;
         } catch (error) {
             lastError = error;
         }
     }
 
-    if (!processHandle || !terminal || !shellPath) {
+    if (!processHandle || !shellPath) {
         const details = lastError instanceof Error ? lastError.message : String(lastError?.toString() ?? 'Unknown error');
         throw new Error(`Failed to start integrated terminal in '${terminalCwd}': ${details}`);
     }
@@ -128,7 +113,6 @@ export function createIntegratedTerminalSession(
         id: sessionId,
         target,
         process: processHandle,
-        terminal,
         shellPath,
     });
 
@@ -145,7 +129,7 @@ export function writeIntegratedTerminalSession(ps: { sessionId: string; data: st
         return;
     }
 
-    session.terminal.write(ps.data);
+    session.process.write(ps.data);
 }
 
 export function resizeIntegratedTerminalSession(ps: { sessionId: string; cols: number; rows: number }) {
@@ -154,7 +138,7 @@ export function resizeIntegratedTerminalSession(ps: { sessionId: string; cols: n
         return;
     }
 
-    session.terminal.resize(Math.max(20, ps.cols), Math.max(5, ps.rows));
+    session.process.resize(Math.max(20, ps.cols), Math.max(5, ps.rows));
 }
 
 export function closeIntegratedTerminalSession(ps: { sessionId: string }) {
@@ -165,5 +149,4 @@ export function closeIntegratedTerminalSession(ps: { sessionId: string }) {
 
     terminalSessions.delete(ps.sessionId);
     session.process.kill('SIGHUP');
-    session.terminal.close();
 }

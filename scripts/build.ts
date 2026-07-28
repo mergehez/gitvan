@@ -1,12 +1,14 @@
-/// <reference types="bun" />
+/// <reference types="node" />
 
+import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
-import { cp, mkdir, mkdtemp, readdir, rm, stat } from 'fs/promises';
+import { copyFile, cp, mkdir, mkdtemp, readdir, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 type EnvMap = Record<string, string>;
+const appName = 'Gitvan';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -81,15 +83,19 @@ function combineEnv() {
 }
 
 async function runCommand(command: string, args: string[], env: NodeJS.ProcessEnv = process.env, cwd = projectRoot) {
-    const processHandle = Bun.spawn([command, ...args], {
+    const processHandle = spawn(command, args, {
         cwd,
         env,
-        stdin: 'inherit',
-        stdout: 'inherit',
-        stderr: 'inherit',
+        stdio: 'inherit',
     });
 
-    const exitCode = await processHandle.exited;
+    const exitCode = await new Promise<number>((resolve, reject) => {
+        processHandle.once('error', reject);
+        processHandle.once('close', (code: number | null, signal: NodeJS.Signals | null) => {
+            resolve(code ?? (signal ? 1 : 0));
+        });
+    });
+
     if (exitCode !== 0) {
         throw new Error(`${command} ${args.join(' ')} exited with code ${exitCode}.`);
     }
@@ -140,7 +146,7 @@ async function verifySignedMacApp(appPath: string, env: NodeJS.ProcessEnv) {
 }
 
 async function verifyDmgDistributionArtifact(dmgPath: string, env: NodeJS.ProcessEnv) {
-    const mountDir = await mkdtemp(join(tmpdir(), 'gitvan-dmg-check-'));
+    const mountDir = await mkdtemp(join(tmpdir(), `${appName}-dmg-check-`));
 
     try {
         console.log(`Mounting ${dmgPath} for distribution verification.`);
@@ -195,7 +201,7 @@ async function ensureMacIconset() {
         throw new Error(`Missing icon source at ${iconSvgPath}.`);
     }
 
-    const tempDir = await mkdtemp(join(tmpdir(), 'gitvan-icon-'));
+    const tempDir = await mkdtemp(join(tmpdir(), `${appName}-icon-`));
     const tempIconsetDir = join(tempDir, 'icon.iconset');
     const previewPath = join(tempDir, 'icon.png');
 
@@ -219,7 +225,7 @@ async function ensureMacIconset() {
             await runCommand('/usr/bin/sips', ['-z', String(size), String(size), previewPath, '--out', join(tempIconsetDir, fileName)]);
         }
 
-        await Bun.write(join(tempIconsetDir, 'icon_512x512@2x.png'), Bun.file(previewPath));
+        await copyFile(previewPath, join(tempIconsetDir, 'icon_512x512@2x.png'));
 
         if (await pathExists(iconsetDir)) {
             await rm(iconsetDir, { recursive: true, force: true });
