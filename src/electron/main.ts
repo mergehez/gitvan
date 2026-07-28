@@ -71,8 +71,66 @@ function createHandlers(mainWindow: BrowserWindow) {
         },
 
         openDirectoryInTerminal: async (ps: { directoryPath: string; applicationPath?: string }) => {
-            const { openDirectoryInTerminal } = await import('./systemShell.ts');
-            return openDirectoryInTerminal(ps);
+            const { directoryPath, applicationPath } = ps;
+            type CommandAttempt = {
+                command: string;
+                args: string[];
+            };
+            const attempts: CommandAttempt[] = (() => {
+                const configuredApplicationPath = applicationPath && existsSync(applicationPath) ? applicationPath : undefined;
+
+                if (configuredApplicationPath) {
+                    if (process.platform === 'darwin') {
+                        return [{ command: 'open', args: ['-a', configuredApplicationPath, directoryPath] }];
+                    }
+
+                    if (process.platform === 'win32') {
+                        return [{ command: 'cmd.exe', args: ['/c', 'start', '', '/D', directoryPath, configuredApplicationPath] }];
+                    }
+
+                    return [{ command: configuredApplicationPath, args: [] }];
+                }
+
+                if (process.platform === 'darwin') {
+                    return [{ command: 'open', args: ['-a', 'Terminal', directoryPath] }];
+                }
+
+                if (process.platform === 'win32') {
+                    return [
+                        { command: 'cmd.exe', args: ['/c', 'start', '', 'wt.exe', '-d', directoryPath] },
+                        { command: 'cmd.exe', args: ['/c', 'start', '', 'cmd.exe', '/K', 'cd', '/d', directoryPath] },
+                    ];
+                }
+
+                return [
+                    { command: 'x-terminal-emulator', args: ['--working-directory', directoryPath] },
+                    { command: 'gnome-terminal', args: ['--working-directory', directoryPath] },
+                    { command: 'konsole', args: ['--workdir', directoryPath] },
+                    { command: 'xfce4-terminal', args: ['--working-directory', directoryPath] },
+                    { command: 'kitty', args: ['--directory', directoryPath] },
+                    { command: 'alacritty', args: ['--working-directory', directoryPath] },
+                ];
+            })();
+
+            let lastError: unknown;
+
+            for (const attempt of attempts) {
+                try {
+                    await executeCommand({
+                        ...attempt,
+                        cwd: directoryPath,
+                        detached: process.platform !== 'win32',
+                        allowedExitCodes: [0],
+                        getErrorToThrow: (_, stderr) =>
+                            new Error(`Failed to open the directory in a terminal application using command: ${attempt.command} ${attempt.args.join(' ')}\n\n${stderr}`),
+                    });
+                    return;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError instanceof Error ? lastError : new Error('Failed to open the directory in a terminal application.');
         },
 
         createIntegratedTerminalSession: async (ps: { repoId: number; terminalPath?: string; cols?: number; rows?: number }) => {
