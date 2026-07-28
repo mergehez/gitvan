@@ -30,6 +30,7 @@ type Opts<AppServiceType extends Record<string, any>, NativeMethods extends Reco
     apiMethods: AppServiceType; // this is a hack. we actually get a string array of method names, but we use this type to infer the types of the backend methods
     getNativeMethods: (mainWindow: BrowserWindow, apiPost: (method: string, params?: unknown) => Promise<unknown>) => NativeMethods;
     getMenu: (mainWindow: BrowserWindow) => Electron.MenuItemConstructorOptions[];
+    windowSize?: (screen: Electron.Display['workAreaSize']) => { width: number; height: number; x: number; y: number };
 };
 
 export function createElectronHelpers<AppServiceType extends Record<string, any>, NativeMethods extends Record<string, any>>(opts: Opts<AppServiceType, NativeMethods>) {
@@ -84,19 +85,21 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
     }
 
     async function createWindow() {
-        const primaryDisplay = screen.getPrimaryDisplay();
-        const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-        const width = Math.max(screenWidth * 0.5, 1440);
-        const height = Math.max(screenHeight * 0.8, 720);
-        const x = Math.round((screenWidth - width) / 2);
-        const y = Math.round((screenHeight - height) / 2);
+        const primaryDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+        opts.windowSize ??= (screen) => {
+            const width = Math.round(Math.min(Math.max(screen.width * 0.5, 1440), screen.width));
+            return { width, height: screen.height, x: 0, y: 0 };
+        };
+        const { width, height, x, y } = opts.windowSize(primaryDisplay.workAreaSize);
 
+        console.log('workAreaSize', primaryDisplay.workAreaSize);
+        console.log('requested bounds: ', { width, height, x, y });
         const mainWindow = new BrowserWindow({
             title: appName,
             x,
             y,
             width,
-            height,
+            height: height,
             webPreferences: {
                 preload: join(__dirname, 'preload.cjs'),
                 contextIsolation: true,
@@ -122,6 +125,9 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
         const indexPath = join(projectRoot, 'dist', 'index.html');
         if (existsSync(indexPath)) await mainWindow.loadFile(indexPath);
         else throw new Error(`Frontend build not found at ${indexPath}. Run 'vp build' first.`);
+
+        // final height
+        console.log('final bounds: ', mainWindow.getBounds());
     }
 
     function start() {
