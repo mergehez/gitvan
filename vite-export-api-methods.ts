@@ -26,7 +26,7 @@ const electronApiMethods: PluginOption = {
             .map((m) => m[1]);
 
         // Extract native method names from main.ts: methodName: async (ps) => { in createNativeHandlers
-        const handlersContent = fs.readFileSync(mainPath, 'utf-8');
+        const handlersContent = fs.readFileSync(mainPath, 'utf-8').split('export type HandlersMap')[0].split('function createHandlers').pop()!;
         const nativeMethods = [...handlersContent.matchAll(/^\s+([a-zA-Z]+):\s+async\s+\(/gm)].map((m) => m[1]);
 
         const allMethods = [...new Set([...backendMethods, ...nativeMethods])].sort();
