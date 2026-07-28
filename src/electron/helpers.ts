@@ -24,10 +24,19 @@ export type CreateGitClientRequestApi<HandlersMap extends Record<string, any>> =
         : (params: Parameters<HandlersMap[K]>[0]) => Promise<Awaited<ReturnType<HandlersMap[K]>>>;
 };
 
-export function createElectronHelpers(appName: string, defaultApiPort: string) {
+type Opts<AppServiceType extends Record<string, any>, NativeMethods extends Record<string, any>> = {
+    appName: string;
+    defaultApiPort: string;
+    apiMethods: AppServiceType; // this is a hack. we actually get a string array of method names, but we use this type to infer the types of the backend methods
+    getNativeMethods: (mainWindow: BrowserWindow, apiPost: (method: string, params?: unknown) => Promise<unknown>) => NativeMethods;
+    getMenu: (mainWindow: BrowserWindow) => Electron.MenuItemConstructorOptions[];
+};
+
+export function createElectronHelpers<AppServiceType extends Record<string, any>, NativeMethods extends Record<string, any>>(opts: Opts<AppServiceType, NativeMethods>) {
+    const { appName, defaultApiPort, apiMethods, getNativeMethods, getMenu } = opts;
     const apiPort = process.env.API_PORT || defaultApiPort;
 
-    function generateHandlers<AppServiceType extends Record<string, any>>(apiMethods: readonly string[]) {
+    function generateHandlers(mainWindow: BrowserWindow) {
         type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
         type BackendHandlers = {
             [K in AppMethodKeys]: (ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
@@ -46,18 +55,16 @@ export function createElectronHelpers(appName: string, defaultApiPort: string) {
         }
 
         const handlers: any = {};
-        for (const name of apiMethods) {
+        for (const name of apiMethods as any) {
             handlers[name] = async (ps?: unknown) => callApiPost(name as string, ps);
         }
 
+        const nativeMethods = getNativeMethods(mainWindow, callApiPost);
+
         return {
-            mergeWithNative: <NativeMethods extends Record<string, any>>(nativeMethods: (apiPost: typeof callApiPost) => NativeMethods) => {
-                return {
-                    ...handlers,
-                    ...nativeMethods(callApiPost),
-                } as BackendHandlers & NativeMethods;
-            },
-        };
+            ...handlers,
+            ...nativeMethods,
+        } as BackendHandlers & NativeMethods;
     }
 
     function registerIpcHandlers(handlers: Record<string, any>) {
@@ -76,11 +83,7 @@ export function createElectronHelpers(appName: string, defaultApiPort: string) {
         });
     }
 
-    type StartOpts = {
-        createHandlers: (window: BrowserWindow) => Record<string, any>;
-        getMenu: (mainWindow: BrowserWindow) => Electron.MenuItemConstructorOptions[];
-    };
-    async function createWindow(opts: StartOpts) {
+    async function createWindow() {
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
         const width = Math.max(screenWidth * 0.5, 1440);
@@ -101,8 +104,9 @@ export function createElectronHelpers(appName: string, defaultApiPort: string) {
             },
         });
 
-        Menu.setApplicationMenu(Menu.buildFromTemplate(opts.getMenu(mainWindow)));
-        registerIpcHandlers(opts.createHandlers(mainWindow));
+        Menu.setApplicationMenu(Menu.buildFromTemplate(getMenu(mainWindow)));
+        const handlers = generateHandlers(mainWindow);
+        registerIpcHandlers(handlers);
 
         if (isDev) {
             try {
@@ -120,7 +124,7 @@ export function createElectronHelpers(appName: string, defaultApiPort: string) {
         else throw new Error(`Frontend build not found at ${indexPath}. Run 'vp build' first.`);
     }
 
-    function start(opts: StartOpts) {
+    function start() {
         const _require = createRequire(typeof __filename !== 'undefined' ? __filename : import.meta.url);
 
         app.whenReady().then(async () => {
@@ -130,9 +134,9 @@ export function createElectronHelpers(appName: string, defaultApiPort: string) {
                 return mod.ready ?? Promise.resolve();
             })();
             console.log('Backend started. Creating window...');
-            await createWindow(opts);
+            await createWindow();
             app.on('activate', () => {
-                if (BrowserWindow.getAllWindows().length === 0) createWindow(opts);
+                if (BrowserWindow.getAllWindows().length === 0) createWindow();
             });
         });
 

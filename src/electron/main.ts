@@ -5,10 +5,11 @@ import { executeCommand } from '../backend/services/subprocess.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
 import { createElectronHelpers, type CreateGitClientRequestApi } from './helpers.ts';
 
-const helpers = createElectronHelpers('Gitvan', '5176');
-
-function createHandlers(mainWindow: BrowserWindow) {
-    return helpers.generateHandlers<typeof AppService>(apiMethods).mergeWithNative((apiPost) => ({
+const helpers = createElectronHelpers({
+    appName: 'Gitvan',
+    defaultApiPort: '5176',
+    apiMethods: apiMethods as unknown as typeof AppService,
+    getNativeMethods: (mainWindow, apiPost) => ({
         pickEditorApplication: async () => {
             const result = await dialog.showOpenDialog(mainWindow, {
                 defaultPath: process.platform === 'darwin' ? '/Applications' : require('os').homedir(),
@@ -165,14 +166,7 @@ function createHandlers(mainWindow: BrowserWindow) {
             const { closeIntegratedTerminalSession } = await import('./integratedTerminal.ts');
             return closeIntegratedTerminalSession(ps);
         },
-    }));
-}
-
-export type HandlersMap = ReturnType<typeof createHandlers>;
-export type GitClientRequestApi = CreateGitClientRequestApi<HandlersMap>;
-
-helpers.start({
-    createHandlers,
+    }),
     getMenu: (mainWindow: BrowserWindow) => {
         const template: Electron.MenuItemConstructorOptions[] = [
             {
@@ -208,3 +202,8 @@ helpers.start({
         return template;
     },
 });
+
+export type HandlersMap = ReturnType<typeof helpers.generateHandlers>;
+export type GitClientRequestApi = CreateGitClientRequestApi<HandlersMap>;
+
+helpers.start();
