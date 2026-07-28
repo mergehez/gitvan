@@ -1,5 +1,6 @@
 {
     "name": "gitvan",
+    "productName": "Gitvan",
     "version": "0.1.1",
     "description": "Gitvan desktop Git client with Vue and Vite",
     "license": "MIT",
@@ -62,6 +63,5 @@
         "vue-tsc": "^3.3.8",
         "wait-on": "^9.1.0"
     },
-    "packageManager": "bun@1.3.12",
-    "productName": "Gitvan"
+    "packageManager": "bun@1.3.12"
 }

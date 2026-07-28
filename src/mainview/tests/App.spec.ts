@@ -254,7 +254,6 @@ describe('App', () => {
         nativeCommandListener = undefined;
         window.electronAPI = {
             invoke: vi.fn(),
-            onIntegratedTerminalEvent: vi.fn(() => () => {}),
             onNativeCommand: vi.fn((listener: (command: NativeCommand) => void) => {
                 nativeCommandListener = listener;
                 return () => {

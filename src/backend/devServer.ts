@@ -41,7 +41,6 @@ const methodMap: Record<string, (ps?: any) => any> = {
     resizeIntegratedTerminalSession: async () => undefined,
     closeIntegratedTerminalSession: async () => undefined,
     onNativeCommand: () => () => {},
-    onIntegratedTerminalEvent: () => () => {},
 };
 
 // console.log(Object.keys(methodMap));

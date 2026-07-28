@@ -59,7 +59,6 @@ export async function invoke(method: string, params?: unknown): Promise<any> {
 const dev2Bridge = {
     invoke,
     onNativeCommand: () => () => {},
-    onIntegratedTerminalEvent: () => () => {},
 };
 
 export function installDev2GitClientBridge() {

@@ -229,9 +229,6 @@ async function resetRealAppState(resetSandboxes = false) {
         onNativeCommand() {
             return () => undefined;
         },
-        onIntegratedTerminalEvent() {
-            return () => undefined;
-        },
     };
 }
 

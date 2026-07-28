@@ -2,12 +2,14 @@ import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'fs';
 import type { app as AppService } from '../backend/services/app.ts';
 import { executeCommand } from '../backend/services/subprocess.ts';
+import { createElectronHelpers, type CreateGitClientRequestApi } from '../electronUtils/helpers.ts';
+import type { NativeCommand } from '../shared/gitClient.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
-import { createElectronHelpers, type CreateGitClientRequestApi } from './helpers.ts';
 
 const helpers = createElectronHelpers({
     appName: 'Gitvan',
     defaultApiPort: '5176',
+    defaultFrontendPort: '5173',
     apiMethods: apiMethods as unknown as typeof AppService,
     getNativeMethods: (mainWindow, apiPost) => ({
         pickEditorApplication: async () => {
@@ -143,7 +145,11 @@ const helpers = createElectronHelpers({
             return createIntegratedTerminalSession(
                 {
                     emitIntegratedTerminalEvent(event: any) {
-                        mainWindow.webContents.send('integrated-terminal-event', event);
+                        const command: NativeCommand =
+                            event.kind === 'data'
+                                ? { kind: 'integrated-terminal-data', sessionId: event.sessionId, data: event.data }
+                                : { kind: 'integrated-terminal-exit', sessionId: event.sessionId, exitCode: event.exitCode };
+                        mainWindow.webContents.send('native-command', command);
                     },
                 },
                 repoPath,

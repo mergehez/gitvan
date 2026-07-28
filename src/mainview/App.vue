@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watchEffect } from 'vue';
+import type { NativeCommand } from '../shared/gitClient';
 import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppConfirmationModal from './components/AppConfirmationModal.vue';
@@ -39,7 +40,7 @@ watchEffect(() => {
 let disposeNativeCommandListener: (() => void) | undefined = undefined;
 
 onMounted(() => {
-    disposeNativeCommandListener = window.electronAPI?.onNativeCommand?.(async (command: any) => {
+    disposeNativeCommandListener = window.electronAPI?.onNativeCommand?.(async (command: NativeCommand) => {
         if (command.kind === 'open-settings') {
             await settings.openSettingsWindow(command.panel);
         }

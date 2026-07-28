@@ -180,8 +180,12 @@ function onTerminalSelectionChange(event: Event) {
     void applySelectedTerminal(value);
 }
 
-disposeTerminalEventListener = window.electronAPI?.onIntegratedTerminalEvent?.((event) => {
-    if (event.sessionId !== sessionIdRef.value) {
+disposeTerminalEventListener = window.electronAPI?.onNativeCommand?.((command) => {
+    if (command.kind !== 'integrated-terminal-data' && command.kind !== 'integrated-terminal-exit') {
+        return;
+    }
+
+    if (command.sessionId !== sessionIdRef.value) {
         return;
     }
 
@@ -190,14 +194,14 @@ disposeTerminalEventListener = window.electronAPI?.onIntegratedTerminalEvent?.((
         return;
     }
 
-    if (event.kind === 'data') {
-        terminal.write(event.data);
+    if (command.kind === 'integrated-terminal-data') {
+        terminal.write(command.data);
         return;
     }
 
-    exitCode.value = event.exitCode;
+    exitCode.value = command.exitCode;
     sessionIdRef.value = undefined;
-    terminal.writeln(`\r\n[Process exited with code ${event.exitCode}]`);
+    terminal.writeln(`\r\n[Process exited with code ${command.exitCode}]`);
 });
 
 watch(

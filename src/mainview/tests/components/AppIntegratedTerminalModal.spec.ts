@@ -129,7 +129,6 @@ describe('AppIntegratedTerminalModal', () => {
         window.electronAPI = {
             invoke: vi.fn(),
             onNativeCommand: vi.fn(() => () => undefined),
-            onIntegratedTerminalEvent: () => () => undefined,
         } as any;
     });
 

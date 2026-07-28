@@ -6,7 +6,17 @@ export type SettingsPanel = 'repositories' | 'accounts' | 'editors' | 'terminals
 export type NativeCommand = {
     kind: 'open-settings';
     panel?: SettingsPanel;
-};
+}
+    | {
+          kind: 'integrated-terminal-data';
+          sessionId: string;
+          data: string;
+      }
+    | {
+          kind: 'integrated-terminal-exit';
+          sessionId: string;
+          exitCode: number;
+      };
 
 export type IntegratedTerminalSession = {
     sessionId: string;

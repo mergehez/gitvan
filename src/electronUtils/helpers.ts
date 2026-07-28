@@ -13,8 +13,8 @@ const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirn
 const projectRoot = join(__dirname, '..');
 const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
-export type RendererDiagnosticPayload = {
-    type: 'console-error' | 'window-error' | 'unhandled-rejection';
+type RendererDiagnosticPayload = {
+    type: 'console-debug' | 'console-info' | 'console-log' | 'console-warn' | 'console-error' | 'window-error' | 'unhandled-rejection';
     message: string;
     details?: string;
 };
@@ -27,6 +27,7 @@ export type CreateGitClientRequestApi<HandlersMap extends Record<string, any>> =
 type Opts<AppServiceType extends Record<string, any>, NativeMethods extends Record<string, any>> = {
     appName: string;
     defaultApiPort: string;
+    defaultFrontendPort: string;
     apiMethods: AppServiceType; // this is a hack. we actually get a string array of method names, but we use this type to infer the types of the backend methods
     getNativeMethods: (mainWindow: BrowserWindow, apiPost: (method: string, params?: unknown) => Promise<unknown>) => NativeMethods;
     getMenu: (mainWindow: BrowserWindow) => Electron.MenuItemConstructorOptions[];
@@ -40,7 +41,7 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
     function generateHandlers(mainWindow: BrowserWindow) {
         type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
         type BackendHandlers = {
-            [K in AppMethodKeys]: (ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
+            [K in AppMethodKeys]: (event: Electron.IpcMainInvokeEvent, ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
         };
         async function callApiPost(method: string, params?: unknown): Promise<unknown> {
             const response = await fetch(`http://127.0.0.1:${apiPort}/api/${method}`, {
@@ -57,7 +58,7 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 
         const handlers: any = {};
         for (const name of apiMethods as any) {
-            handlers[name] = async (ps?: unknown) => callApiPost(name as string, ps);
+            handlers[name] = async (_event: Electron.IpcMainInvokeEvent, ps?: unknown) => callApiPost(name as string, ps);
         }
 
         const nativeMethods = getNativeMethods(mainWindow, callApiPost);
@@ -73,14 +74,26 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
             ipcMain.handle(name, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
         }
 
-        ipcMain.on('renderer-diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
+        const ANSI_RESET = '\x1b[0m';
+        const ANSI_GREEN = '\x1b[32m';
+        const ANSI_YELLOW = '\x1b[33m';
+        const ANSI_RED = '\x1b[31m';
+        // ipcMain.on('renderer-diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
+        ipcMain.on('renderer:diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
+            const write =
+                diagnostic.type === 'console-debug'
+                    ? console.debug
+                    : diagnostic.type === 'console-info' || diagnostic.type === 'console-log'
+                      ? console.log
+                      : diagnostic.type === 'console-warn'
+                        ? console.warn
+                        : console.error;
+
             const header = `[renderer:${diagnostic.type}] ${diagnostic.message}`;
-            if (diagnostic.details) {
-                console.error(header);
-                console.error(diagnostic.details);
-            } else {
-                console.error(header);
-            }
+            const body = diagnostic.details ? `${header}\n${diagnostic.details}` : header;
+            const color =
+                diagnostic.type === 'console-warn' ? ANSI_YELLOW : ['console-error', 'window-error', 'unhandled-rejection'].includes(diagnostic.type) ? ANSI_RED : ANSI_GREEN;
+            write(`${color}${body}${ANSI_RESET}`);
         });
     }
 
@@ -100,10 +113,12 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
             y,
             width,
             height: height,
+            titleBarStyle: 'default',
             webPreferences: {
                 preload: join(__dirname, 'preload.cjs'),
                 contextIsolation: true,
                 nodeIntegration: false,
+                sandbox: false,
             },
         });
 
@@ -113,8 +128,10 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 
         if (isDev) {
             try {
-                await fetch('http://127.0.0.1:5173', { method: 'HEAD' });
-                await mainWindow.loadURL('http://127.0.0.1:5173');
+                const url = `http://127.0.0.1:${opts.defaultFrontendPort}`;
+                await fetch(url, { method: 'HEAD' });
+                await mainWindow.loadURL(url);
+                // mainWindow.webContents.openDevTools();
                 console.log('Using Vite dev server');
                 return;
             } catch {
@@ -158,5 +175,24 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
     return {
         generateHandlers,
         start,
+        isDev,
     };
+}
+
+export function createPreloadApi<NativeCommand>(ipcRenderer: Electron.IpcRenderer, contextBridge: Electron.ContextBridge) {
+    const api = {
+        invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+        onNativeCommand: (listener: (command: NativeCommand) => void) => {
+            const handler = (_event: Electron.IpcRendererEvent, command: NativeCommand) => {
+                listener(command);
+            };
+            ipcRenderer.on('native-command', handler);
+            return () => {
+                ipcRenderer.removeListener('native-command', handler);
+            };
+        },
+        sendDiagnostic: (payload: unknown) => ipcRenderer.send('renderer-diagnostic', payload),
+    };
+    contextBridge.exposeInMainWorld('electronAPI', api);
+    return api;
 }
