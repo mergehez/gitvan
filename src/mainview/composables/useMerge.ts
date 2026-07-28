@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { MergeConflictFileDetails, MergeConflictState } from '../../shared/gitClient';
+import type { MergeConflictFileDetails, MergeConflictState } from '../../shared/types';
 import { confirmAction } from '../lib/utils';
 import { _coreState } from './coreState';
 import { applyMutation } from './initializeStates';

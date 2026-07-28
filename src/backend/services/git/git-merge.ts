@@ -1,6 +1,6 @@
 import { writeFileSync } from 'fs';
 import { join } from 'path';
-import type { MergeConflictFileDetails, MergeConflictState } from '../../../shared/gitClient.js';
+import type { MergeConflictFileDetails, MergeConflictState } from '../../../shared/types.js';
 import { runGit } from './git-common.js';
 import { countConflictMarkers, parseIncomingBranchFromMergeMessage, readGitIndexStageFile, readGitMetadataFile, readWorkingTreeFile } from './git-helpers.js';
 

@@ -15,7 +15,7 @@ import type {
     RepoChangesData,
     RepoStashDetail,
     RepoStashEntry,
-} from '../../shared/gitClient.ts';
+} from '../../shared/types.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import { joinNativePath, writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';

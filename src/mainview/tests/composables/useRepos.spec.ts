@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/gitClient';
+import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/types';
 import { _useRepositories } from '../../composables/useRepos';
 import type { ContextMenuEntry, ContextMenuItem } from '../../directives';
 

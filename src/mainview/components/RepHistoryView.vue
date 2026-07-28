@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { CommitSummary, CommitTag } from '../../shared/gitClient';
+import type { CommitSummary, CommitTag } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';

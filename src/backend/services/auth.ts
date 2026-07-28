@@ -1,4 +1,4 @@
-import { executeCommand } from './subprocess.js';
+import { executeCommand } from '../../electronUtils/executeCommand.js';
 
 const KEYCHAIN_SERVICE_NAME = 'Gitvan';
 

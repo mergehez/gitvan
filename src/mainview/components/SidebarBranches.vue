@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import type { BranchSummary } from '../../shared/types.ts';
 import { useRepos } from '../composables/useRepos.ts';
 import { tasks } from '../composables/useTasks.ts';
+import CenteredInputModal from './CenteredInputModal.vue';
 import type { FileTreeItem } from './FileTree.vue';
 import FileTree from './FileTree.vue';
-import type { BranchSummary } from '../../shared/gitClient.ts';
 import IconButton from './IconButton.vue';
-import CenteredInputModal from './CenteredInputModal.vue';
 
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);

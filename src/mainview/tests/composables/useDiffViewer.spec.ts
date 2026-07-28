@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, reactive } from 'vue';
-import type { EditorSettings, FileDiffData } from '../../../shared/gitClient';
+import type { EditorSettings, FileDiffData } from '../../../shared/types';
 import { useDiffViewer } from '../../composables/useDiffViewer';
 import type { useSettings } from '../../composables/useSettings';
 

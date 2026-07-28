@@ -1,4 +1,4 @@
-import type { OAuthDeviceStartResult, OAuthProvider, OAuthProviderSettings } from '../../shared/gitClient.js';
+import type { OAuthDeviceStartResult, OAuthProvider, OAuthProviderSettings } from '../../shared/types.js';
 
 type OAuthSecretRecord = {
     kind: 'oauth';

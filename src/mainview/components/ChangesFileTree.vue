@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends { status?: ChangeStatus }">
-import type { ChangeStatus } from '../../shared/gitClient';
+import type { ChangeStatus } from '../../shared/types.ts';
 import type { ContextMenuEntry } from '../directives/contextMenuTypes';
 import { fileIconAndLanguageByPath, fileName, parentPath, statusClass, statusLetter } from '../lib/utils';
 import type { FileTreeChild, FileTreeItem } from './FileTree.vue';

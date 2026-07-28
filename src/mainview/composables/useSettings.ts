@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { EditorApp, EditorSettings, OAuthProviderSettings, SettingsPanel, TerminalApp } from '../../shared/gitClient';
+import type { EditorApp, EditorSettings, OAuthProviderSettings, SettingsPanel, TerminalApp } from '../../shared/types';
 import { confirmAction } from '../lib/utils';
 import { tasks } from './useTasks';
 import { toast } from './useToast';

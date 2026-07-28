@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { invoke, resolveDev2ApiBase } from '../../lib/gitClientDev2';
+import { invoke, resolveDev2ApiBase } from '../../appClientBrowser';
 
 describe('gitClientDev2', () => {
     beforeEach(() => {

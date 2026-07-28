@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { AccountSummary, CloneRepoSourceTab, CloneableRepo } from '../../shared/gitClient';
+import type { AccountSummary, CloneRepoSourceTab, CloneableRepo } from '../../shared/types.ts';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
 

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { isAbsolute, join } from 'path';
-import type { ChangeStatus, CommitFileEntry } from '../../../shared/gitClient.js';
+import type { ChangeStatus, CommitFileEntry } from '../../../shared/types.js';
 import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
 
 const previewByteLimit = 1024 * 1024;
@@ -136,7 +136,6 @@ export function buildDiffStats(patch: string, oldSizeBytes: number | undefined, 
         removedLines: lineChanges.removedLines,
     };
 }
-
 
 export async function applyPartialFilePatch(repoPath: string, patch: string, mode: 'stage' | 'unstage' | 'discard') {
     // Ensure patch ends with a newline (git apply requires it)

@@ -1,7 +1,7 @@
 import { reactive, ref } from 'vue';
 import type { GitClientRequestApi as Api } from '../../electron/bridge.ts';
 import { apiMethods } from '../../shared/apiMethods';
-import { appClientRpc } from '../lib/gitClient';
+import { appClientRpc } from '../appClient.ts';
 
 const runningOperations = reactive({} as Record<string, number | undefined>); // key => timestamp
 const errors = reactive({} as Record<string, string | undefined>);

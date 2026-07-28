@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { EditorSettings, Repo } from '../../../shared/gitClient';
+import type { EditorSettings, Repo } from '../../../shared/types.ts';
 import SidebarRepositories from '../../components/SidebarRepositories.vue';
 import type { useAuth } from '../../composables/useAuth';
 import { useRepo, type RepositoryState } from '../../composables/useRepo';

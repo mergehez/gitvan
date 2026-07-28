@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { EditorSettings } from '../../../shared/gitClient';
+import type { EditorSettings } from '../../../shared/types.ts';
 import DiffViewer from '../../components/DiffViewer.vue';
 import type { HunkActionsConfig } from '../../components/DiffsDiffEditor.vue';
 import type { useSettings } from '../../composables/useSettings';

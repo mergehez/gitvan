@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { AccountSummary, Repo, GroupSummary, AppBootstrapApi } from '../../shared/gitClient';
+import type { AccountSummary, AppBootstrapApi, GroupSummary, Repo } from '../../shared/types';
 
 export const _coreState = reactive({
     stateCounter: 0,

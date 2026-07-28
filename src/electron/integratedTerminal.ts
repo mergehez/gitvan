@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { spawn, type IPty } from 'node-pty';
 import { homedir } from 'os';
-import type { IntegratedTerminalEvent, IntegratedTerminalSession } from '../shared/gitClient.js';
+import type { IntegratedTerminalEvent, IntegratedTerminalSession } from '../shared/types.js';
 
 type TerminalEventTarget = {
     emitIntegratedTerminalEvent(event: IntegratedTerminalEvent): void;

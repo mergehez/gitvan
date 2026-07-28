@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, defineComponent, reactive } from 'vue';
-import type { EditorSettings, NativeCommand, NavigationView, Repo, SettingsPanel } from '../../shared/gitClient';
+import type { EditorSettings, NativeCommand, NavigationView, Repo, SettingsPanel } from '../../shared/types.ts';
 import App from '../App.vue';
 import { useRepo, type RepositoryState } from '../composables/useRepo';
 import type { useRepos } from '../composables/useRepos';
@@ -86,7 +86,7 @@ function createMockSettings(activeView: NavigationView = 'changes') {
             diffFontSize: 12,
             diffViewMode: 'full-file',
             diffIgnoredChars: '',
-    diffIgnoredCharsEnabled: true,
+            diffIgnoredCharsEnabled: true,
             showWhitespaceChanges: false,
             activeView,
             showBranches: false,

@@ -13,7 +13,7 @@ const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirn
 const projectRoot = join(__dirname, '..');
 const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
-type RendererDiagnosticPayload = {
+export type RendererDiagnosticPayload = {
     type: 'console-debug' | 'console-info' | 'console-log' | 'console-warn' | 'console-error' | 'window-error' | 'unhandled-rejection';
     message: string;
     details?: string;

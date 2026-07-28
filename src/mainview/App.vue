@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watchEffect } from 'vue';
-import type { NativeCommand } from '../shared/gitClient';
+import type { NativeCommand } from '../shared/types.ts';
 import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppConfirmationModal from './components/AppConfirmationModal.vue';

@@ -6,15 +6,12 @@ import { vContextMenu } from './directives/VContextMenu';
 import { vError } from './directives/VError';
 import { vLoading } from './directives/VLoading';
 import { vTooltip } from './directives/VTooltip';
-import { installRendererDiagnostics } from './lib/installRendererDiagnostics';
-
-installRendererDiagnostics();
 
 const isDev2 = import.meta.env.VITE_DEV2 === 'true';
 let mountedApp: ReturnType<typeof createApp> | undefined;
 
 if (isDev2) {
-    const { installDev2GitClientBridge } = await import('./lib/gitClientDev2');
+    const { installDev2GitClientBridge } = await import('./appClientBrowser.ts');
     installDev2GitClientBridge();
 }
 

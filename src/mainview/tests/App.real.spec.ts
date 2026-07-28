@@ -6,7 +6,7 @@ import { join } from 'path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../../backend/services/app';
 import { useDb } from '../../backend/services/database';
-import type { AppBootstrapApi, EditorSettings } from '../../shared/gitClient';
+import type { AppBootstrapApi, EditorSettings } from '../../shared/types.ts';
 import AppVue from '../App.vue';
 import Settings from '../components/Settings.vue';
 import { _coreState } from '../composables/coreState';

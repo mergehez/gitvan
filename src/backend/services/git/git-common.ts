@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { executeCommand } from '../subprocess.js';
+import { executeCommand } from '../../../electronUtils/executeCommand.js';
 
 export type GitRemoteAuth = {
     kind: 'https-token';

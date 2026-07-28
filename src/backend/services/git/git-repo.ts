@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname } from 'path';
-import type { BranchesData, BranchSummary, RemoteOperation } from '../../../shared/gitClient.js';
+import type { BranchesData, BranchSummary, RemoteOperation } from '../../../shared/types.js';
 import type { GitRemoteAuth } from './git-common.js';
 import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, runGit } from './git-common.js';
 import { normalizeBranchName, parseTrackCounts } from './git-helpers.js';

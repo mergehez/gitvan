@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { CommittedFileEntry } from '../../shared/gitClient';
+import type { CommittedFileEntry } from '../../shared/types.ts';
 import { useRepos } from '../composables/useRepos';
 import { fileIconAndLanguageByPath, formatBytes, readableDate } from '../lib/utils';
 import EtSplitter from './EtSplitter.vue';

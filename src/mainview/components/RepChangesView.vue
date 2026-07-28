@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { ChangeStatus } from '../../shared/gitClient';
-import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/gitClient';
+import type { ChangeStatus } from '../../shared/types.ts';
+import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';

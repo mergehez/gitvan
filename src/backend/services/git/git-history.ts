@@ -1,4 +1,4 @@
-import type { CommitDetail, CommittedFileData, CommittedTreeData, FileDiffData, HistoryData } from '../../../shared/gitClient.js';
+import type { CommitDetail, CommittedFileData, CommittedTreeData, FileDiffData, HistoryData } from '../../../shared/types.js';
 import { runGit } from './git-common.js';
 import {
     buildDiffStats,

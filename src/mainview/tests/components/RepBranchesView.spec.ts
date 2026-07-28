@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { BranchesData, Repo } from '../../../shared/gitClient';
+import type { BranchesData, Repo } from '../../../shared/types.ts';
 import RepBranchesView from '../../components/RepBranchesView.vue';
 import type { useRepos } from '../../composables/useRepos';
 import type { tasks as tasksType } from '../../composables/useTasks';

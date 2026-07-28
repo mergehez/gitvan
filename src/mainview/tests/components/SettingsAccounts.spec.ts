@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
-import type { AccountSummary } from '../../../shared/gitClient';
+import type { AccountSummary } from '../../../shared/types.ts';
 import SettingsAccounts from '../../components/SettingsAccounts.vue';
 import type { useAuth } from '../../composables/useAuth';
 import type { useSettings } from '../../composables/useSettings';

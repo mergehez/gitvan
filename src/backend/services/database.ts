@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import type { AccountSummary, GroupSummary } from '../../shared/gitClient.js';
+import type { AccountSummary, GroupSummary } from '../../shared/types.js';
 
 type SQLInputValue = string | number | bigint | Uint8Array | Buffer | null;
 type SQLOutputValue = string | number | bigint | Uint8Array | Buffer | null;

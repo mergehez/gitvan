@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted, watch } from 'vue';
-import type { AppBootstrapApi } from '../../shared/gitClient.ts';
-import { appClientRpc } from '../lib/gitClient.ts';
+import type { AppBootstrapApi } from '../../shared/types.ts';
+import { appClientRpc } from '../appClient.ts';
 import { runWithButtonLoadingIndicatorSilenced } from '../lib/loadingIndicatorState.ts';
 import { _coreState } from './coreState.ts';
 import { useMergeHelper } from './useMerge.ts';

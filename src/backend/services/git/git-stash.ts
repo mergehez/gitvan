@@ -1,4 +1,4 @@
-import type { FileDiffData, RepoStashDetail, RepoStashEntry } from '../../../shared/gitClient.js';
+import type { FileDiffData, RepoStashDetail, RepoStashEntry } from '../../../shared/types.js';
 import type { GitRemoteAuth } from './git-common.js';
 import { createRemoteGitEnv, runGit } from './git-common.js';
 import {

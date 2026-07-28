@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Repo } from '../../../shared/gitClient';
+import type { Repo } from '../../../shared/types';
 
 // Mock useSettings before importing the module under test
 vi.mock('../../composables/useSettings', () => ({

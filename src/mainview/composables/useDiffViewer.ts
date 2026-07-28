@@ -1,6 +1,6 @@
 import { computed, type MaybeRefOrGetter, toValue } from 'vue';
 import { areEquivalentIgnoringDiffChars } from '../../shared/diffIgnoredChars.ts';
-import type { FileDiffData } from '../../shared/gitClient.ts';
+import type { FileDiffData } from '../../shared/types.ts';
 import { formatBytes } from '../lib/utils.ts';
 import { useSettings } from './useSettings.ts';
 

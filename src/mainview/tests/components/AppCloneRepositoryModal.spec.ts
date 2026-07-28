@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
-import type { AccountSummary, CloneableRepo } from '../../../shared/gitClient';
+import type { AccountSummary, CloneableRepo } from '../../../shared/types.ts';
 import AppCloneRepositoryModal from '../../components/AppCloneRepositoryModal.vue';
 import type { useAuth } from '../../composables/useAuth';
 import type { useRepos } from '../../composables/useRepos';

@@ -3,10 +3,11 @@ export type NavigationView = 'changes' | 'explorer' | 'history';
 
 export type SettingsPanel = 'repositories' | 'accounts' | 'editors' | 'terminals';
 
-export type NativeCommand = {
-    kind: 'open-settings';
-    panel?: SettingsPanel;
-}
+export type NativeCommand =
+    | {
+          kind: 'open-settings';
+          panel?: SettingsPanel;
+      }
     | {
           kind: 'integrated-terminal-data';
           sessionId: string;

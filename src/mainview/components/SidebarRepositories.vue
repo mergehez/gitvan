@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import type { Repo } from '../../shared/gitClient.ts';
+import type { Repo } from '../../shared/types.ts';
 import { useAuth } from '../composables/useAuth.ts';
 import { useRepos } from '../composables/useRepos.ts';
 import { useSettings } from '../composables/useSettings.ts';

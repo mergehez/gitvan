@@ -3,9 +3,9 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+import { appClientRpc } from '../appClient.ts';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
-import { appClientRpc } from '../lib/gitClient';
 import CenteredModal from './CenteredModal.vue';
 
 const repos = useRepos();

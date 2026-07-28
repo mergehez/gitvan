@@ -1,10 +1,10 @@
 import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'fs';
 import type { app as AppService } from '../backend/services/app.ts';
-import { executeCommand } from '../backend/services/subprocess.ts';
+import { executeCommand } from '../electronUtils/executeCommand.ts';
 import { createElectronHelpers, type CreateGitClientRequestApi } from '../electronUtils/helpers.ts';
-import type { NativeCommand } from '../shared/gitClient.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
+import type { NativeCommand } from '../shared/types.ts';
 
 const helpers = createElectronHelpers({
     appName: 'Gitvan',

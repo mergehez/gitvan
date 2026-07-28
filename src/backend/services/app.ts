@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { executeCommand } from '../../electronUtils/executeCommand.js';
 import type {
     AppBootstrapApi,
     BranchesData,
@@ -23,14 +24,13 @@ import type {
     RemoteOperation,
     Repo,
     RepoChangesData,
-} from '../../shared/gitClient.js';
+} from '../../shared/types.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
 import type { RepoRow } from './database.js';
 import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
-import { executeCommand } from './subprocess.js';
 
 const db = useDb();
 
