@@ -1,4 +1,4 @@
-import { executeTextCommand } from './bunSubprocess.js';
+import { executeCommand } from './subprocess.js';
 
 const KEYCHAIN_SERVICE_NAME = 'Gitvan';
 
@@ -7,14 +7,12 @@ function getKeychainAccountName(accountId: number) {
 }
 
 async function runSecurityCommand(args: string[], allowedExitCodes: number[] = [0]) {
-    const [stdout, stderr, exitCode] = await executeTextCommand({
+    const [, stdout] = await executeCommand({
         command: 'security',
         args,
+        allowedExitCodes,
+        getErrorToThrow: (stdout, stderr) => new Error(stderr.trim() || stdout.trim() || 'Keychain command failed.'),
     });
-
-    if (!allowedExitCodes.includes(exitCode)) {
-        throw new Error(stderr.trim() || stdout.trim() || 'Keychain command failed.');
-    }
 
     return stdout.trim();
 }

@@ -25,12 +25,12 @@ import type {
     RepoChangesData,
 } from '../../shared/gitClient.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
-import { executeTextCommand } from './bunSubprocess.js';
 import type { RepoRow } from './database.js';
 import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
+import { executeCommand } from './subprocess.js';
 
 const db = useDb();
 
@@ -250,19 +250,6 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         activeView: raw.activeView === 'history' || raw.activeView === 'explorer' ? raw.activeView : 'changes',
         showBranches: raw.showBranches === true,
     };
-}
-
-async function runProcess(command: string, args: string[], cwd: string) {
-    const [stdout, stderr, exitCode] = await executeTextCommand({
-        command,
-        args,
-        cwd,
-        env: process.env,
-    });
-
-    if (exitCode !== 0) {
-        throw new Error(stderr.trim() || stdout.trim() || `${command} exited with code ${exitCode}.`);
-    }
 }
 
 async function resolveVerifiedManualAccount(params: {
@@ -685,7 +672,14 @@ export const app = {
             const repoPath = join(folderPath, 'repo');
             const scriptPath = join(folderPath, sandbox.script);
             console.log('running: node', [scriptPath], repoPath);
-            await runProcess('node', [scriptPath], repoPath);
+            await executeCommand({
+                command: 'node',
+                args: [scriptPath],
+                cwd: repoPath,
+                env: process.env,
+                allowedExitCodes: [0],
+                getErrorToThrow: (stdout, stderr, exitCode) => new Error(stderr.trim() || stdout.trim() || `node exited with code ${exitCode}.`),
+            });
             const repo = await git.resolveGitRepo(repoPath);
             db.upsertRepo(repo.path, sandbox.folder, groupSandbox!.id);
         }
