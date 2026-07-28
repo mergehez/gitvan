@@ -1,12 +1,12 @@
 import { onMounted, onUnmounted, watch } from 'vue';
-import { gitClientRpc } from '../lib/gitClient.ts';
-import { useSettings } from './useSettings.ts';
-import { useMergeHelper } from './useMerge.ts';
 import type { AppBootstrapApi } from '../../shared/gitClient.ts';
+import { appClientRpc } from '../lib/gitClient.ts';
 import { runWithButtonLoadingIndicatorSilenced } from '../lib/loadingIndicatorState.ts';
-import { initTasks, tasks } from './useTasks.ts';
-import { useRepos } from './useRepos.ts';
 import { _coreState } from './coreState.ts';
+import { useMergeHelper } from './useMerge.ts';
+import { useRepos } from './useRepos.ts';
+import { useSettings } from './useSettings.ts';
+import { initTasks, tasks } from './useTasks.ts';
 
 export async function applyMutation(nextBootstrap: AppBootstrapApi) {
     _coreState.applyBootstrap(nextBootstrap);
@@ -60,7 +60,7 @@ function createGitClientAppState() {
 
             try {
                 await runWithButtonLoadingIndicatorSilenced(async () => {
-                    const nextBootstrap = await gitClientRpc.request.refreshRepos(undefined);
+                    const nextBootstrap = await appClientRpc.request.refreshRepos(undefined);
                     await applyMutation(nextBootstrap);
                 });
             } catch (error) {

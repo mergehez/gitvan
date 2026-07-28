@@ -3,7 +3,7 @@ import type { CloneRepoDefaults, RemoteOperation, Repo } from '../../shared/gitC
 import type { ContextMenuEntry } from '../directives/contextMenuTypes.ts';
 import { useContextMenu } from '../directives/useContextMenu.ts';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries.ts';
-import { gitClientRpc } from '../lib/gitClient.ts';
+import { appClientRpc } from '../lib/gitClient.ts';
 import { isButtonBusyStateSilenced, runWithButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import { writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
@@ -65,10 +65,10 @@ export function _useRepositories() {
             });
         },
         async getCloneRepoDefaults(): Promise<CloneRepoDefaults> {
-            return await gitClientRpc.request.getCloneRepoDefaults(undefined);
+            return await appClientRpc.request.getCloneRepoDefaults(undefined);
         },
         async pickDirectory(options?: { title?: string; buttonLabel?: string; defaultPath?: string }) {
-            return await gitClientRpc.request.pickDirectory(options);
+            return await appClientRpc.request.pickDirectory(options);
         },
         async pickCloneRepoDirectory(defaultPath?: string) {
             const selectedPath = await this.pickDirectory({

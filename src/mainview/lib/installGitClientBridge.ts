@@ -1,2 +1,2 @@
 // Re-exported from Electron bridge via gitClient
-export { gitClientRpc } from './gitClient.ts';
+export { appClientRpc as gitClientRpc } from './gitClient.ts';

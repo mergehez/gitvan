@@ -55,12 +55,11 @@ export async function invoke(method: string, params?: unknown): Promise<any> {
     }
 }
 
-// Minimal stub of the Electrobun bridge shape
-const dev2Bridge = {
-    invoke,
-    onNativeCommand: () => () => {},
-};
-
 export function installDev2GitClientBridge() {
-    (window as any).gitClient = dev2Bridge;
+    // Minimal stub of the Electrobun bridge shape
+    window.electronAPI = {
+        invoke,
+        onNativeCommand: () => () => {},
+        sendDiagnostic: () => undefined,
+    };
 }

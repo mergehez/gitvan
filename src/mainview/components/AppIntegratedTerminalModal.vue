@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
-import { gitClientRpc } from '../lib/gitClient';
+import { appClientRpc } from '../lib/gitClient';
 import CenteredModal from './CenteredModal.vue';
 
 const repos = useRepos();
@@ -58,7 +58,7 @@ function scheduleTerminalResize() {
     requestAnimationFrame(() => {
         fitAddon.fit();
 
-        void gitClientRpc.request.resizeIntegratedTerminalSession({
+        void appClientRpc.request.resizeIntegratedTerminalSession({
             sessionId,
             cols: terminal.cols,
             rows: terminal.rows,
@@ -95,7 +95,7 @@ function createTerminalSurface() {
             return;
         }
 
-        void gitClientRpc.request.writeIntegratedTerminalSession({
+        void appClientRpc.request.writeIntegratedTerminalSession({
             sessionId,
             data,
         });
@@ -126,7 +126,7 @@ async function startTerminalSession(repoId: number, terminalPath?: string) {
     exitCode.value = undefined;
 
     try {
-        const session = await gitClientRpc.request.createIntegratedTerminalSession({
+        const session = await appClientRpc.request.createIntegratedTerminalSession({
             repoId,
             cols: terminal.cols,
             rows: terminal.rows,
@@ -150,7 +150,7 @@ async function stopTerminalSession() {
     exitCode.value = undefined;
 
     if (sessionId) {
-        await gitClientRpc.request.closeIntegratedTerminalSession({ sessionId });
+        await appClientRpc.request.closeIntegratedTerminalSession({ sessionId });
     }
 
     disposeTerminalSurface();

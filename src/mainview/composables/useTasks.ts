@@ -1,7 +1,7 @@
 import { reactive, ref } from 'vue';
 import type { GitClientRequestApi as Api } from '../../electron/bridge.ts';
 import { apiMethods } from '../../shared/apiMethods';
-import { gitClientRpc } from '../lib/gitClient';
+import { appClientRpc } from '../lib/gitClient';
 
 const runningOperations = reactive({} as Record<string, number | undefined>); // key => timestamp
 const errors = reactive({} as Record<string, string | undefined>);
@@ -17,9 +17,9 @@ function updateLongRunningOperations() {
 
 export function useAsyncTask2<TMethod extends Api[keyof Api], TParams = Parameters<TMethod>[0], TResult = Awaited<ReturnType<TMethod>>>(
     methodName: string,
-    getMethod: (api: typeof gitClientRpc.request) => TMethod
+    getMethod: (api: typeof appClientRpc.request) => TMethod
 ) {
-    const method = getMethod(gitClientRpc.request);
+    const method = getMethod(appClientRpc.request);
 
     async function run(ps: TParams, identifier?: string): Promise<TResult> {
         const finalKey = identifier ? `${methodName}:${identifier}` : (methodName as string);

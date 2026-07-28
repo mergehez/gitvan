@@ -213,7 +213,7 @@ async function resetRealAppState(resetSandboxes = false) {
     merge.resolvedMergeConflictPaths = new Set<string>();
 
     localStorage.clear();
-    (window as any).gitClient = {
+    window.electronAPI = {
         async invoke(method: string, params?: unknown) {
             if (method in realAppMethods) {
                 return await (
@@ -229,6 +229,7 @@ async function resetRealAppState(resetSandboxes = false) {
         onNativeCommand() {
             return () => undefined;
         },
+        sendDiagnostic: () => undefined,
     };
 }
 
