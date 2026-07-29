@@ -58,7 +58,8 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 
         const handlers: any = {};
         for (const name of apiMethods as any) {
-            handlers[name] = async (_event: Electron.IpcMainInvokeEvent, ps?: unknown) => callApiPost(name as string, ps);
+            // handlers[name] = async (_event: Electron.IpcMainInvokeEvent, ps?: unknown) => callApiPost(name as string, ps);
+            handlers[name] = async (ps?: unknown) => callApiPost(name as string, ps);
         }
 
         const nativeMethods = getNativeMethods(mainWindow, callApiPost);
