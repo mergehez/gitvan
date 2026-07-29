@@ -1,3 +1,5 @@
+import type { ChildProcess } from 'child_process';
+import { exec, execSync } from 'child_process';
 import fs from 'fs';
 import { resolve } from 'path';
 import type { PluginOption } from 'vite';
@@ -37,40 +39,104 @@ function generateApiMethods(paths: Options) {
 
     fs.writeFileSync(paths.apiMethods, content);
 }
-// console.log('Exporting backend + native method names to src/shared/apiMethods.ts...', appPath, mainPath);
+
+const buildElectronAssets = (paths: Options) => {
+    const cfgs = [
+        { src: paths.main, out: 'dist-electron/main.cjs', external: ['electron', 'better-sqlite3'] },
+        { src: paths.preload, out: 'dist-electron/preload.cjs', external: ['electron'] },
+        { src: paths.devServer, out: 'dist-electron/backend.cjs', external: ['better-sqlite3'] },
+    ];
+    console.log('⚡ [Rolldown] Compiling Electron main, preload, and backend targets...');
+    for (const cfg of cfgs) {
+        const externalFlags = cfg.external.map((id) => `-e ${id}`).join(' ');
+        execSync(`bunx rolldown ${cfg.src} --file=${cfg.out} ${externalFlags} --platform=node --format=cjs --no-code-splitting`, { stdio: 'inherit' });
+    }
+};
+
+let electronProcess: ChildProcess | null = null;
+
+function watchDevServer(server: any, paths: Options) {
+    const isDesktopMode = server.config.mode === 'desktop';
+
+    if (!isDesktopMode) {
+        console.log('🌐 Browser Dev Mode active. Mounting devServer via Vite ModuleRunner...');
+        server.httpServer?.once('listening', async () => {
+            try {
+                const backendRunner = (server.environments as any).ssr?.runner;
+                if (backendRunner) {
+                    await backendRunner.import(paths.devServer);
+                    console.log('🚀 Backend devServer successfully instantiated inside Vite.');
+                } else {
+                    console.warn('⚠️ SSR environment runner not found.');
+                }
+            } catch (error) {
+                console.error('❌ Vite failed to load your background devServer script:', error);
+            }
+        });
+    } else {
+        console.log('🖥️  Desktop Dev Mode active. Preparing asset dependencies...');
+        buildElectronAssets(paths);
+
+        server.httpServer?.once('listening', () => {
+            const addressInfo = server.httpServer?.address();
+            if (addressInfo) {
+                console.log('📱 Frontend asset stream active. Instantiating Electron window...');
+
+                electronProcess = exec('electron .', {
+                    env: { ...process.env, VITE_DEV2: 'true' },
+                });
+
+                electronProcess.on('error', (err) => {
+                    // Fallback restoration in case of an instant boot failure
+                    // fs.writeFileSync(packageJsonPath, rawPackageJson);
+                    console.error('Electron run failed:', err);
+                });
+            }
+        });
+    }
+
+    process.on('exit', () => {
+        electronProcess?.kill();
+    });
+}
+
 const electronPlugin = (paths: Options): PluginOption => {
     paths.app = resolve(paths.app);
     paths.main = resolve(paths.main);
     paths.preload = resolve(paths.preload);
     paths.devServer = resolve(paths.devServer);
     paths.apiMethods = resolve(paths.apiMethods);
+
     return {
         name: 'export-api-methods',
+
+        config() {
+            return {
+                environments: {
+                    ssr: {
+                        resolve: {
+                            conditions: ['node'],
+                        },
+                    },
+                },
+            };
+        },
         buildStart() {
-            // console.log('Exporting backend + native method names to src/shared/apiMethods.ts...', appPath, mainPath);
             generateApiMethods(paths);
         },
         configureServer(server) {
             server.watcher.add([paths.app, paths.main]);
             server.watcher.on('change', (file) => {
-                console.log(file);
                 if (file === paths.app || file === paths.main) {
-                    // console.log('Detected change in app.ts or main.ts, regenerating apiMethods.ts...');
                     generateApiMethods(paths);
                 }
             });
+
+            watchDevServer(server, paths);
         },
+
         closeBundle() {
-            const { execSync } = require('child_process');
-            const cfgs = [
-                { src: paths.main, out: 'dist-electron/main.cjs', external: 'electron,better-sqlite3' },
-                { src: paths.preload, out: 'dist-electron/preload.cjs', external: 'electron' },
-                { src: paths.devServer, out: 'dist-electron/backend.cjs', external: 'better-sqlite3' },
-            ];
-            console.log('Bundling Electron main, preload, and backend using rolldown...');
-            for (const cfg of cfgs) {
-                execSync(`bunx rolldown ${cfg.src} --file=${cfg.out} --external=${cfg.external} --platform=node --format=cjs --no-code-splitting`, { stdio: 'inherit' });
-            }
+            buildElectronAssets(paths);
         },
     };
 };
