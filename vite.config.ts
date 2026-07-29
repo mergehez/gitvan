@@ -2,16 +2,22 @@
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
-import electronApiMethods from './vite-export-api-methods.ts';
+import electronApiMethods from './src/electronUtils/vite-plugin';
 
 export default defineConfig({
     base: './',
-    plugins: [vue(), tailwindcss(), electronApiMethods],
+    plugins: [
+        vue(),
+        tailwindcss(),
+        electronApiMethods({
+            app: 'src/backend/services/app.ts',
+            main: 'src/electron/main.ts',
+            preload: 'src/electron/preload.ts',
+            devServer: 'src/backend/devServer.ts',
+            apiMethods: 'src/shared/apiMethods.ts',
+        }),
+    ],
     root: 'src/mainview',
-    build: {
-        outDir: '../../dist',
-        emptyOutDir: true,
-    },
     server: {
         host: '127.0.0.1',
         port: 5173,
