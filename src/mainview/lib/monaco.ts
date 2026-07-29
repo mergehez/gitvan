@@ -1,14 +1,9 @@
 // import type { MonacoEditor } from '@guolao/vue-monaco-editor';
 import type * as MonacoEditorModule from 'monaco-editor';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { fileIconAndLanguageByPath } from './utils';
 
 type MonacoModule = typeof MonacoEditorModule;
-type MonacoWorkerFactory = new () => Worker;
+type MonacoWorkerFactory = () => Worker;
 
 let monacoConfigured = false;
 let monacoEnvironmentConfigured = false;
@@ -20,23 +15,25 @@ export function configureMonacoEnvironment() {
     }
 
     const workerFactories: Record<string, MonacoWorkerFactory> = {
-        json: jsonWorker,
-        css: cssWorker,
-        scss: cssWorker,
-        less: cssWorker,
-        html: htmlWorker,
-        handlebars: htmlWorker,
-        razor: htmlWorker,
-        typescript: tsWorker,
-        javascript: tsWorker,
+        json: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/json/json.worker.js', import.meta.url), { type: 'module' }),
+        css: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/css/css.worker.js', import.meta.url), { type: 'module' }),
+        scss: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/css/css.worker.js', import.meta.url), { type: 'module' }),
+        less: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/css/css.worker.js', import.meta.url), { type: 'module' }),
+        html: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/html/html.worker.js', import.meta.url), { type: 'module' }),
+        handlebars: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/html/html.worker.js', import.meta.url), { type: 'module' }),
+        razor: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/html/html.worker.js', import.meta.url), { type: 'module' }),
+        typescript: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/typescript/ts.worker.js', import.meta.url), { type: 'module' }),
+        javascript: () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/language/typescript/ts.worker.js', import.meta.url), { type: 'module' }),
     };
+
+    const createEditorWorker = () => new Worker(new URL('../../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url), { type: 'module' });
 
     Object.assign(globalThis, {
         MonacoEnvironment: {
             getWorker(_workerId: string, label: string) {
-                const WorkerFactory = workerFactories[label] ?? editorWorker;
+                const WorkerFactory = workerFactories[label] ?? createEditorWorker;
 
-                return new WorkerFactory();
+                return WorkerFactory();
             },
         },
     });
