@@ -76,13 +76,13 @@ This runs the Electrobun stable build wrapper, ensures the macOS iconset exists 
 For a signed local build:
 
 ```bash
-bun run ./scripts/build.ts --signed
+bun do build --signed
 ```
 
 For a signed and notarized local build:
 
 ```bash
-bun run ./scripts/build.ts --notarize
+bun do build --notarize
 ```
 
 ## Release Hygiene
@@ -90,7 +90,7 @@ bun run ./scripts/build.ts --notarize
 Run the release audit:
 
 ```bash
-bun run release:audit
+bun do audit
 ```
 
 This audit scans tracked files for publish-sensitive text, shows the current git status, and fails only when it finds actual blockers.
@@ -112,7 +112,7 @@ Recommended flow:
 1. Update the version in `package.json`.
 2. Update `CHANGELOG.md` for the release.
 3. Run `bun install` if dependencies changed.
-4. Run `bun run release:audit`.
+4. Run `bun do audit`.
 5. Run `bun run release:validate`.
 6. Build the public artifact with `bun run release:mac`.
 7. Confirm the app bundle exists under `build/` and the DMG exists under `artifacts/`.

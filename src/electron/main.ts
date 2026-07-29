@@ -2,14 +2,11 @@ import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'fs';
 import type { app as AppService } from '../backend/services/app.ts';
 import { executeCommand } from '../electronUtils/executeCommand.ts';
-import { createElectronHelpers, type CreateGitClientRequestApi } from '../electronUtils/helpers.ts';
+import { createElectronHelpers, type CreateGitClientRequestApi } from '../electronUtils/mainProloadHelpers.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
 import type { NativeCommand } from '../shared/types.ts';
 
 const helpers = createElectronHelpers({
-    appName: 'Gitvan',
-    defaultApiPort: '5176',
-    defaultFrontendPort: '5173',
     apiMethods: apiMethods as unknown as typeof AppService,
     getNativeMethods: (mainWindow, apiPost) => ({
         pickEditorApplication: async () => {

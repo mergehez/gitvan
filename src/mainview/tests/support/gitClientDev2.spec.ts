@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { appConfig } from '../../../electronUtils/helpers';
 import { invoke, resolveDev2ApiBase } from '../../appClientBrowser';
 
 describe('gitClientDev2', () => {
@@ -13,7 +14,7 @@ describe('gitClientDev2', () => {
     });
 
     it('builds a direct backend url from the current hostname by default', () => {
-        expect(resolveDev2ApiBase()).toBe(`http://${window.location.hostname}:5176/api`);
+        expect(resolveDev2ApiBase()).toBe(`${appConfig.apiBaseUrl}/api`);
     });
 
     it('uses the configured backend base when provided', () => {

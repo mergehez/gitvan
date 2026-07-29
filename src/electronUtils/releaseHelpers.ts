@@ -4,15 +4,16 @@ import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile, cp, mkdir, mkdtemp, readdir, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import pkg from '../../package.json' with { type: 'json' };
+import { appConfig } from './helpers';
 
 type EnvMap = Record<string, string>;
 const appName = pkg.productName;
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(__dirname);
+// const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = process.cwd();
 const scriptPath = fileURLToPath(import.meta.url);
 const projectEnvPath = join(projectRoot, '.env');
 const assetsDir = join(projectRoot, 'assets');
@@ -21,11 +22,7 @@ const iconIcnsPath = join(assetsDir, 'icon.icns');
 const iconsetDir = join(assetsDir, 'icon.iconset');
 const buildTargetDir = join(projectRoot, 'build', `mac-${process.arch}`);
 const artifactsDir = join(projectRoot, 'build');
-const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')) as {
-    name: string;
-    productName?: string;
-};
-const appBundleName = `${packageJson.productName || packageJson.name}.app`;
+const appBundleName = appConfig.appName;
 const requiredIconFiles = [
     'icon_16x16.png',
     'icon_16x16@2x.png',

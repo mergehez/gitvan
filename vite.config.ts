@@ -2,6 +2,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
+import { appConfig } from './src/electronUtils/helpers';
 import electronApiMethods from './src/electronUtils/vite-plugin';
 
 export default defineConfig({
@@ -15,6 +16,7 @@ export default defineConfig({
             preload: 'src/electron/preload.ts',
             devServer: 'src/backend/devServer.ts',
             apiMethods: 'src/shared/apiMethods.ts',
+            externalize: ['node-pty'],
         }),
     ],
     root: 'src/mainview',
@@ -23,16 +25,16 @@ export default defineConfig({
     },
     server: {
         host: '127.0.0.1',
-        port: 5173,
+        port: appConfig.vuePort,
         strictPort: true,
         proxy: {
             '/api': {
-                target: 'http://127.0.0.1:5176',
+                target: appConfig.apiBaseUrl,
                 changeOrigin: true,
             },
         },
         watch: {
-            ignored: ['**/sandbox/**', 'scripts/**'],
+            ignored: ['**/sandbox/**'],
         },
     },
     test: {

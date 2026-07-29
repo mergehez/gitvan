@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 
 status=0
 tmp_matches_file="$(mktemp)"
-audit_script_path="scripts/release-audit.sh"
+audit_script_path="src/electronUtils/release-audit.sh"
 benign_lockfile_glob_deprecation='"deprecated": "Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me"'
 cleanup() {
     rm -f "$tmp_matches_file"

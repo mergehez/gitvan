@@ -5,9 +5,9 @@
  * Activated when VITE_DEV2=true.
  */
 
-import { createBrowserOnlyAppClientPpc } from '../electronUtils/mainviewHelpers';
+import { createBrowserOnlyAppClientPpc } from '../electronUtils/browserOnlyHelpers';
 
-const server = createBrowserOnlyAppClientPpc('5176');
+const server = createBrowserOnlyAppClientPpc();
 
 export const resolveDev2ApiBase = server.resolveDev2ApiBase;
 export const invoke = server.invoke;

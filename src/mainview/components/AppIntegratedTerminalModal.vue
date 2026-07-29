@@ -6,6 +6,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import { appClientRpc } from '../appClient.ts';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
+import { toast } from '../composables/useToast.ts';
 import CenteredModal from './CenteredModal.vue';
 
 const repos = useRepos();
@@ -137,6 +138,11 @@ async function startTerminalSession(repoId: number, terminalPath?: string) {
         currentWorkingDirectory.value = session.cwd;
         shellPath.value = session.shellPath;
         scheduleTerminalResize();
+    } catch (error) {
+        modalOpen.value = false;
+        let msg = (error as Error).message || 'Failed to start terminal session';
+        console.log(error, msg);
+        toast.showErrorToast((error as Error).message);
     } finally {
         isStarting.value = false;
     }

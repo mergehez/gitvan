@@ -3,6 +3,7 @@ import { exec, execSync } from 'child_process';
 import fs from 'fs';
 import { resolve } from 'path';
 import type { PluginOption } from 'vite';
+import { appConfig } from './helpers';
 
 type Options = {
     app: string;
@@ -10,6 +11,8 @@ type Options = {
     preload: string;
     devServer: string;
     apiMethods: string;
+
+    externalize?: string[];
 };
 
 function generateApiMethods(paths: Options) {
@@ -42,7 +45,7 @@ function generateApiMethods(paths: Options) {
 
 const buildElectronAssets = (paths: Options) => {
     const cfgs = [
-        { src: paths.main, out: 'dist-electron/main.cjs', external: ['electron', 'better-sqlite3'] },
+        { src: paths.main, out: 'dist-electron/main.cjs', external: ['electron', 'better-sqlite3', ...(paths.externalize || [])] },
         { src: paths.preload, out: 'dist-electron/preload.cjs', external: ['electron'] },
         { src: paths.devServer, out: 'dist-electron/backend.cjs', external: ['better-sqlite3'] },
     ];
@@ -55,7 +58,21 @@ const buildElectronAssets = (paths: Options) => {
 
 let electronProcess: ChildProcess | null = null;
 
+function killStaleServers(...ports: number[]) {
+    for (const port of ports) {
+        try {
+            execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, { stdio: 'ignore' });
+        } catch {
+            // port already free, nothing to do
+        }
+    }
+}
+
 function watchDevServer(server: any, paths: Options) {
+    // Kill any leftover processes on the API and dev-server ports so a fresh
+    // backend / Electron instance starts without port conflicts or stale code.
+    killStaleServers(appConfig.apiPort, appConfig.vuePort);
+
     const isDesktopMode = server.config.mode === 'desktop';
 
     if (!isDesktopMode) {

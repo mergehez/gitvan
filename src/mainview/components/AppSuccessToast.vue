@@ -20,5 +20,12 @@ import IconButton from './IconButton.vue';
                 <IconButton severity="raised" @click="toast.dismissSuccessToast()" icon="icon-[mdi--close] text-xl text-green-700" />
             </div>
         </Alert>
+        <Alert v-else-if="toast.errorToastMessage" severity="danger" class="pointer-events-auto fixed right-4 top-4 z-50 max-w-sm w-auto">
+            <div class="flex items-start gap-2">
+                <span class="icon icon-[mdi--alert-circle] text-2xl text-red-500 shrink-0"></span>
+                <p class="flex-1">{{ toast.errorToastMessage }}</p>
+                <IconButton severity="raised" @click="toast.dismissErrorToast()" icon="icon-[mdi--close] text-xl text-red-700" />
+            </div>
+        </Alert>
     </Transition>
 </template>
