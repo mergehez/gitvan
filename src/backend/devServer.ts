@@ -6,7 +6,7 @@
 import express from 'express';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { GitClientRequestApi as Api } from '../electron/bridge.ts';
+import type { GitClientRequestApi } from '../electron/main.ts';
 import { apiMethods } from '../shared/apiMethods';
 import { app } from './services/app';
 import { useDb } from './services/database';
@@ -21,7 +21,7 @@ const methodMap: Record<string, (ps?: any) => any> = {
     // getBootstrap: () => app.getBootstrap(),
     // deleteTrackedRepoGroup: (ps: any) => app.deleteTrackedRepoGroup(ps),
     ...(apiMethods.reduce((acc, methodName) => {
-        acc[methodName as keyof Api] = app[methodName as keyof typeof app] as any;
+        acc[methodName as keyof GitClientRequestApi] = app[methodName as keyof typeof app] as any;
         return acc;
     }, {} as any) as Record<string, (ps?: any) => any>),
 
@@ -42,8 +42,6 @@ const methodMap: Record<string, (ps?: any) => any> = {
     closeIntegratedTerminalSession: async () => undefined,
     onNativeCommand: () => () => {},
 };
-
-// console.log(Object.keys(methodMap));
 
 const REQUEST_TIMEOUT_MS = 65_000;
 const serverApp = express();
