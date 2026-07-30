@@ -195,14 +195,16 @@ const diffOptions = computed<DiffOptions>(() => {
 let hunkActionsWrapper: HTMLElement;
 
 /**
- * Build a minimal unified-diff patch that covers only a single change block
- * (one @pierre/diffs ChangeContent), instead of extracting a whole git hunk
- * which may group many unrelated changes together.
+ * Build a unified-diff patch covering only a single change block
+ * (one @pierre/diffs ChangeContent), using the original git patch header.
  *
- * The patch uses the file header from the full git patch and constructs a
- * hunk with just the deleted/added lines of this block.  With --recount and
- * --unidiff-zero flags in the backend, git tolerates approximate line numbers
- * and zero context lines.
+ * The @@-header uses deletionLineIndex for the old-file side and
+ * additionLineIndex for the new-file side.  These can differ when prior
+ * partial operations have shifted the file content (e.g. after staging
+ * one change, the index has different line numbers than HEAD).
+ *
+ * With --recount and --unidiff-zero flags in the backend, git tolerates
+ * approximate positions and recalculates counts from the patch content.
  */
 function buildChangeBlockPatch(
     fullPatch: string,
@@ -212,41 +214,52 @@ function buildChangeBlockPatch(
     if (!fullPatch) return '';
     if (!rendered) return '';
 
-    // Extract the file header (everything before the first @@)
     const parts = fullPatch.split(/^@@ /m);
     const header = parts[0];
     if (!header) return '';
 
-    // Use deletionLineIndex + 1 as the line number for both old and new sides.
-    // With --recount and --unidiff-zero, git tolerates approximate positions and
-    // recalculates counts from the actual patch content.
-    const line = rawHunk.deletionLineIndex + 1;
-    const hunkHeader = `@@ -${line},${rawHunk.deletions} +${line},${rawHunk.additions} @@`;
+    const oldLine = rawHunk.deletionLineIndex + 1;
+    const newLine = rawHunk.additionLineIndex + 1;
 
-    const patchLines: string[] = [hunkHeader];
+    // Build the hunk content: context lines, then deletions, then additions.
+    const ctxBefore: string[] = [];
+    const ctxAfter: string[] = [];
 
-    // For pure additions (no deleted lines to anchor on), include one context
-    // line before the insertion point so git can locate the right position.
-    if (rawHunk.deletions === 0 && rawHunk.additions > 0 && rawHunk.deletionLineIndex > 0) {
+    // 1–2 context lines before the change so git can anchor the hunk
+    // when applying in reverse (unstage / discard).
+    if (rawHunk.deletionLineIndex > 1) {
+        const ctx = rendered.deletionLines[rawHunk.deletionLineIndex - 2];
+        if (ctx !== undefined) ctxBefore.push(` ${ctx.replace(/\n$/, '')}`);
+    }
+    if (rawHunk.deletionLineIndex > 0) {
         const ctx = rendered.deletionLines[rawHunk.deletionLineIndex - 1];
-        if (ctx !== undefined) {
-            patchLines.push(` ${ctx.replace(/\n$/, '')}`);
-        }
+        if (ctx !== undefined) ctxBefore.push(` ${ctx.replace(/\n$/, '')}`);
     }
 
-    // Deleted lines
+    const deletions: string[] = [];
     for (let d = 0; d < rawHunk.deletions; d++) {
         const content = rendered.deletionLines[rawHunk.deletionLineIndex + d];
-        patchLines.push(`-${(content ?? '').replace(/\n$/, '')}`);
+        deletions.push(`-${(content ?? '').replace(/\n$/, '')}`);
     }
 
-    // Added lines
+    const additions: string[] = [];
     for (let a = 0; a < rawHunk.additions; a++) {
         const content = rendered.additionLines[rawHunk.additionLineIndex + a];
-        patchLines.push(`+${(content ?? '').replace(/\n$/, '')}`);
+        additions.push(`+${(content ?? '').replace(/\n$/, '')}`);
     }
 
-    return header + patchLines.join('\n') + '\n';
+    // 1 context line after the change
+    if (rawHunk.deletionLineIndex + rawHunk.deletions < rendered.deletionLines.length) {
+        const ctx = rendered.deletionLines[rawHunk.deletionLineIndex + rawHunk.deletions];
+        if (ctx !== undefined) ctxAfter.push(` ${ctx.replace(/\n$/, '')}`);
+    }
+
+    const ctxLen = ctxBefore.length + ctxAfter.length;
+    const oldCount = ctxLen + rawHunk.deletions;
+    const newCount = ctxLen + rawHunk.additions;
+    const hunkHeader = `@@ -${oldLine},${oldCount} +${newLine},${newCount} @@`;
+
+    return header + hunkHeader + '\n' + [...ctxBefore, ...deletions, ...additions, ...ctxAfter].join('\n') + '\n';
 }
 
 function onHunkButtonHover(e: MouseEvent) {

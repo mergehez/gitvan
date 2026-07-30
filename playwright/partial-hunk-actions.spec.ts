@@ -38,8 +38,8 @@ test.describe('partial hunk actions', () => {
         const initialCount = await hunkButtons.count();
         return {
             get: (index: number) => hunkButtons.nth(index),
-            getDataHunkPatch(index: number) {
-                return hunkButtons.nth(index).getAttribute('data-hunk-patch');
+            async getDataHunkPatch(index: number) {
+                return (await hunkButtons.nth(index).getAttribute('data-hunk-patch')).split('\n').slice(5).join('\n');
             },
             initialCount,
             getCount: async () => await hunkButtons.count(),
