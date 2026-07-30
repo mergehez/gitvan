@@ -276,5 +276,31 @@ test.describe('partial hunk actions', () => {
         // After unstaging the last hunk, the staged file should remain with 1 hunk
         // Verify by checking the staged file still has one hunk
         expect(await stagedHunks.getCount()).toBe(stagedInitialCount - 1);
+
+        // let's also discard a hunk from the unstaged file to ensure it works after staging/unstaging
+        const unstagedFile2 = getFile(page, 'unstaged', 'stub.txt');
+        await expect(unstagedFile2).toBeVisible({ timeout: 5000 });
+        await unstagedFile2.click();
+        await page.waitForTimeout(1000);
+
+        diffRoot = page.getByTestId('diffs-diff-editor-root');
+        await expect(diffRoot).toBeVisible({ timeout: 5000 });
+
+        const unstagedHunks2 = await getHunkButtons(diffRoot);
+        const unstagedCount2 = unstagedHunks2.initialCount;
+
+        // Hover the first hunk button and click "Discard Change"
+        const toDiscard = unstagedHunks2.get(5);
+        await expect(toDiscard).toBeVisible({ timeout: 8000 });
+        await toDiscard.hover();
+        await page.waitForTimeout(500);
+
+        const discardBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /discard change/i });
+        await expect(discardBtn).toBeVisible({ timeout: 3000 });
+        await discardBtn.click();
+        await page.waitForTimeout(2000);
+
+        expect(await getError(page)).toBeFalsy();
+        expect(await unstagedHunks2.getCount()).toBe(unstagedCount2 - 1);
     });
 });
