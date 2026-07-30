@@ -38,6 +38,9 @@ test.describe('partial hunk actions', () => {
         const initialCount = await hunkButtons.count();
         return {
             get: (index: number) => hunkButtons.nth(index),
+            getDataHunkPatch(index: number) {
+                return hunkButtons.nth(index).getAttribute('data-hunk-patch');
+            },
             initialCount,
             getCount: async () => await hunkButtons.count(),
         };
@@ -196,7 +199,7 @@ test.describe('partial hunk actions', () => {
         await resetSandboxAndOpenRepo(page);
 
         // ── Step 1: Stage the second and fourth hunks from unstaged.txt ──
-        const unstagedFile = getFile(page, 'unstaged', 'second.txt');
+        const unstagedFile = getFile(page, 'unstaged', 'stub.txt');
         await expect(unstagedFile).toBeVisible({ timeout: 5000 });
         await unstagedFile.click();
         await page.waitForTimeout(1000);
@@ -207,6 +210,9 @@ test.describe('partial hunk actions', () => {
         // --- Stage the 2nd hunk (index 1) ---
         let unstagedHunks = await getHunkButtons(diffRoot);
         let unstagedCount = unstagedHunks.initialCount;
+
+        const fourthHunkPatch = await unstagedHunks.getDataHunkPatch(3);
+        expect(fourthHunkPatch).toBeTruthy();
 
         const secondHunk = unstagedHunks.get(1);
         await expect(secondHunk).toBeVisible({ timeout: 8000 });
@@ -227,6 +233,9 @@ test.describe('partial hunk actions', () => {
 
         const fourthHunk = unstagedHunks.get(2);
         await expect(fourthHunk).toBeVisible({ timeout: 8000 });
+        const fourthHunkPatchAfter = await unstagedHunks.getDataHunkPatch(2);
+        expect(fourthHunkPatchAfter).toBeTruthy();
+        await expect(fourthHunkPatchAfter).toBe(fourthHunkPatch);
         await fourthHunk.hover();
         await page.waitForTimeout(500);
 
@@ -239,7 +248,7 @@ test.describe('partial hunk actions', () => {
         expect(await unstagedHunks.getCount()).toBe(unstagedCount - 1);
 
         // ── Step 2: Now open the staged file and unstage the last hunk ──
-        const stagedFile = getFile(page, 'staged', 'second.txt');
+        const stagedFile = getFile(page, 'staged', 'stub.txt');
         await expect(stagedFile).toBeVisible({ timeout: 5000 });
         await stagedFile.click();
         await page.waitForTimeout(1000);

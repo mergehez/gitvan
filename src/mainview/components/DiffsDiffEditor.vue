@@ -114,8 +114,12 @@ function createRenderedDiff(name: string, original: string, modified: string, ig
         return { renderedDiff: null, hasVisibleChanges: false, hideDecorations };
     }
 
-    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified));
-
+    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified), {
+        // callback(patch) {
+        // console.log('patch', patch);
+        // },
+    });
+    console.log('hunk count', rawDiff.hunks.length);
     const rawHunks: (ChangeContent & { hunkSpecs: string; diffsHunkIdx: number })[] = [];
 
     for (let hunkIdx = 0; hunkIdx < rawDiff.hunks.length; hunkIdx++) {
@@ -190,14 +194,59 @@ const diffOptions = computed<DiffOptions>(() => {
 
 let hunkActionsWrapper: HTMLElement;
 
-/** Extract a single hunk from a unified diff patch by splitting at `@@` headers. */
-function extractNthHunkPatch(fullPatch: string, hunkIndex: number): string {
+/**
+ * Build a minimal unified-diff patch that covers only a single change block
+ * (one @pierre/diffs ChangeContent), instead of extracting a whole git hunk
+ * which may group many unrelated changes together.
+ *
+ * The patch uses the file header from the full git patch and constructs a
+ * hunk with just the deleted/added lines of this block.  With --recount and
+ * --unidiff-zero flags in the backend, git tolerates approximate line numbers
+ * and zero context lines.
+ */
+function buildChangeBlockPatch(
+    fullPatch: string,
+    rawHunk: { deletions: number; deletionLineIndex: number; additions: number; additionLineIndex: number },
+    rendered: { deletionLines: string[]; additionLines: string[] }
+): string {
     if (!fullPatch) return '';
-    // Split at each hunk header — parts[0] is the file header, parts[N+1] is the Nth hunk
+    if (!rendered) return '';
+
+    // Extract the file header (everything before the first @@)
     const parts = fullPatch.split(/^@@ /m);
-    const targetIdx = hunkIndex + 1;
-    if (targetIdx >= parts.length) return '';
-    return parts[0] + '@@ ' + parts[targetIdx];
+    const header = parts[0];
+    if (!header) return '';
+
+    // Use deletionLineIndex + 1 as the line number for both old and new sides.
+    // With --recount and --unidiff-zero, git tolerates approximate positions and
+    // recalculates counts from the actual patch content.
+    const line = rawHunk.deletionLineIndex + 1;
+    const hunkHeader = `@@ -${line},${rawHunk.deletions} +${line},${rawHunk.additions} @@`;
+
+    const patchLines: string[] = [hunkHeader];
+
+    // For pure additions (no deleted lines to anchor on), include one context
+    // line before the insertion point so git can locate the right position.
+    if (rawHunk.deletions === 0 && rawHunk.additions > 0 && rawHunk.deletionLineIndex > 0) {
+        const ctx = rendered.deletionLines[rawHunk.deletionLineIndex - 1];
+        if (ctx !== undefined) {
+            patchLines.push(` ${ctx.replace(/\n$/, '')}`);
+        }
+    }
+
+    // Deleted lines
+    for (let d = 0; d < rawHunk.deletions; d++) {
+        const content = rendered.deletionLines[rawHunk.deletionLineIndex + d];
+        patchLines.push(`-${(content ?? '').replace(/\n$/, '')}`);
+    }
+
+    // Added lines
+    for (let a = 0; a < rawHunk.additions; a++) {
+        const content = rendered.additionLines[rawHunk.additionLineIndex + a];
+        patchLines.push(`+${(content ?? '').replace(/\n$/, '')}`);
+    }
+
+    return header + patchLines.join('\n') + '\n';
 }
 
 function onHunkButtonHover(e: MouseEvent) {
@@ -270,10 +319,11 @@ function onHunkButtonHover(e: MouseEvent) {
 
 function addHunkElsToDom(label: string, addLine: HTMLElement, i: number) {
     const rendered = diffState.value.renderedDiff;
-    const rawHunk = rendered?.rawHunks[i];
-    const diffsHunkIdx = rawHunk?.diffsHunkIdx ?? 0;
+    if (!rendered) return;
+    const rawHunk = rendered.rawHunks[i];
+    if (!rawHunk) return;
     const fullPatch = props.hunkActionsConfig?.patch ?? '';
-    const hunkPatch = extractNthHunkPatch(fullPatch, diffsHunkIdx);
+    const hunkPatch = buildChangeBlockPatch(fullPatch, rawHunk, rendered);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = '⋯';

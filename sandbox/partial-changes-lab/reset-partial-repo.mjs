@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoDir = join(__dirname, 'repo');
+const stubsDir = join(__dirname, 'stubs');
 
 rmSync(repoDir, { recursive: true, force: true });
 mkdirSync(repoDir, { recursive: true });
@@ -43,14 +44,16 @@ function applyChanges(lines, changes) {
 }
 const firstFile = 'first.txt';
 const secondFile = 'second.txt';
+const stubFile = 'stub.txt';
 
 // ── Commit clean baseline ──
 writeFileSync(join(repoDir, secondFile), makeLines().join('\n') + '\n', 'utf8');
 writeFileSync(join(repoDir, firstFile), makeLines().join('\n') + '\n', 'utf8');
-git(['add', secondFile, firstFile]);
+writeFileSync(join(repoDir, stubFile), readFileSync(join(stubsDir, 'old.txt'), 'utf8') + '\n', 'utf8');
+git(['add', secondFile, firstFile, stubFile]);
 git(['commit', '-m', 'Initial baseline']);
 
-// ── unstaged file: overwrite with changes ──
+// ── second file: overwrite with changes ──
 const u = makeLines();
 applyChanges(u, [
     { type: 'modify', at: 2 },
@@ -65,7 +68,7 @@ applyChanges(u, [
 ]);
 writeFileSync(join(repoDir, secondFile), u.join('\n') + '\n', 'utf8');
 
-// ── staged file: overwrite with changes, then stage ──
+// ── first file: overwrite with changes, then stage ──
 const s = makeLines();
 applyChanges(s, [
     { type: 'modify', at: 3 },
@@ -77,6 +80,9 @@ applyChanges(s, [
 ]);
 writeFileSync(join(repoDir, firstFile), s.join('\n') + '\n', 'utf8');
 git(['add', firstFile]);
+
+// stub file: overwrite with changes, then stage
+writeFileSync(join(repoDir, stubFile), readFileSync(join(stubsDir, 'new.txt'), 'utf8') + '\n', 'utf8');
 
 // ── verify ──
 function countHunks(file) {
@@ -93,4 +99,6 @@ console.log(`${secondFile} — 9 hunks (3× modify, 3× delete, 3× add):`);
 console.log(`  git diff --unified=0 -- ${secondFile}  →  ${countHunks(secondFile)} hunks\n`);
 console.log(`${firstFile} — 6 hunks (2× modify, 2× delete, 2× add):`);
 console.log(`  git diff --staged --unified=0 -- ${firstFile}  →  ${countStagedHunks(firstFile)} hunks\n`);
+console.log(`${stubFile} — 3 hunks (1× modify, 1× delete, 1× add):`);
+console.log(`  git diff --staged --unified=0 -- ${stubFile}  →  ${countStagedHunks(stubFile)} hunks\n`);
 console.log(`Try:  cd ${repoDir}`);

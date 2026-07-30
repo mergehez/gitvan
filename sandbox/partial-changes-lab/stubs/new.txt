@@ -1,0 +1,45 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { appConfig } from '../../electronUtils/helpers.js';
+import { useDatabase, type DatabaseClient } from '../../electronUtils/useDatabase.js';
+import type { AccountSummary, GroupSummary } from '../../shared/types.js';
+
+type SettingsRow = {
+    key: string;
+    value: string;
+};
+export type RepoRow = {
+    id: number;
+    name: string;
+    path: string;
+    sequence: number | bigint;
+    group_id: number | undefined;
+    group_name: string | undefined;
+    account_id: number | undefined;
+    account_label: string | undefined;
+    terminal_path: string | undefined;
+    created_at: string;
+    last_opened_at: string | undefined;
+};
+
+type AccountRow = {
+    id: number;
+    label: string;
+    provider: string;
+    auth_kind: string;
+    username: string | undefined;
+    host: string | undefined;
+    sequence: number | bigint;
+    is_default: number;
+    created_at: string;
+};
+
+type AccountAuthRow = {
+    id: number;
+    label: string;
+    provider: string;
+    username: string | undefined;
+    host: string | undefined;
+    default: number;
+    created_at: string;
+};

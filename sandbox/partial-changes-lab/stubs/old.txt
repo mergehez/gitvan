@@ -1,0 +1,53 @@
+import Database from 'better-sqlite3';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import type { AccountSummary, GroupSummary } from '../../shared/types.js';
+
+type SQLInputValue = string | number | bigint | Uint8Array | Buffer | null;
+type SQLOutputValue = string | number | bigint | Uint8Array | Buffer | null;
+
+type DatabaseRunResult = {
+    lastInsertRowid: number | bigint;
+};
+
+type DatabaseStatement = {
+    run: (...params: SQLInputValue[]) => DatabaseRunResult;
+    get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T | undefined;
+    all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T[];
+};
+
+export type RepoRow = {
+    id: number;
+    name: string;
+    path: string;
+    sequence: number | bigint;
+    group_id: number | undefined;
+    group_name: string | undefined;
+    account_id: number | undefined;
+    account_label: string | undefined;
+    terminal_path: string | undefined;
+    added_at: string;
+    last_opened_at: string | undefined;
+};
+
+type AccountRow = {
+    id: number;
+    label: string;
+    provider: string;
+    auth_kind: string;
+    username: string | undefined;
+    host: string | undefined;
+    is_default: number;
+    created_at: string;
+};
+
+type AccountAuthRow = {
+    id: number;
+    label: string;
+    provider: string;
+    auth_kind: string;
+    username: string | undefined;
+    host: string | undefined;
+    is_default: number;
+    created_at: string;
+};
