@@ -324,6 +324,11 @@ async function main() {
             console.log(`Removing existing application at ${applicationsPath}.`);
             await rm(applicationsPath, { recursive: true, force: true });
             await new Promise((resolve) => setTimeout(resolve, 2000));
+            if (!(await pathExists(applicationsPath))) {
+                console.log(`Removed existing application at ${applicationsPath}.`);
+            } else {
+                console.error(`Failed to remove existing application at ${applicationsPath}.`);
+            }
         }
 
         await cp(builtAppPath, applicationsPath, { recursive: true });
