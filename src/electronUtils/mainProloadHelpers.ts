@@ -37,12 +37,12 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
     const { apiMethods, getNativeMethods, getMenu } = opts;
 
     function generateHandlers(mainWindow: BrowserWindow) {
-        type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
+        // type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
         type BackendHandlers = {
-            [K in AppMethodKeys]: (event: Electron.IpcMainInvokeEvent, ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
+            [K in keyof AppServiceType]: (ps: Parameters<AppServiceType[K]>[0]) => Promise<Awaited<ReturnType<AppServiceType[K]>>>;
         };
 
-        const handlers: any = {};
+        const handlers = {} as any;
         for (const name of apiMethods as any) {
             // handlers[name] = async (_event: Electron.IpcMainInvokeEvent, ps?: unknown) => callApiPost(name as string, ps);
             handlers[name] = async (ps?: unknown) => callApiPost(name as string, ps);
@@ -51,9 +51,9 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
         const nativeMethods = getNativeMethods(mainWindow, callApiPost);
 
         return {
-            ...handlers,
+            ...(handlers as BackendHandlers),
             ...nativeMethods,
-        } as BackendHandlers & NativeMethods;
+        };
     }
 
     function registerIpcHandlers(handlers: Record<string, any>) {
