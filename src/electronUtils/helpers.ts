@@ -1,9 +1,18 @@
 import pkgObj from '../../package.json' with { type: 'json' };
-const pkgStr = JSON.stringify(pkgObj);
-const pkg = JSON.parse(pkgStr) as { config: { vuePort: number; appId: string; copyright?: string; apiPort: number; appName: string } };
+
+const pkg = JSON.parse(JSON.stringify(pkgObj));
+
+type Config = {
+    vuePort: number;
+    apiPort: number;
+    appId: string;
+    copyright?: string;
+    appName: string;
+    dbFileName: string;
+};
 
 export const appConfig = {
-    ...pkg.config,
+    ...(pkg.config as Config),
     vueBaseUrl: `http://127.0.0.1:${pkg.config.vuePort}`,
     apiBaseUrl: `http://127.0.0.1:${pkg.config.apiPort}`,
 };

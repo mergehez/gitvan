@@ -1,69 +1,13 @@
-import Database from 'better-sqlite3';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
+import { appConfig } from '../../electronUtils/helpers.js';
+import { useDatabase, type DatabaseClient } from '../../electronUtils/useDatabase.js';
 import type { AccountSummary, GroupSummary } from '../../shared/types.js';
 
-type SQLInputValue = string | number | bigint | Uint8Array | Buffer | null;
-type SQLOutputValue = string | number | bigint | Uint8Array | Buffer | null;
-
-type DatabaseRunResult = {
-    lastInsertRowid: number | bigint;
+type SettingsRow = {
+    key: string;
+    value: string;
 };
-
-type DatabaseStatement = {
-    run: (...params: SQLInputValue[]) => DatabaseRunResult;
-    get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T | undefined;
-    all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => T[];
-};
-
-type DatabaseClient = {
-    exec: (sql: string) => void;
-    prepare: (sql: string) => DatabaseStatement;
-    close: () => void;
-};
-
-function applyConnectionPragmas(db: Pick<DatabaseClient, 'exec'>) {
-    db.exec('PRAGMA foreign_keys = ON;');
-    db.exec('PRAGMA busy_timeout = 5000;');
-}
-
-function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?: boolean }): DatabaseClient {
-    const db = new Database(databasePath, {
-        readonly: options?.readOnly === true,
-        fileMustExist: options?.readOnly === true,
-        timeout: 5000,
-    });
-
-    const client: DatabaseClient = {
-        exec: (sql: string) => {
-            db.exec(sql);
-        },
-        prepare: (sql: string): DatabaseStatement => {
-            const statement = db.prepare(sql);
-
-            return {
-                run: (...params: SQLInputValue[]) => {
-                    const result = statement.run(...params);
-                    return {
-                        lastInsertRowid: result.lastInsertRowid,
-                    } satisfies DatabaseRunResult;
-                },
-                get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => (statement.get(...params) ?? undefined) as T | undefined,
-                all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.all(...params) as T[],
-            };
-        },
-        close: () => {
-            db.close();
-        },
-    };
-
-    applyConnectionPragmas(client);
-
-    return client;
-}
-
-export const DATABASE_FILE_NAME = 'gitvan.sqlite';
-
 export type RepoRow = {
     id: number;
     name: string;
@@ -74,7 +18,7 @@ export type RepoRow = {
     account_id: number | undefined;
     account_label: string | undefined;
     terminal_path: string | undefined;
-    added_at: string;
+    created_at: string;
     last_opened_at: string | undefined;
 };
 
@@ -93,6 +37,7 @@ type AccountRow = {
     auth_kind: string;
     username: string | undefined;
     host: string | undefined;
+    sequence: number | bigint;
     is_default: number;
     created_at: string;
 };
@@ -108,193 +53,152 @@ type AccountAuthRow = {
     created_at: string;
 };
 
-function createDbClient(userDataDir: string) {
-    mkdirSync(userDataDir, { recursive: true });
+type ColumnDefinitions<T extends Record<string, any>, TComputed extends string> = Record<Exclude<keyof T, TComputed>, string>;
+function useTable<Table extends Record<string, any>, TComputed extends string = ''>(
+    tableName: string,
+    columns: ColumnDefinitions<Table, TComputed>,
+    foreignKeys?: Record<string, string>
+) {
+    type RealColumn = Exclude<keyof Table, TComputed>;
+    // const columns = columnDefs as { name: string; createDefinition: string }[];
 
-    console.log(`Using database path: ${join(userDataDir, DATABASE_FILE_NAME)}`);
-    const db = createRuntimeDatabaseClient(join(userDataDir, DATABASE_FILE_NAME));
+    function createTableSql() {
+        const columnDefs = Object.entries(columns)
+            .map(([name, createDefinition]) => `${name} ${createDefinition}`)
+            .join(',\n    ');
+        const foreignKeyDefs = foreignKeys
+            ? Object.entries(foreignKeys)
+                  .map(([col, ref]) => `FOREIGN KEY (${col}) REFERENCES ${ref}`)
+                  .join(',\n    ')
+            : '';
+        const allDefs = [columnDefs, foreignKeyDefs].filter(Boolean).join(',\n    ');
+        return `CREATE TABLE IF NOT EXISTS ${tableName} (\n    ${allDefs}\n);`;
+    }
 
+    function select(db: DatabaseClient, columns: (keyof Table)[] | '*', whereClause?: string, orderBy?: string, limit?: number) {
+        let sql = `SELECT ${columns === '*' ? '*' : (columns as string[]).join(', ')} FROM ${tableName}`;
+        if (whereClause) {
+            sql += ` WHERE ${whereClause}`;
+        }
+        if (orderBy) {
+            sql += ` ORDER BY ${orderBy}`;
+        }
+        if (limit !== undefined) {
+            sql += ` LIMIT ${limit}`;
+        }
+        return db.prepare(sql).all() as Table[];
+    }
+
+    function getCount(db: DatabaseClient, whereClause?: string) {
+        let sql = `SELECT COUNT(*) AS count FROM ${tableName}`;
+        if (whereClause) {
+            sql += ` WHERE ${whereClause}`;
+        }
+        const row = db.prepare(sql).get<{ count: number }>();
+        return row ? row.count : 0;
+    }
+    // db.prepare('INSERT INTO accounts(label, provider, auth_kind, username, host, is_default) VALUES(?, ?, ?, ?, ?, ?)').run(
+    //     'System Git',
+    //     'system',
+    //     'system-git',
+    //     null,
+    //     null,
+    //     1
+    // );
+    type InsertUpdateData = Partial<{
+        [K in RealColumn]: Table[K] | null;
+    }>;
+    function insert(db: DatabaseClient, data: InsertUpdateData) {
+        const keys = Object.keys(data);
+        const vals = Object.values(data).map((v) => (v === undefined ? null : v)) as any[];
+        return db.prepare(`INSERT INTO ${tableName} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`).run(...vals);
+    }
     return {
-        exec: (sql: string) => db.exec(sql),
-        prepare: (sql: string) => db.prepare(sql),
-        close: () => db.close(),
+        createTableSql,
+        select,
+        getCount,
+        insert,
     };
 }
 
-let db = undefined as unknown as ReturnType<typeof createDbClient>;
+const settingsTable = useTable<SettingsRow>('settings', {
+    key: 'TEXT PRIMARY KEY',
+    value: 'TEXT NOT NULL',
+});
+
+const repoTable = useTable<RepoRow, 'group_name' | 'account_label'>(
+    'repositories',
+    {
+        id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
+        name: 'TEXT NOT NULL',
+        path: 'TEXT NOT NULL UNIQUE',
+        sequence: 'INTEGER NOT NULL DEFAULT 0',
+        group_id: 'INTEGER',
+        account_id: 'INTEGER',
+        terminal_path: 'TEXT',
+        created_at: 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        last_opened_at: 'TEXT',
+    },
+    {
+        group_id: 'groups(id)',
+        account_id: 'accounts(id)',
+    }
+);
+console.log(repoTable.createTableSql());
+
+const accountTable = useTable<AccountRow>('accounts', {
+    id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
+    label: 'TEXT NOT NULL',
+    provider: 'TEXT NOT NULL',
+    auth_kind: 'TEXT NOT NULL',
+    username: 'TEXT',
+    host: 'TEXT',
+    sequence: 'INTEGER NOT NULL DEFAULT 0',
+    is_default: 'INTEGER NOT NULL DEFAULT 0',
+    created_at: 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+});
+
+const groupsTable = useTable<GroupRow, 'repository_count'>('groups', {
+    id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
+    name: 'TEXT NOT NULL UNIQUE COLLATE NOCASE',
+    sequence: 'INTEGER NOT NULL DEFAULT 0',
+    created_at: 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+});
+
+const db = useDatabase();
 
 export function useDb() {
-    function ensureColumn(tableName: string, columnName: string, definition: string) {
-        const columns = db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-
-        if (columns.some((column) => column.name === columnName)) {
-            return;
-        }
-
-        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
-    }
-
-    function toNumber(value: number | bigint) {
-        return typeof value === 'bigint' ? Number(value) : value;
-    }
-
-    function normalizeGroupSequences() {
-        const rows = db.prepare('SELECT id FROM groups ORDER BY sequence ASC, created_at ASC, id ASC').all<{ id: number }>();
-        const updateSequence = db.prepare('UPDATE groups SET sequence = ? WHERE id = ?');
-
-        rows.forEach((row, index) => {
-            updateSequence.run(index + 1, row.id);
-        });
-    }
-
-    function normalizeRepoSequences() {
-        const rows = db.prepare('SELECT id FROM repositories ORDER BY sequence ASC, added_at ASC, id ASC').all<{ id: number }>();
-        const updateSequence = db.prepare('UPDATE repositories SET sequence = ? WHERE id = ?');
-
-        rows.forEach((row, index) => {
-            updateSequence.run(index + 1, row.id);
-        });
-    }
-
-    function normalizeAccountSequences() {
-        const rows = db.prepare('SELECT id FROM accounts ORDER BY sequence ASC, is_default DESC, created_at ASC, id ASC').all<{ id: number }>();
-        const updateSequence = db.prepare('UPDATE accounts SET sequence = ? WHERE id = ?');
-
-        rows.forEach((row, index) => {
-            updateSequence.run(index + 1, row.id);
-        });
-    }
-
-    function getNextSequence(tableName: 'accounts' | 'groups' | 'repositories') {
-        const row = db.prepare(`SELECT COALESCE(MAX(sequence), 0) AS sequence FROM ${tableName}`).get<{ sequence: number }>();
-        return toNumber(row!.sequence) + 1;
-    }
-
-    function moveSequence(tableName: 'accounts' | 'groups' | 'repositories', id: number, direction: 'up' | 'down') {
-        const orderColumn = tableName === 'groups' ? 'created_at' : tableName === 'repositories' ? 'added_at' : 'created_at';
-        const rows = db.prepare(`SELECT id FROM ${tableName} ORDER BY sequence ASC, ${orderColumn} ASC, id ASC`).all<{ id: number }>();
-        const currentIndex = rows.findIndex((row) => row.id === id);
-
-        if (currentIndex === -1) {
-            throw new Error(`The selected ${tableName === 'groups' ? 'group' : tableName === 'repositories' ? 'repository' : 'account'} could not be found.`);
-        }
-
-        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-        if (targetIndex < 0 || targetIndex >= rows.length) {
-            return;
-        }
-
-        const orderedIds = rows.map((row) => row.id);
-        const [movedId] = orderedIds.splice(currentIndex, 1);
-        orderedIds.splice(targetIndex, 0, movedId!);
-
-        applySequenceOrder(tableName, orderedIds);
-    }
-
-    function applySequenceOrder(tableName: 'accounts' | 'groups' | 'repositories', orderedIds: number[]) {
-        const updateSequence =
-            tableName === 'groups'
-                ? db.prepare('UPDATE groups SET sequence = ? WHERE id = ?')
-                : tableName === 'repositories'
-                  ? db.prepare('UPDATE repositories SET sequence = ? WHERE id = ?')
-                  : db.prepare('UPDATE accounts SET sequence = ? WHERE id = ?');
-
-        orderedIds.forEach((entryId, index) => {
-            updateSequence.run(index + 1, entryId);
-        });
-    }
-
-    function reorderSequence(tableName: 'accounts' | 'groups' | 'repositories', id: number, toIndex: number) {
-        const orderColumn = tableName === 'groups' ? 'created_at' : tableName === 'repositories' ? 'added_at' : 'created_at';
-        const rows = db.prepare(`SELECT id FROM ${tableName} ORDER BY sequence ASC, ${orderColumn} ASC, id ASC`).all<{ id: number }>();
-        const currentIndex = rows.findIndex((row) => row.id === id);
-
-        if (currentIndex === -1) {
-            throw new Error(`The selected ${tableName === 'groups' ? 'group' : tableName === 'repositories' ? 'repository' : 'account'} could not be found.`);
-        }
-
-        const clampedIndex = Math.max(0, Math.min(toIndex, rows.length - 1));
-        if (currentIndex === clampedIndex) {
-            return;
-        }
-
-        const orderedIds = rows.map((row) => row.id);
-        const [movedId] = orderedIds.splice(currentIndex, 1);
-        orderedIds.splice(clampedIndex, 0, movedId!);
-
-        applySequenceOrder(tableName, orderedIds);
-    }
-
     return {
         configureDatabase(userDataDir: string) {
-            if (db) {
-                return;
-            }
+            db.configureDatabase(userDataDir, () => {
+                db.exec(`
+                    PRAGMA journal_mode = WAL;
+                    ${settingsTable.createTableSql()}
+                    ${accountTable.createTableSql()}
+                    ${groupsTable.createTableSql()}
+                    ${repoTable.createTableSql()}
+                `);
 
-            db = createDbClient(userDataDir);
-            db.exec(`
-                PRAGMA journal_mode = WAL;
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    label TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    auth_kind TEXT NOT NULL,
-                    username TEXT,
-                    host TEXT,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    is_default INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS groups (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS repositories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    path TEXT NOT NULL UNIQUE,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    account_id INTEGER,
-                    terminal_path TEXT,
-                    added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    last_opened_at TEXT,
-                    FOREIGN KEY (account_id) REFERENCES accounts(id)
-                );
-            `);
+                const accountCount = accountTable.getCount(db);
 
-            ensureColumn('accounts', 'username', 'TEXT');
-            ensureColumn('accounts', 'host', 'TEXT');
-            ensureColumn('accounts', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
-            ensureColumn('groups', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
-            ensureColumn('repositories', 'sequence', 'INTEGER NOT NULL DEFAULT 0');
-            ensureColumn('repositories', 'group_id', 'INTEGER REFERENCES groups(id)');
-            ensureColumn('repositories', 'terminal_path', 'TEXT');
+                if (accountCount === 0) {
+                    accountTable.insert(db, {
+                        label: 'System Git',
+                        provider: 'system',
+                        auth_kind: 'system-git',
+                        username: null,
+                        host: null,
+                        is_default: 1,
+                    });
+                }
 
-            const accountCount = db.prepare('SELECT COUNT(*) AS count FROM accounts').get<{ count: number } | undefined>();
-
-            if ((accountCount?.count ?? 0) === 0) {
-                db.prepare('INSERT INTO accounts(label, provider, auth_kind, username, host, is_default) VALUES(?, ?, ?, ?, ?, ?)').run(
-                    'System Git',
-                    'system',
-                    'system-git',
-                    null,
-                    null,
-                    1
-                );
-            }
-
-            normalizeAccountSequences();
-            normalizeGroupSequences();
-            normalizeRepoSequences();
+                db.normalizeSequence('accounts', 'is_default DESC, ');
+                db.normalizeSequence('groups');
+                db.normalizeSequence('repositories');
+            });
         },
         getStoredRepoCount(userDataDir: string) {
-            const databasePath = join(userDataDir, DATABASE_FILE_NAME);
+            const databasePath = join(userDataDir, appConfig.dbFileName);
 
             if (!existsSync(databasePath)) {
                 return undefined;
@@ -303,7 +207,7 @@ export function useDb() {
             let tempDatabase: DatabaseClient | undefined = undefined;
 
             try {
-                tempDatabase = createRuntimeDatabaseClient(databasePath, { readOnly: true });
+                tempDatabase = db.createRuntimeDatabaseClient(databasePath, { readOnly: true });
 
                 const hasRepositoriesTable = tempDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repositories'").get() as
                     | { name: string }
@@ -334,12 +238,12 @@ export function useDb() {
                         repositories.account_id,
                         accounts.label AS account_label,
                         repositories.terminal_path,
-                        repositories.added_at,
+                        repositories.created_at,
                         repositories.last_opened_at
                     FROM repositories
                     LEFT JOIN groups ON groups.id = repositories.group_id
                     LEFT JOIN accounts ON accounts.id = repositories.account_id
-                    ORDER BY repositories.sequence ASC, repositories.added_at ASC, repositories.id ASC
+                    ORDER BY repositories.sequence ASC, repositories.created_at ASC, repositories.id ASC
                 `)
                 .all<RepoRow>();
         },
@@ -362,8 +266,8 @@ export function useDb() {
                     const summary: GroupSummary = {
                         id: group.id,
                         name: group.name,
-                        sequence: toNumber(group.sequence),
-                        repoCount: toNumber(group.repository_count),
+                        sequence: db.toNumber(group.sequence),
+                        repoCount: db.toNumber(group.repository_count),
                         createdAt: group.created_at,
                     };
 
@@ -371,24 +275,21 @@ export function useDb() {
                 }) as GroupSummary[];
         },
         listAccounts() {
-            return db
-                .prepare('SELECT id, label, provider, auth_kind, username, host, is_default, created_at FROM accounts ORDER BY sequence ASC, created_at ASC, id ASC')
-                .all<AccountRow>()
-                .map((account) => {
-                    const summary: AccountSummary = {
-                        id: account.id,
-                        label: account.label,
-                        provider: account.provider,
-                        authKind: account.auth_kind,
-                        username: account.username,
-                        host: account.host,
-                        hasSecret: account.auth_kind === 'https-token' || account.auth_kind === 'oauth',
-                        isDefault: account.is_default === 1,
-                        createdAt: account.created_at,
-                    };
+            return accountTable.select(db, '*', undefined, 'sequence ASC, created_at ASC, id ASC').map((account) => {
+                const summary: AccountSummary = {
+                    id: account.id,
+                    label: account.label,
+                    provider: account.provider,
+                    authKind: account.auth_kind,
+                    username: account.username,
+                    host: account.host,
+                    hasSecret: account.auth_kind === 'https-token' || account.auth_kind === 'oauth',
+                    isDefault: account.is_default === 1,
+                    createdAt: account.created_at,
+                };
 
-                    return summary;
-                }) as AccountSummary[];
+                return summary;
+            });
         },
         upsertRepo(path: string, name: string, groupId?: number) {
             const existing = db.prepare('SELECT id FROM repositories WHERE path = ?').get<{ id: number }>(path);
@@ -403,17 +304,17 @@ export function useDb() {
             if (defaultAccount) {
                 const result = db
                     .prepare('INSERT INTO repositories(name, path, account_id, sequence, group_id) VALUES(?, ?, ?, ?, ?)')
-                    .run(name, path, defaultAccount.id, getNextSequence('repositories'), groupId ?? null);
+                    .run(name, path, defaultAccount.id, db.getNextSequence('repositories'), groupId ?? null);
                 touchRepo.run(name, path, groupId ?? null);
 
-                return toNumber(result.lastInsertRowid);
+                return db.toNumber(result.lastInsertRowid);
             }
 
             const result = db
                 .prepare('INSERT INTO repositories(name, path, sequence, group_id) VALUES(?, ?, ?, ?)')
-                .run(name, path, getNextSequence('repositories'), groupId ?? null);
+                .run(name, path, db.getNextSequence('repositories'), groupId ?? null);
             touchRepo.run(name, path, groupId ?? null);
-            return toNumber(result.lastInsertRowid);
+            return db.toNumber(result.lastInsertRowid);
         },
         setSelectedRepoId(id: number | undefined) {
             db.prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('selectedRepoId', JSON.stringify(id));
@@ -458,8 +359,8 @@ export function useDb() {
                 throw new Error('Group name is required.');
             }
 
-            const result = db.prepare('INSERT INTO groups(name, sequence) VALUES(?, ?)').run(normalizedName, getNextSequence('groups'));
-            return toNumber(result.lastInsertRowid);
+            const result = db.prepare('INSERT INTO groups(name, sequence) VALUES(?, ?)').run(normalizedName, db.getNextSequence('groups'));
+            return db.toNumber(result.lastInsertRowid);
         },
         deleteGroup(id: number) {
             db.prepare('DELETE FROM repositories WHERE group_id = ?').run(id);
@@ -476,13 +377,13 @@ export function useDb() {
             db.prepare('UPDATE groups SET name = ? WHERE id = ?').run(normalizedName, id);
         },
         moveGroup(id: number, direction: 'up' | 'down') {
-            moveSequence('groups', id, direction);
+            db.moveSequence('group', 'groups', id, direction);
         },
         moveRepo(id: number, direction: 'up' | 'down') {
-            moveSequence('repositories', id, direction);
+            db.moveSequence('repository', 'repositories', id, direction);
         },
         reorderRepo(id: number, toIndex: number) {
-            reorderSequence('repositories', id, toIndex);
+            db.reorderSequence('repository', 'repositories', id, toIndex);
         },
         accountExists(id: number) {
             return Boolean(db.prepare('SELECT id FROM accounts WHERE id = ?').get(id));
@@ -500,9 +401,9 @@ export function useDb() {
 
             const result = db
                 .prepare('INSERT INTO accounts(label, provider, auth_kind, username, host, sequence, is_default) VALUES(?, ?, ?, ?, ?, ?, ?)')
-                .run(normalizedLabel, provider, authKind, username ?? null, host ?? null, getNextSequence('accounts'), setAsDefault ? 1 : 0);
+                .run(normalizedLabel, provider, authKind, username ?? null, host ?? null, db.getNextSequence('accounts'), setAsDefault ? 1 : 0);
 
-            return toNumber(result.lastInsertRowid);
+            return db.toNumber(result.lastInsertRowid);
         },
         updateAccount(id: number, label: string, username: string | undefined, host: string | undefined, setAsDefault: boolean) {
             const normalizedLabel = label.trim();
@@ -524,7 +425,7 @@ export function useDb() {
             );
         },
         reorderAccount(id: number, toIndex: number) {
-            reorderSequence('accounts', id, toIndex);
+            db.reorderSequence('account', 'accounts', id, toIndex);
         },
         getAccountAuthById(id: number) {
             return db.prepare('SELECT id, label, provider, auth_kind, username, host, is_default, created_at FROM accounts WHERE id = ?').get<AccountAuthRow>(id);

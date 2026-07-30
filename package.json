@@ -9,7 +9,8 @@
         "appId": "com.mergesoft.gitvan",
         "copyright": "Copyright © MergeSoft",
         "vuePort": 5177,
-        "apiPort": 5176
+        "apiPort": 5176,
+        "dbFileName": "gitvan.sqlite"
     },
     "author": {
         "name": "Mergesoft"

@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile, cp, mkdir, mkdtemp, readdir, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
-import path, { dirname, join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import pkg from '../../package.json' with { type: 'json' };
 import { appConfig } from './helpers';
@@ -323,6 +323,7 @@ async function main() {
         if (await pathExists(applicationsPath)) {
             console.log(`Removing existing application at ${applicationsPath}.`);
             await rm(applicationsPath, { recursive: true, force: true });
+            await new Promise((resolve) => setTimeout(resolve, 2000));
         }
 
         await cp(builtAppPath, applicationsPath, { recursive: true });

@@ -418,7 +418,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
                 accountId: row.account_id,
                 accountLabel: row.account_label,
                 terminalPath: row.terminal_path,
-                addedAt: row.added_at,
+                addedAt: row.created_at,
                 lastOpenedAt: row.last_opened_at,
                 status,
             };
