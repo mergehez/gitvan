@@ -288,9 +288,20 @@ const _useRepository = (repo: Repo) => {
             toast.showSuccessToast('All files unstaged.');
         },
         async discardAllChanges() {
+            const lockedPaths = this.changes?.unstaged?.filter((e) => this.isFileLocked(e.path)).map((e) => e.path) ?? [];
+            const unlockedPaths = this.changes?.unstaged?.filter((e) => !this.isFileLocked(e.path)).map((e) => e.path) ?? [];
+
+            if (unlockedPaths.length === 0) {
+                toast.showSuccessToast('No unlocked changes to discard.');
+                return;
+            }
+
             const confirmed = await confirmAction({
                 title: 'Discard all changes',
-                message: 'Discard all unstaged changes in this repository?',
+                message:
+                    lockedPaths.length == 0
+                        ? 'Discard all unstaged changes in this repository?'
+                        : `Discard unstaged changes? ${lockedPaths.length} locked file${lockedPaths.length === 1 ? '' : 's'} will be skipped.`,
                 detail: 'This permanently removes all current unstaged edits and untracked files.',
                 confirmLabel: 'Discard all',
             });
@@ -299,10 +310,10 @@ const _useRepository = (repo: Repo) => {
                 return;
             }
 
-            const nextBootstrap = await tasks.discardAllChanges.run({ repoId: this.id });
+            const nextBootstrap = await tasks.discardRepoFiles.run({ repoId: this.id, paths: unlockedPaths });
 
             await applyMutation(nextBootstrap);
-            toast.showSuccessToast('All changes discarded.');
+            toast.showSuccessToast(lockedPaths.length == 0 ? 'All changes discarded.' : 'All unlocked changes discarded.');
         },
         async deleteFile(path: string, kind: 'staged' | 'unstaged') {
             const confirmed = await confirmAction({
