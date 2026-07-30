@@ -73,7 +73,7 @@ const treeItem = computed<FileTreeItem<CommitListItem, {}>>(() => {
                 title: e.summary,
                 shortSha: e.shortSha,
                 at: new Date(e.authoredAt),
-                by: e.authorName,
+                by: `${e.authorName} <${e.authorEmail}>`,
                 tags: e.tags,
                 isUnpushed: e.isUnpushed,
             })) ?? [],
@@ -270,35 +270,38 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                 :selection="repo.currCommitSha"
                 :onSelect="(t) => repo.selectCommit(t.id)"
                 :get-context-menu-items="buildCommitContextMenuEntries"
+                noActions
             >
                 <template #item-leftIcon> </template>
-                <template #item-title="{ item }">
-                    <div class="flex items-center w-full pl-1">
+                <template #item-title="{ item, index }">
+                    <div class="relative flex items-center w-full pl-1 border-t border-x2 py-1" :class="index % 2 == 0 ? '' : ''">
                         <span v-if="item.isUnpushed" class="icon icon-[mdi--arrow-up-thick] text-lg opacity-70"></span>
                         <div class="w-full flex-1 pl-1">
                             <p class="text-xs font-semibold whitespace-pre-wrap break-normal wrap-anywhere leading-tight">{{ item.title }}</p>
                             <div class="flex justify-between w-full">
-                                <p class="text-2xs opacity-50 tracking-tight">{{ item.by }}</p>
-                                <p class="text-2xs opacity-50 tracking-tight">{{ readableDate(item.at) }}</p>
+                                <p class="text-2xs tracking-tight opacity-80">{{ item.by }}</p>
+                                <p class="text-2xs tracking-tight opacity-80">{{ readableDate(item.at).replace(' at ', ' ') }}</p>
                             </div>
                         </div>
+                        <div class="absolute top-0 right-1 min-w-0 items-center justify-end gap-1 hidden group-hover:flex">
+                            <IconButton
+                                v-if="canAmendCommitItem(item)"
+                                severity="info"
+                                class="focus:opacity-100 p-px text-xs"
+                                v-tooltip="canAmendCommitItem(item) ? 'Amend latest commit' : 'Only the latest unpushed commit can be amended'"
+                                @click.stop="onAmendCommitItem(item)"
+                                icon="icon-[mdi--pencil]"
+                            />
+                            <IconButton
+                                v-if="canUndoCommitItem(item)"
+                                severity="info"
+                                class="focus:opacity-100 p-px text-xs"
+                                v-tooltip="canUndoCommitItem(item) ? 'Undo latest commit' : 'Undo is only available for the latest unpushed commit with a parent commit'"
+                                @click.stop="onUndoCommitItem(item)"
+                                icon="icon-[mdi--undo]"
+                            />
+                        </div>
                     </div>
-                </template>
-                <template #item-actions="{ item }">
-                    <IconButton
-                        v-if="canAmendCommitItem(item)"
-                        class="focus:opacity-100 p-px text-xs"
-                        v-tooltip="canAmendCommitItem(item) ? 'Amend latest commit' : 'Only the latest unpushed commit can be amended'"
-                        @click.stop="onAmendCommitItem(item)"
-                        icon="icon-[mdi--pencil]"
-                    />
-                    <IconButton
-                        v-if="canUndoCommitItem(item)"
-                        class="focus:opacity-100 p-px text-xs"
-                        v-tooltip="canUndoCommitItem(item) ? 'Undo latest commit' : 'Undo is only available for the latest unpushed commit with a parent commit'"
-                        @click.stop="onUndoCommitItem(item)"
-                        icon="icon-[mdi--undo]"
-                    />
                 </template>
                 <template #item-rightIcon="{ item }">
                     <div v-if="item.tags?.length" class="flex max-w-44 flex-wrap items-center justify-end gap-1">
@@ -322,7 +325,8 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                 <div class="border-b border-white/10 pb-3 px-2">
                     <p class="text-xl font-semibold text-white">{{ repo.currCommit.summary }}</p>
                     <p class="text-sm opacity-50 tracking-tight">
-                        {{ repo.currCommit.shortSha }} · {{ repo.currCommit.authorName }} · {{ readableDate(new Date(repo.currCommit.authoredAt)) }}
+                        {{ repo.currCommit.shortSha }} · {{ repo.currCommit.authorName }} <{{ repo.currCommit.authorEmail }}> ·
+                        {{ readableDate(new Date(repo.currCommit.authoredAt)) }}
                     </p>
                 </div>
                 <p v-if="repo.currCommit.body" class="mt-4 whitespace-pre-wrap text-sm leading-7 text-default">{{ repo.currCommit.body }}</p>

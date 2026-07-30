@@ -145,7 +145,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
 
         <div v-else-if="!collapsed" class="min-h-0 overflow-auto">
             <div
-                v-for="entryState in visibleChildren"
+                v-for="(entryState, index) in visibleChildren"
                 :key="`${entryState.item.id}`"
                 class="group flex min-h-6 items-center gap-1 px-2 py-0.5 text-left transition relative"
                 :class="[
@@ -175,7 +175,14 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                         <span v-if="props.leftIcon && props.leftIcon(entryState.item)" :class="twMerge('icon text-sm', props.leftIcon(entryState.item))"></span>
                     </slot>
                     <div class="flex min-w-0 flex-1 items-center text-xs py-px overflow-hidden">
-                        <slot name="item-title" :item="entryState.item" :depth="entryState.depth" :is-group="entryState.isGroup" :is-collapsed="entryState.isCollapsed">
+                        <slot
+                            name="item-title"
+                            :index="index"
+                            :item="entryState.item"
+                            :depth="entryState.depth"
+                            :is-group="entryState.isGroup"
+                            :is-collapsed="entryState.isCollapsed"
+                        >
                             <p class="text-xs tracking-tight leading-tight">{{ entryState.item.title }}</p>
                         </slot>
                     </div>
