@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'child_process';
 import { exec, execSync } from 'child_process';
 import fs from 'fs';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
 import type { PluginOption } from 'vite';
 import { appConfig } from './helpers';
 
@@ -44,10 +44,20 @@ function generateApiMethods(paths: Options) {
 }
 
 const buildElectronAssets = (paths: Options) => {
+    const projectRoot = resolve(import.meta.dirname ?? process.cwd(), '../..');
+    const outDir = resolve(projectRoot, 'dist-electron');
+
+    // Clean stale electron builds — vite only empties its own outDir (dist/),
+    // not dist-electron/.  rolldown's caching can also skip recompilation.
+    if (fs.existsSync(outDir)) {
+        fs.rmSync(outDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(outDir, { recursive: true });
+
     const cfgs = [
-        { src: paths.main, out: 'dist-electron/main.cjs', external: ['electron', 'better-sqlite3', ...(paths.externalize || [])] },
-        { src: paths.preload, out: 'dist-electron/preload.cjs', external: ['electron'] },
-        { src: paths.devServer, out: 'dist-electron/backend.cjs', external: ['better-sqlite3'] },
+        { src: paths.main, out: join(outDir, 'main.cjs'), external: ['electron', 'better-sqlite3', ...(paths.externalize || [])] },
+        { src: paths.preload, out: join(outDir, 'preload.cjs'), external: ['electron'] },
+        { src: paths.devServer, out: join(outDir, 'backend.cjs'), external: ['better-sqlite3'] },
     ];
     console.log('⚡ [Rolldown] Compiling Electron main, preload, and backend targets...');
     for (const cfg of cfgs) {
@@ -69,10 +79,6 @@ function killStaleServers(...ports: number[]) {
 }
 
 function watchDevServer(server: any, paths: Options) {
-    // Kill any leftover processes on the API and dev-server ports so a fresh
-    // backend / Electron instance starts without port conflicts or stale code.
-    killStaleServers(appConfig.apiPort, appConfig.vuePort);
-
     const isDesktopMode = server.config.mode === 'desktop';
 
     if (!isDesktopMode) {
@@ -139,6 +145,8 @@ const electronPlugin = (paths: Options): PluginOption => {
             };
         },
         buildStart() {
+            // kill running processes for both dev and build
+            killStaleServers(appConfig.apiPort, appConfig.vuePort);
             generateApiMethods(paths);
         },
         configureServer(server) {

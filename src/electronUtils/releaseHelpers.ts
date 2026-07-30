@@ -22,7 +22,7 @@ const iconIcnsPath = join(assetsDir, 'icon.icns');
 const iconsetDir = join(assetsDir, 'icon.iconset');
 const buildTargetDir = join(projectRoot, 'build', `mac-${process.arch}`);
 const artifactsDir = join(projectRoot, 'build');
-const appBundleName = appConfig.appName;
+const appBundleName = appConfig.appName + '.app';
 const requiredIconFiles = [
     'icon_16x16.png',
     'icon_16x16@2x.png',
@@ -300,11 +300,17 @@ async function main() {
         console.log('Building an unsigned macOS release.');
     }
 
-    const electronBuilder = join(projectRoot, 'node_modules', '.bin', 'electron-builder');
     const buildEnv = { ...env, PATH: `${dirname(process.execPath)}:${env.PATH ?? ''}` };
 
-    await runCommand('vite', ['build'], buildEnv);
-    await runCommand(electronBuilder, ['build', '--config', 'electron.config.js', '--arm64'], buildEnv);
+    // Ensure a clean build — Vite empties dist/ but won't touch dist-electron/
+    // or previous electron-builder artifacts in build/.
+    for (const dir of ['dist', 'dist-electron', 'build']) {
+        const p = join(projectRoot, dir);
+        if (existsSync(p)) {
+            await rm(p, { recursive: true, force: true });
+        }
+    }
+    await runCommand('bun', ['run', 'build'], buildEnv); // this builds vue, api, electron and runs electron-builder
 
     const builtAppPath = await findAppBundle(buildTargetDir);
     const dmgPath = await findArtifact('.dmg');
