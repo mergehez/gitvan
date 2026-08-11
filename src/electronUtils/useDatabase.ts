@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
+import { homedir, platform } from 'os';
 import { join } from 'path';
 import { appConfig } from './helpers';
 
@@ -221,4 +222,20 @@ export function useDatabase() {
         moveSequence: moveSequence,
         reorderSequence: reorderSequence,
     };
+}
+
+export function resolveAppDataDir(): string {
+    const envDir = process.env.APP_DATA_DIR;
+    if (envDir) return envDir;
+
+    if (platform() === 'win32') {
+        const appData = process.env.APPDATA;
+        if (appData) return join(appData, appConfig.projectName);
+    }
+
+    if (platform() === 'darwin') {
+        return join(homedir(), 'Library', 'Application Support', appConfig.projectName);
+    }
+
+    return join(homedir(), '.local', 'share', appConfig.projectName);
 }

@@ -39,6 +39,7 @@
         "better-sqlite3": "^13.0.2",
         "express": "^5.2.1",
         "node-pty": "^1.1.0",
+        "oxlint-tsgolint": "^7.0.2001",
         "tailwind-merge": "^3.6.0"
     },
     "devDependencies": {

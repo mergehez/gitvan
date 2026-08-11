@@ -11,4 +11,4 @@ const server = createBrowserOnlyAppClientPpc();
 
 export const resolveDev2ApiBase = server.resolveDev2ApiBase;
 export const invoke = server.invoke;
-export const installDev2GitClientBridge = server.installDev2GitClientBridge;
+export const installDev2AppClientBridge = server.installDev2AppClientBridge;

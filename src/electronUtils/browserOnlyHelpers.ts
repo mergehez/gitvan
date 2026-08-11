@@ -1,16 +1,13 @@
 import express from 'express';
-import { homedir } from 'os';
-import { join } from 'path';
 import { appConfig } from './helpers.ts';
 import type { RendererDiagnosticPayload } from './mainProloadHelpers.ts';
 /**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
  * Run with: tsx src/backend/devServer.ts
  */
-export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(app: GitClientRequestApi, apiMethods: readonly string[], configureDatabase: (path: string) => void) {
+export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(app: GitClientRequestApi, apiMethods: readonly string[], db: { configureDatabase: () => void }) {
     // Initialize database (normally done by the Electrobun entrypoint)
-    const userDataDir = process.env.GITVAN_DATA_DIR || join(homedir(), 'Library', 'Application Support', 'gitvan');
-    configureDatabase(userDataDir);
+    db.configureDatabase();
 
     const methodMap: GitClientRequestApi = apiMethods.reduce((acc, methodName) => {
         if (methodName in app) {
@@ -25,6 +22,20 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(a
 
     const REQUEST_TIMEOUT_MS = 65_000;
     const serverApp = express();
+
+    // // CORS preflight (dev mode only — standalone serves from the same origin)
+    // if (!IS_STANDALONE) {
+    //     serverApp.use((req, res, next) => {
+    //         if (req.method === 'OPTIONS') {
+    //             res.set('Access-Control-Allow-Origin', '*');
+    //             res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    //             res.set('Access-Control-Allow-Headers', 'Content-Type');
+    //             res.sendStatus(204);
+    //             return;
+    //         }
+    //         next();
+    //     });
+    // }
 
     serverApp.use(express.text({ type: '*/*', limit: '10mb' }));
     serverApp.use((_req, res, next) => {
@@ -42,17 +53,11 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(a
 
     function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
         const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-                reject(new Error(`Request timed out after ${timeoutMs}ms`));
-            }, timeoutMs);
+            timeoutHandle = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
         });
-
         return Promise.race([promise, timeoutPromise]).finally(() => {
-            if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-            }
+            if (timeoutHandle) clearTimeout(timeoutHandle);
         });
     }
 
@@ -146,7 +151,7 @@ export function createBrowserOnlyAppClientPpc(timeoutMs: number = 75_000) {
         }
     }
 
-    function installDev2GitClientBridge() {
+    function installDev2AppClientBridge() {
         installRendererDiagnostics();
         // Minimal stub of the Electrobun bridge shape
         window.electronAPI = {
@@ -159,7 +164,7 @@ export function createBrowserOnlyAppClientPpc(timeoutMs: number = 75_000) {
     return {
         resolveDev2ApiBase,
         invoke,
-        installDev2GitClientBridge,
+        installDev2AppClientBridge,
     };
 }
 

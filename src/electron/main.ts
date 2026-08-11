@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, shell } from 'electron';
 import { existsSync } from 'fs';
 import type { app as AppService } from '../backend/services/app.ts';
 import { executeCommand } from '../electronUtils/executeCommand.ts';
-import { createElectronHelpers, type CreateGitClientRequestApi } from '../electronUtils/mainProloadHelpers.ts';
+import { createElectronHelpers, type CreateAppClientRequestApi } from '../electronUtils/mainProloadHelpers.ts';
 import { apiMethods } from '../shared/apiMethods.ts';
 import type { NativeCommand } from '../shared/types.ts';
 
@@ -53,10 +53,10 @@ const helpers = createElectronHelpers({
             const filePath: string = response;
             if (!existsSync(filePath)) throw new Error('The selected file no longer exists in the working tree.');
             if (!existsSync(ps.editorPath)) throw new Error('The selected editor no longer exists on disk.');
+            const { execFileSync } = await import('child_process');
             if (process.platform === 'darwin') {
-                await shell.openPath(filePath);
+                execFileSync('open', ['-a', ps.editorPath, filePath]);
             } else {
-                const { execFileSync } = await import('child_process');
                 execFileSync(ps.editorPath, [filePath]);
             }
         },
@@ -207,6 +207,6 @@ const helpers = createElectronHelpers({
 });
 
 export type HandlersMap = ReturnType<typeof helpers.generateHandlers>;
-export type GitClientRequestApi = CreateGitClientRequestApi<HandlersMap>;
+export type AppClientRequestApi = CreateAppClientRequestApi<HandlersMap>;
 
 helpers.start();

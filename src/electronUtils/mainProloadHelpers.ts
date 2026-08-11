@@ -21,7 +21,7 @@ export type RendererDiagnosticPayload = {
     message: string;
     details?: string;
 };
-export type CreateGitClientRequestApi<HandlersMap extends Record<string, any>> = {
+export type CreateAppClientRequestApi<HandlersMap extends Record<string, any>> = {
     [K in keyof HandlersMap]: undefined extends Parameters<HandlersMap[K]>[0]
         ? (params?: Parameters<HandlersMap[K]>[0]) => Promise<Awaited<ReturnType<HandlersMap[K]>>>
         : (params: Parameters<HandlersMap[K]>[0]) => Promise<Awaited<ReturnType<HandlersMap[K]>>>;
@@ -58,7 +58,7 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 
     function registerIpcHandlers(handlers: Record<string, any>) {
         for (const [name, handler] of Object.entries(handlers)) {
-            ipcMain.handle(name, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
+            ipcMain.handle(`api:${name}`, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
         }
 
         const ANSI_RESET = '\x1b[0m';
@@ -167,18 +167,24 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 }
 
 export function createPreloadApi<NativeCommand>(ipcRenderer: Electron.IpcRenderer, contextBridge: Electron.ContextBridge) {
+    const nativeCommandListeners = new Set<(command: NativeCommand) => void>();
+
+    // Listen for native commands from the main process
+    ipcRenderer.on('native-command', (_event, command: NativeCommand) => {
+        nativeCommandListeners.forEach((listener) => listener(command));
+    });
+
     const api = {
-        invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+        invoke: (name: string, params?: unknown) => {
+            return ipcRenderer.invoke(`api:${name}`, params);
+        },
         onNativeCommand: (listener: (command: NativeCommand) => void) => {
-            const handler = (_event: Electron.IpcRendererEvent, command: NativeCommand) => {
-                listener(command);
-            };
-            ipcRenderer.on('native-command', handler);
+            nativeCommandListeners.add(listener);
             return () => {
-                ipcRenderer.removeListener('native-command', handler);
+                nativeCommandListeners.delete(listener);
             };
         },
-        sendDiagnostic: (payload: unknown) => ipcRenderer.send('renderer-diagnostic', payload),
+        sendDiagnostic: (payload: unknown) => ipcRenderer.send('renderer:diagnostic', payload),
     };
     contextBridge.exposeInMainWorld('electronAPI', api);
     return api;

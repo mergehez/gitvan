@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { appConfig } from '../../electronUtils/helpers.js';
-import { useDatabase, type DatabaseClient } from '../../electronUtils/useDatabase.js';
+import { resolveAppDataDir, useDatabase, type DatabaseClient } from '../../electronUtils/useDatabase.js';
 import type { AccountSummary, GroupSummary } from '../../shared/types.js';
 
 type SettingsRow = {
@@ -169,8 +169,8 @@ const db = useDatabase();
 
 export function useDb() {
     return {
-        configureDatabase(userDataDir: string) {
-            db.configureDatabase(userDataDir, () => {
+        configureDatabase(userDataDir?: string) {
+            db.configureDatabase(userDataDir ?? resolveAppDataDir(), () => {
                 db.exec(`
                     PRAGMA journal_mode = WAL;
                     ${settingsTable.createTableSql()}

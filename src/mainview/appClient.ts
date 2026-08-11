@@ -1,4 +1,4 @@
-import type { GitClientRequestApi } from '../electron/main.ts';
+import type { AppClientRequestApi } from '../electron/main.ts';
 import { createAppClientPpc } from '../electronUtils/mainviewHelpers.ts';
 
-export const appClientRpc = createAppClientPpc<GitClientRequestApi>(window.electronAPI);
+export const appClientRpc = createAppClientPpc<AppClientRequestApi>(window.electronAPI);

@@ -105,7 +105,7 @@ function watchDevServer(server: any, paths: Options) {
             if (addressInfo) {
                 console.log('📱 Frontend asset stream active. Instantiating Electron window...');
 
-                electronProcess = exec('electron .', {
+                electronProcess = exec('electron . --dev', {
                     env: { ...process.env, VITE_DEV2: 'true' },
                 });
 

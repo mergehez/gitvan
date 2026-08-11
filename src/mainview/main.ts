@@ -11,7 +11,7 @@ const isDev2 = import.meta.env.VITE_DEV2 === 'true';
 let mountedApp: ReturnType<typeof createApp> | undefined;
 
 if (isDev2) {
-    const { installDev2GitClientBridge } = await import('./appClientBrowser.ts');
+    const { installDev2AppClientBridge: installDev2GitClientBridge } = await import('./appClientBrowser.ts');
     installDev2GitClientBridge();
 }
 

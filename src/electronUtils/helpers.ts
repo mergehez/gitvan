@@ -13,6 +13,7 @@ type Config = {
 
 export const appConfig = {
     ...(pkg.config as Config),
+    projectName: pkg.name,
     vueBaseUrl: `http://127.0.0.1:${pkg.config.vuePort}`,
     apiBaseUrl: `http://127.0.0.1:${pkg.config.apiPort}`,
 };

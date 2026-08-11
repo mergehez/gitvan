@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue';
-import type { GitClientRequestApi as Api } from '../../electron/main.ts';
+import type { AppClientRequestApi as Api } from '../../electron/main.ts';
 import { apiMethods } from '../../shared/apiMethods';
 import { appClientRpc } from '../appClient.ts';
 
