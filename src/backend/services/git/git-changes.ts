@@ -191,11 +191,15 @@ export const changesGit = {
         await Promise.all(
             entries.map(async (entry) => {
                 if (entry.stagedStatus === 'modified') {
-                    entry.stagedNoActualChange = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
+                    const result = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
+                    entry.stagedNoActualChange = result.noActualChange;
+                    entry.stagedTooLargeForCosmeticCheck = result.tooLarge;
                 }
 
                 if (entry.unstagedStatus === 'modified') {
-                    entry.unstagedNoActualChange = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
+                    const result = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
+                    entry.unstagedNoActualChange = result.noActualChange;
+                    entry.unstagedTooLargeForCosmeticCheck = result.tooLarge;
                 }
             })
         );
@@ -454,15 +458,21 @@ export const changesGit = {
     },
 };
 
+const cosmeticCheckSizeLimit = 50 * 1024;
+
+function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
+    return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
+}
+
 async function hasNoActualChangeForKind(
     repoPath: string,
     filePath: string,
     kind: FileDiffRequestKind,
     ignoredChars: string | undefined,
     showWhitespaceChanges: boolean | undefined
-) {
+): Promise<{ noActualChange: boolean; tooLarge: boolean }> {
     if (isImagePath(filePath)) {
-        return false;
+        return { noActualChange: false, tooLarge: false };
     }
 
     const absolutePath = join(repoPath, filePath);
@@ -470,22 +480,28 @@ async function hasNoActualChangeForKind(
     if (kind === 'staged') {
         const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `HEAD:${filePath}`), readGitRevisionFileSize(repoPath, `:${filePath}`)]);
 
-        if (isPreviewTooLarge(originalSize, modifiedSize)) {
-            return false;
+        if (isTooLargeForCosmeticCheck(originalSize, modifiedSize)) {
+            return { noActualChange: false, tooLarge: true };
         }
 
         const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `HEAD:${filePath}`), readGitRevisionFile(repoPath, `:${filePath}`)]);
 
-        return areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false));
+        return {
+            noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false)),
+            tooLarge: false,
+        };
     }
 
     const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFileSize(absolutePath))]);
 
-    if (isPreviewTooLarge(originalSize, modifiedSize)) {
-        return false;
+    if (isTooLargeForCosmeticCheck(originalSize, modifiedSize)) {
+        return { noActualChange: false, tooLarge: true };
     }
 
     const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFile(absolutePath))]);
 
-    return areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false));
+    return {
+        noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false)),
+        tooLarge: false,
+    };
 }

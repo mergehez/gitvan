@@ -58,4 +58,20 @@ describe('changesGit partial file operations', () => {
         expect(changes.unstaged[0]?.path).toBe('story.txt');
         expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(true);
     });
+
+    it('skips the cosmetic check and flags files larger than 50kb', async () => {
+        const largeContent = 'role: "admin";\n'.repeat(4000);
+        const repo = createRepoWithFile('big.txt', largeContent, largeContent.replaceAll('"', "'"));
+        cleanups.push(() => repo.cleanup());
+
+        const changes = await changesGit.getRepoChanges(repo.repoPath, {
+            ignoredChars: ',;"\'',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.unstaged).toHaveLength(1);
+        expect(changes.unstaged[0]?.path).toBe('big.txt');
+        expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(false);
+        expect(changes.unstaged[0]?.unstagedTooLargeForCosmeticCheck).toBe(true);
+    });
 });

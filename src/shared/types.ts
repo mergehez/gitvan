@@ -182,6 +182,8 @@ export type FileChangeEntry = {
     unstagedStatus: ChangeStatus;
     stagedNoActualChange?: boolean;
     unstagedNoActualChange?: boolean;
+    stagedTooLargeForCosmeticCheck?: boolean;
+    unstagedTooLargeForCosmeticCheck?: boolean;
     displayStatus: string;
 };
 

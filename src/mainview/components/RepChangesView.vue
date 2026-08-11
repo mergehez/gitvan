@@ -42,6 +42,7 @@ type ChangeTreeEntry = TTreeData & {
     subtitle?: string;
     id: string;
     noActualChange?: boolean;
+    cosmeticCheckTooLarge?: boolean;
 };
 
 type TreeItem = FileTreeItem<ChangeTreeEntry, { isStaged: boolean }>;
@@ -60,6 +61,12 @@ function hasBackendNoActualChange(kind: 'staged' | 'unstaged', path: string) {
     return kind === 'staged' ? entry?.stagedNoActualChange === true : entry?.unstagedNoActualChange === true;
 }
 
+function hasBackendCosmeticCheckTooLarge(kind: 'staged' | 'unstaged', path: string) {
+    const entry = findChangeEntry(kind, path);
+
+    return kind === 'staged' ? entry?.stagedTooLargeForCosmeticCheck === true : entry?.unstagedTooLargeForCosmeticCheck === true;
+}
+
 const treeItems = computed<TreeItem[]>(() => {
     return [
         {
@@ -73,6 +80,7 @@ const treeItems = computed<TreeItem[]>(() => {
                 path: e.path,
                 status: e.stagedStatus,
                 noActualChange: hasBackendNoActualChange('staged', e.path),
+                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('staged', e.path),
                 isStaged: true,
             })),
         },
@@ -87,6 +95,7 @@ const treeItems = computed<TreeItem[]>(() => {
                 path: e.path,
                 status: e.unstagedStatus,
                 noActualChange: hasBackendNoActualChange('unstaged', e.path),
+                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('unstaged', e.path),
                 isStaged: false,
             })),
         },
@@ -809,6 +818,11 @@ onUnmounted(() => {
                                     v-if="item.path && repo.isFileLocked(item.path)"
                                     class="icon icon-[mdi--lock] text-xs opacity-50"
                                     v-tooltip="'Staging disabled for this file'"
+                                ></span>
+                                <span
+                                    v-if="item.path && item.cosmeticCheckTooLarge"
+                                    class="icon icon-[mdi--alert-circle-outline] text-xs opacity-50"
+                                    v-tooltip="'Too large to check for cosmetic changes'"
                                 ></span>
                             </template>
                             <template #item-actions="{ item }">
