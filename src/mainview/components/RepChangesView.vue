@@ -3,12 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ChangeStatus } from '../../shared/types.ts';
 import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
+import { useFileSort } from '../composables/useFileSort';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
 import type { ContextMenuEntry } from '../directives';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
+import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
@@ -26,6 +28,10 @@ const mergeState = useMergeHelper();
 const openWithEditors = computed(() => {
     return settings.getOpenWithEditors();
 });
+
+const stagedFileSort = useFileSort('changes-staged');
+const unstagedFileSort = useFileSort('changes-unstaged');
+const stashFilesFileSort = useFileSort('stash-files');
 
 const showDescription = ref(false);
 const selectedStagedIds = ref<string[]>([]);
@@ -73,31 +79,37 @@ const treeItems = computed<TreeItem[]>(() => {
             id: 'staged',
             title: 'Staged Changes',
             isStaged: true,
-            children: (repo.value?.changes?.staged ?? []).map((e) => ({
-                id: `staged-${e.path}`,
-                title: e.path,
-                subtitle: e.previousPath,
-                path: e.path,
-                status: e.stagedStatus,
-                noActualChange: hasBackendNoActualChange('staged', e.path),
-                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('staged', e.path),
-                isStaged: true,
-            })),
+            children: sortFilesByMode(
+                (repo.value?.changes?.staged ?? []).map((e) => ({
+                    id: `staged-${e.path}`,
+                    title: e.path,
+                    subtitle: e.previousPath,
+                    path: e.path,
+                    status: e.stagedStatus,
+                    noActualChange: hasBackendNoActualChange('staged', e.path),
+                    cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('staged', e.path),
+                    isStaged: true,
+                })),
+                stagedFileSort.mode.value
+            ),
         },
         {
             id: 'unstaged',
             title: 'Changes',
             isStaged: false,
-            children: (repo.value?.changes?.unstaged ?? []).map((e) => ({
-                id: `unstaged-${e.path}`,
-                title: e.path,
-                subtitle: e.previousPath,
-                path: e.path,
-                status: e.unstagedStatus,
-                noActualChange: hasBackendNoActualChange('unstaged', e.path),
-                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('unstaged', e.path),
-                isStaged: false,
-            })),
+            children: sortFilesByMode(
+                (repo.value?.changes?.unstaged ?? []).map((e) => ({
+                    id: `unstaged-${e.path}`,
+                    title: e.path,
+                    subtitle: e.previousPath,
+                    path: e.path,
+                    status: e.unstagedStatus,
+                    noActualChange: hasBackendNoActualChange('unstaged', e.path),
+                    cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('unstaged', e.path),
+                    isStaged: false,
+                })),
+                unstagedFileSort.mode.value
+            ),
         },
     ];
 });
@@ -156,7 +168,7 @@ const stashFilesTreeItem = computed<FileTreeItem>(() => {
     return {
         id: repo.value.currStash?.ref ?? '-',
         title: 'Files',
-        children:
+        children: sortFilesByMode(
             repo.value.currStash?.files.map((file) => ({
                 id: file.path,
                 title: file.path,
@@ -164,6 +176,8 @@ const stashFilesTreeItem = computed<FileTreeItem>(() => {
                 path: file.path,
                 status: file.status,
             })) ?? [],
+            stashFilesFileSort.mode.value
+        ),
     };
 });
 
@@ -520,11 +534,23 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
 }
 
 function buildChangeHeaderContextMenuEntries(item: ChangeTreeHeaderItem): ContextMenuEntry[] {
-    if (item.isStaged) {
-        return [];
+    const sortState = item.isStaged ? stagedFileSort : unstagedFileSort;
+    const entries: ContextMenuEntry[] = [...buildFileSortMenuEntries(sortState.mode.value, (mode) => sortState.setMode(mode), item.isStaged ? 'staged-sort' : 'unstaged-sort')];
+
+    if (!item.isStaged) {
+        entries.push({ type: 'separator', id: 'change-header-separator-sort' });
+        entries.push(...buildBulkChangeClassificationMenuEntries('unstaged'));
     }
 
-    return buildBulkChangeClassificationMenuEntries('unstaged');
+    return entries;
+}
+
+function buildStashFilesHeaderContextMenuEntries(): ContextMenuEntry[] {
+    return [
+        ...buildFileSortMenuEntries(stashFilesFileSort.mode.value, (mode) => stashFilesFileSort.setMode(mode), 'stash-files-sort'),
+        { type: 'separator', id: 'stash-files-header-separator-sort' },
+        ...buildBulkChangeClassificationMenuEntries('unstaged'),
+    ];
 }
 
 function buildBulkChangeClassificationMenuEntries(kind: 'unstaged'): ContextMenuEntry[] {
@@ -912,7 +938,7 @@ onUnmounted(() => {
                                 no-actions
                                 :onSelect="(t) => t.path && repo.selectRepositoryStashFile(t.path)"
                                 :getContextMenuItems="getContextMenuItems"
-                                :getHeaderContextMenuItems="buildChangeHeaderContextMenuEntries"
+                                :getHeaderContextMenuItems="buildStashFilesHeaderContextMenuEntries"
                             >
                             </ChangesFileTree>
                         </template>

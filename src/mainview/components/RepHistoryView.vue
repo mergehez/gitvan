@@ -2,9 +2,11 @@
 import { computed, ref } from 'vue';
 import type { CommitSummary, CommitTag } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
+import { useFileSort } from '../composables/useFileSort';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
 import type { ContextMenuEntry } from '../directives';
+import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
 import { readableDate } from '../lib/utils';
 import CenteredInputModal from './CenteredInputModal.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
@@ -16,6 +18,7 @@ import IconButton from './IconButton.vue';
 
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);
+const historyFilesSort = useFileSort('history-files');
 const latestCommitSha = computed(() => repo.value.history?.commits[0]?.sha ?? undefined);
 const selectedCommitDiffViewerState = useDiffViewer(computed(() => repo.value.currCommitDiff));
 const isCreateTagModalOpen = ref(false);
@@ -84,7 +87,7 @@ const treeItemFiles = computed<FileTreeItem<{ status: string; hadConflict?: bool
     return {
         id: repo.value.currCommit?.sha ?? '-',
         title: 'Files',
-        children:
+        children: sortFilesByMode(
             repo.value.currCommit?.files.map((e) => ({
                 id: e.path,
                 title: e.path,
@@ -93,8 +96,14 @@ const treeItemFiles = computed<FileTreeItem<{ status: string; hadConflict?: bool
                 status: e.status,
                 hadConflict: e.hadConflict,
             })) ?? [],
+            historyFilesSort.mode.value
+        ),
     };
 });
+
+function buildHistoryFilesHeaderContextMenuEntries(): ContextMenuEntry[] {
+    return buildFileSortMenuEntries(historyFilesSort.mode.value, (mode) => historyFilesSort.setMode(mode), 'history-files-sort');
+}
 
 function tagBadgeClass(tag: CommitTag) {
     return tag.isUnpushed ? 'border-amber-300/35 bg-amber-400/12 text-amber-100' : 'border-blue-400 bg-blue-500 text-white';
@@ -348,6 +357,7 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                                 show-path-tooltip
                                 no-actions
                                 :onSelect="(t) => t.path && repo.selectCommitFile(t.path)"
+                                :getHeaderContextMenuItems="buildHistoryFilesHeaderContextMenuEntries"
                             >
                                 <template #before-status="{ item }">
                                     <span
