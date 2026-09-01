@@ -104,6 +104,7 @@ const defaultEditorSettings: EditorSettings = {
     showWhitespaceChanges: false,
     activeView: 'changes',
     showBranches: false,
+    diffViewWrap: true,
 };
 
 type RemoteOperationResult =
@@ -189,6 +190,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         diffIgnoredChars?: string;
         diffIgnoredCharsEnabled?: boolean;
         showWhitespaceChanges?: boolean;
+        diffViewWrap?: boolean;
         activeView?: NavigationView;
         lastEditorPath?: string | undefined;
         showBranches?: boolean;
@@ -244,6 +246,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
             return Math.min(24, Math.max(10, Math.round(value)));
         })(),
         diffViewMode: raw.diffViewMode === 'changes' ? 'changes' : 'full-file',
+        diffViewWrap: raw.diffViewWrap === true,
         diffIgnoredChars: normalizeDiffIgnoredChars(raw.diffIgnoredChars),
         diffIgnoredCharsEnabled: raw.diffIgnoredCharsEnabled !== false,
         showWhitespaceChanges: raw.showWhitespaceChanges === true,

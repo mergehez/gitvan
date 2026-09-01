@@ -53,6 +53,7 @@ const settingsState = {
     terminals: [{ path: '/bin/zsh', label: 'zsh', locked: true }],
     defaultTerminalPath: '/bin/zsh',
     diffFontSize: 12,
+    diffViewWrap: false,
     diffViewMode: 'full-file',
     diffIgnoredChars: '',
     diffIgnoredCharsEnabled: true,

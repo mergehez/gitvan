@@ -21,6 +21,7 @@ function createMockSettings() {
             terminals: [],
             defaultTerminalPath: undefined,
             diffFontSize: 12,
+            diffViewWrap: false,
             diffViewMode: 'full-file',
             diffIgnoredChars: '',
             diffIgnoredCharsEnabled: true,

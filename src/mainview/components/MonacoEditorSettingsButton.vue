@@ -108,6 +108,18 @@ onUnmounted(() => {
                         </label>
                     </div>
 
+                    <div>
+                        <label class="flex cursor-pointer items-center gap-2 text-white/80 transition hover:border-white/20 hover:text-white">
+                            <input
+                                :checked="settings.state.diffViewWrap"
+                                @change="settings.setDiffViewWrap(($event.target as HTMLInputElement).checked)"
+                                type="checkbox"
+                                class="h-4 w-4 rounded border-white/20 bg-transparent accent-white"
+                            />
+                            <span>Wrap diff view</span>
+                        </label>
+                    </div>
+
                     <div class="pt-3">
                         <div class="font-semibold opacity-50">Chars To Ignore (Cosmetics)</div>
                         <div class="flex items-center gap-2">

@@ -166,7 +166,7 @@ const diffOptions = computed<DiffOptions>(() => {
         themeType: 'dark' as const,
         diffStyle: 'split' as const,
         disableFileHeader: true,
-        overflow: 'scroll' as const,
+        overflow: settings.state.diffViewWrap ? 'wrap' : 'scroll',
         expandUnchanged: props.diffViewMode === 'full-file',
         collapsedContextThreshold: 1,
         hunkSeparators: 'line-info-basic' as const,
@@ -510,7 +510,16 @@ onUnmounted(() => {
 });
 
 watch(
-    () => [props.original, props.modified, props.pathForLanguage, props.diffViewMode, props.diffIgnoredChars, props.showWhitespaceChanges, settings.state.diffFontSize],
+    () => [
+        props.original,
+        props.modified,
+        props.pathForLanguage,
+        props.diffViewMode,
+        props.diffIgnoredChars,
+        props.showWhitespaceChanges,
+        settings.state.diffFontSize,
+        settings.state.diffViewWrap,
+    ],
     () => {
         renderDiff();
     }

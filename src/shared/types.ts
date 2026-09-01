@@ -383,6 +383,7 @@ export type EditorSettings = {
     defaultTerminalPath: string | undefined;
     diffFontSize: number;
     diffViewMode: DiffViewMode;
+    diffViewWrap: boolean;
     diffIgnoredChars: string;
     diffIgnoredCharsEnabled: boolean;
     showWhitespaceChanges: boolean;

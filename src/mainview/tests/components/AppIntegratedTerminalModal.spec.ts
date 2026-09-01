@@ -110,6 +110,7 @@ describe('AppIntegratedTerminalModal', () => {
                 ],
                 defaultTerminalPath: '/bin/zsh',
                 diffFontSize: 12,
+                diffViewWrap: false,
                 diffViewMode: 'full-file',
                 diffIgnoredChars: '',
                 diffIgnoredCharsEnabled: true,

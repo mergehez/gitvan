@@ -41,6 +41,7 @@ export function _useSettings() {
             showWhitespaceChanges: false,
             activeView: 'changes',
             showBranches: false,
+            diffViewWrap: false,
         } as EditorSettings,
         isSettingsModalOpen: false,
         selectedSettingsPanel: 'editors' as SettingsPanel,
@@ -167,6 +168,7 @@ export function _useSettings() {
                     })),
                     defaultTerminalPath: settings.defaultTerminalPath,
                     diffFontSize: settings.diffFontSize,
+                    diffViewWrap: settings.diffViewWrap,
                     diffViewMode: settings.diffViewMode,
                     diffIgnoredChars: settings.diffIgnoredChars,
                     diffIgnoredCharsEnabled: settings.diffIgnoredCharsEnabled,
@@ -284,6 +286,9 @@ export function _useSettings() {
         },
         async setShowWhitespaceChanges(showWhitespaceChanges: boolean) {
             await this._patchEditorSettings({ showWhitespaceChanges });
+        },
+        async setDiffViewWrap(diffViewWrap: boolean) {
+            await this._patchEditorSettings({ diffViewWrap });
         },
         async saveOAuthProviderSettings(nextSettings: OAuthProviderSettings) {
             this.oauthProviderSettings = await tasks.updateOAuthProviderSettings.run({ settings: nextSettings });
