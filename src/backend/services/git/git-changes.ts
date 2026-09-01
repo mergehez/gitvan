@@ -188,21 +188,23 @@ export const changesGit = {
                 } satisfies FileChangeEntry;
             });
 
-        await Promise.all(
-            entries.map(async (entry) => {
-                if (entry.stagedStatus === 'modified') {
-                    const result = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
-                    entry.stagedNoActualChange = result.noActualChange;
-                    entry.stagedTooLargeForCosmeticCheck = result.tooLarge;
-                }
+        if (entries.length < cosmeticCheckFileCountLimit) {
+            await Promise.all(
+                entries.map(async (entry) => {
+                    if (entry.stagedStatus === 'modified') {
+                        const result = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
+                        entry.stagedNoActualChange = result.noActualChange;
+                        entry.stagedTooLargeForCosmeticCheck = result.tooLarge;
+                    }
 
-                if (entry.unstagedStatus === 'modified') {
-                    const result = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
-                    entry.unstagedNoActualChange = result.noActualChange;
-                    entry.unstagedTooLargeForCosmeticCheck = result.tooLarge;
-                }
-            })
-        );
+                    if (entry.unstagedStatus === 'modified') {
+                        const result = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
+                        entry.unstagedNoActualChange = result.noActualChange;
+                        entry.unstagedTooLargeForCosmeticCheck = result.tooLarge;
+                    }
+                })
+            );
+        }
 
         const stagedNumstat = await runGit(['diff', '--staged', '--numstat', '--'], repoPath).catch(() => '');
         const unstagedNumstat = await runGit(['diff', '--numstat', '--'], repoPath).catch(() => '');
@@ -459,10 +461,7 @@ export const changesGit = {
 };
 
 const cosmeticCheckSizeLimit = 50 * 1024;
-
-function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
-    return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
-}
+const cosmeticCheckFileCountLimit = 100;
 
 async function hasNoActualChangeForKind(
     repoPath: string,
@@ -476,6 +475,10 @@ async function hasNoActualChangeForKind(
     }
 
     const absolutePath = join(repoPath, filePath);
+
+    function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
+        return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
+    }
 
     if (kind === 'staged') {
         const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `HEAD:${filePath}`), readGitRevisionFileSize(repoPath, `:${filePath}`)]);
