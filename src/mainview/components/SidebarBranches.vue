@@ -43,14 +43,14 @@ const remoteBranches = computed<FileTreeItem<BranchSummary, { selection: string 
 }));
 
 function onBranchSelect(branch: BranchSummary, local: boolean) {
-    if (local) {
-        if (branch.isCurrent || tasks.isBusy) {
-            return;
-        }
+    if (branch.isCurrent || tasks.isBusy) {
+        return;
+    }
 
+    if (local) {
         void repo.value.checkoutBranch(branch.name);
     } else {
-        // selectRemoteBranch(branch);
+        void repo.value.checkoutBranch(branch.refName);
     }
 }
 

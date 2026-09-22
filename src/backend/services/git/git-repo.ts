@@ -166,7 +166,24 @@ export const repoGit = {
         };
     },
     async checkoutRepoBranch(repoPath: string, branchName: string) {
-        await runGit(['switch', normalizeBranchName(branchName)], repoPath);
+        const normalized = normalizeBranchName(branchName);
+
+        // `git switch` rejects a remote-tracking ref directly, so when the target is a
+        // remote branch, create (or reuse) a local branch that tracks it.
+        const remoteExists = (await runGit(['rev-parse', '--verify', '--quiet', `refs/remotes/${normalized}`], repoPath, [0, 1, 128])).trim();
+        if (remoteExists) {
+            const localName = normalized.slice(normalized.indexOf('/') + 1);
+            const localExists = (await runGit(['rev-parse', '--verify', '--quiet', `refs/heads/${localName}`], repoPath, [0, 1, 128])).trim();
+
+            if (localExists) {
+                await runGit(['switch', localName], repoPath);
+            } else {
+                await runGit(['switch', '-c', localName, '--track', normalized], repoPath);
+            }
+            return;
+        }
+
+        await runGit(['switch', normalized], repoPath);
     },
     async createRepoBranch(repoPath: string, branchName: string) {
         const trimmedName = normalizeBranchName(branchName);

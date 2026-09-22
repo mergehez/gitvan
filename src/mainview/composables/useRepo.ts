@@ -39,6 +39,15 @@ function loadLockedFiles(repoId: number): Set<string> {
     return new Set<string>();
 }
 
+function displayBranchName(branchName: string): string {
+    // `checkoutBranch` may receive a remote-tracking ref (refs/remotes/<remote>/<branch>).
+    // Strip the remote prefix so the toast reads like a local branch name.
+    if (branchName.startsWith('refs/remotes/')) {
+        return branchName.slice('refs/remotes/'.length).replace(/^[^/]+\//, '');
+    }
+    return branchName;
+}
+
 function saveLockedFiles(repoId: number, files: Set<string>) {
     try {
         localStorage.setItem(`${LOCKED_FILES_KEY_PREFIX}${repoId}`, JSON.stringify([...files]));
@@ -866,7 +875,7 @@ const _useRepository = (repo: Repo) => {
             const nextBootstrap = await tasks.checkoutBranch.run({ repoId: this.id, branchName }, branchName);
 
             await applyMutation(nextBootstrap);
-            toast.showSuccessToast(`Switched to ${branchName}.`);
+            toast.showSuccessToast(`Switched to ${displayBranchName(branchName)}.`);
         },
 
         async loadRepositoryStashes() {

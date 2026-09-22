@@ -10,6 +10,10 @@ const fileTreeStub = defineComponent({
             type: Object,
             required: true,
         },
+        onSelect: {
+            type: Function,
+            required: true,
+        },
     },
     template: '<section><div>{{ item.title }}</div><slot name="header-actions" :item="item" /></section>',
 });
@@ -118,5 +122,31 @@ describe('SidebarBranches', () => {
 
         await flushPromises();
         expect(selectedRepo.loadBranches).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks out the remote ref when a remote branch is selected', async () => {
+        selectedRepo.branches.remote = [
+            {
+                name: 'origin/feature',
+                refName: 'refs/remotes/origin/feature',
+                kind: 'remote',
+                isCurrent: false,
+                upstream: undefined,
+                ahead: 0,
+                behind: 0,
+                commit: 'abc1234',
+                subject: 'Add feature',
+            },
+        ];
+
+        const wrapper = mountView();
+        await flushPromises();
+
+        const fileTrees = wrapper.findAllComponents(fileTreeStub);
+        const remoteTree = fileTrees.find((tree) => tree.props('item').title === 'Remote branches') ?? fileTrees[1];
+
+        (remoteTree.props('onSelect') as (branch: unknown) => void)(selectedRepo.branches.remote[0]);
+
+        expect(selectedRepo.checkoutBranch).toHaveBeenCalledWith('refs/remotes/origin/feature');
     });
 });
