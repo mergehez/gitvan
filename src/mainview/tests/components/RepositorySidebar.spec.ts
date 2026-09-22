@@ -20,6 +20,7 @@ type RepositorySidebarReposMock = Pick<
     ReposState,
     | 'repos'
     | 'repoGroups'
+    | 'sandboxLabsAvailable'
     | 'selectedRepoId'
     | 'isCreateRepoModalOpen'
     | 'isCloneRepoModalOpen'
@@ -132,10 +133,11 @@ function createMockAuth() {
     } satisfies RepositorySidebarAuthMock);
 }
 
-function createMockRepos() {
+function createMockRepos(sandboxLabsAvailable = true) {
     return reactive({
         repos: [useRepo(createRepository(1, 'Alpha', 'Work')), useRepo(createRepository(2, 'Beta', 'Work'))] as RepositoryState[],
         repoGroups: [{ id: 1, name: 'Work', sequence: 1, repoCount: 2, createdAt: '2026-03-27T00:00:00.000Z' }],
+        sandboxLabsAvailable,
         selectedRepoId: 1,
         isCreateRepoModalOpen: false,
         isCloneRepoModalOpen: false,
@@ -349,6 +351,20 @@ describe('RepositorySidebar', () => {
         expect(mockSettings.openSettingsWindow).toHaveBeenCalledWith('repositories');
 
         wrapper.unmount();
+    });
+
+    it('only offers the sandbox reset button when the sandbox labs are available', () => {
+        mockRepos = createMockRepos(false);
+        const withoutLabs = mountSidebar();
+
+        expect(withoutLabs.text()).not.toContain('Reset Sandboxes');
+        withoutLabs.unmount();
+
+        mockRepos = createMockRepos(true);
+        const withLabs = mountSidebar();
+
+        expect(withLabs.text()).toContain('Reset Sandboxes');
+        withLabs.unmount();
     });
 
     it('routes add menu actions to create and clone handlers', async () => {

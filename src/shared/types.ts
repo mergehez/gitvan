@@ -357,6 +357,7 @@ export type AppBootstrapApi = {
     groups: GroupSummary[];
     accounts: AccountSummary[];
     selectedRepoId: number | undefined;
+    sandboxLabsAvailable: boolean;
 };
 
 export type EditorApp = {

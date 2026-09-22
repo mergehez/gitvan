@@ -658,7 +658,7 @@ function fetchGroupRepos(groupId: number) {
                 </FileTree>
             </div>
         </div>
-        <div class="mt-4 px-2">
+        <div v-if="repos.sandboxLabsAvailable" class="mt-4 px-2">
             <Button
                 severity="secondary"
                 class="w-full justify-center"

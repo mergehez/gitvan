@@ -39,6 +39,9 @@ export function _useRepositories() {
         get selectedRepoId() {
             return _coreState.selectedRepoId;
         },
+        get sandboxLabsAvailable() {
+            return _coreState.sandboxLabsAvailable;
+        },
         getSelectedRepo() {
             return this.repos.find((repo) => repo.id === this.selectedRepoId);
         },

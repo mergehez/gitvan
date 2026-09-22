@@ -35,7 +35,26 @@ import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessTo
 const db = useDb();
 
 const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, '..', '..', '..');
+
+// The labs ship with the checkout only; when built, this module is bundled into dist-electron/,
+// so the checkout root is not a fixed number of levels above it.
+function findSandboxLabsPath(startDirectory: string): string | undefined {
+    for (let directory = startDirectory; ;) {
+        const candidate = join(directory, 'sandbox');
+        if (existsSync(candidate)) {
+            return candidate;
+        }
+
+        const parent = dirname(directory);
+        if (parent === directory) {
+            return undefined;
+        }
+
+        directory = parent;
+    }
+}
+
+const sandboxLabsPath = findSandboxLabsPath(__dirname);
 const sandboxResetScripts = [
     {
         folder: 'merge-conflict',
@@ -447,6 +466,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
         groups: db.listGroups(),
         accounts: db.listAccounts(),
         selectedRepoId,
+        sandboxLabsAvailable: sandboxLabsPath !== undefined,
     };
 
     return bootstrap;
@@ -660,6 +680,11 @@ export const app = {
         return buildBootstrap();
     },
     resetSandboxRepos: async () => {
+        const labsPath = sandboxLabsPath;
+        if (!labsPath) {
+            throw new Error('The sandbox labs are only available when running from the Gitvan source checkout.');
+        }
+
         let groupSandbox = db.getGroupByName('Sandbox');
         if (!groupSandbox) {
             db.createGroup('Sandbox');
@@ -671,15 +696,16 @@ export const app = {
             db.removeRepo(repo.id);
         }
         for (const sandbox of sandboxResetScripts) {
-            const folderPath = join(projectRoot, 'sandbox', sandbox.folder + '-lab');
+            const folderPath = join(labsPath, sandbox.folder + '-lab');
             const repoPath = join(folderPath, 'repo');
             const scriptPath = join(folderPath, sandbox.script);
-            console.log('running: node', [scriptPath], repoPath);
+            console.log('running:', process.execPath, [scriptPath], repoPath);
             await executeCommand({
-                command: 'node',
+                // Electron is its own Node runtime; `node` is not on PATH for app-launched builds.
+                command: process.execPath,
                 args: [scriptPath],
                 cwd: repoPath,
-                env: process.env,
+                env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
                 allowedExitCodes: [0],
                 getErrorToThrow: (stdout, stderr, exitCode) => new Error(stderr.trim() || stdout.trim() || `node exited with code ${exitCode}.`),
             });
