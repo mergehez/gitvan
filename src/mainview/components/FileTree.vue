@@ -16,7 +16,7 @@ export type FileTreeItem<TData = any, TRoot = {}> = {
     id?: any;
     title: string;
     subtitle?: string;
-    count?: number;
+    count?: number | string;
     children: (FileTreeChild<TData> & TData)[];
 } & TRoot;
 
@@ -131,7 +131,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
         >
             <div class="flex items-center uppercase gap-1 flex-1">
                 <IconButton severity="raised" smaller @click="collapsed = !collapsed" class="opacity-70" :icon="collapsed ? 'icon-[mdi--plus]' : 'icon-[mdi--minus]'" />
-                <p class="cursor-pointer flex-1" @click="collapsed = !collapsed">{{ item.title }}</p>
+                <p class="cursor-pointer flex-1 line-clamp-1 break-all" @click="collapsed = !collapsed">{{ item.title }}</p>
             </div>
             <div class="flex items-center gap-1">
                 <slot name="header-actions" :item="item"></slot>
