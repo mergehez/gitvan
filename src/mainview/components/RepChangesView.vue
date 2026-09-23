@@ -958,7 +958,7 @@ onUnmounted(() => {
                             </Alert>
                             <Button
                                 v-if="repo.curDiff && selectedDiffConflictCount > 0"
-                                severity="secondary"
+                                severity="warning"
                                 smaller
                                 v-tooltip="'Resolve conflict markers inline'"
                                 @click="mergeState.openInlineMergeEditor(repo.curDiff.path)"

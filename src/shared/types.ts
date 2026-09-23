@@ -180,6 +180,7 @@ export type FileChangeEntry = {
     previousPath: string | undefined;
     stagedStatus: ChangeStatus;
     unstagedStatus: ChangeStatus;
+    hasConflictMarkers?: boolean;
     stagedNoActualChange?: boolean;
     unstagedNoActualChange?: boolean;
     stagedTooLargeForCosmeticCheck?: boolean;

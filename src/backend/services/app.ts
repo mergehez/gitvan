@@ -136,6 +136,7 @@ type RemoteOperationResult =
           bootstrap: AppBootstrapApi;
           status: 'conflicted';
           stashed: false;
+          conflictingFiles: string[];
       }
     | {
           bootstrap: AppBootstrapApi;
@@ -154,6 +155,7 @@ type RetryPullAfterStashResult =
           bootstrap: AppBootstrapApi;
           status: 'conflicted';
           stashed: true;
+          conflictingFiles: string[];
       };
 
 function getDefaultTerminalEntries(): EditorSettings['terminals'] {
@@ -1180,6 +1182,7 @@ export const app = {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted',
                     stashed: false,
+                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
                 };
             }
 
@@ -1225,6 +1228,7 @@ export const app = {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted',
                     stashed: true,
+                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
                 };
             }
 
@@ -1244,6 +1248,7 @@ export const app = {
                 bootstrap: await buildBootstrap(),
                 status: 'completed' as const,
                 kept: false,
+                conflictingFiles: [] as string[],
             };
         } catch (error) {
             if (git.isStashRestoreConflictError(error)) {
@@ -1251,6 +1256,7 @@ export const app = {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted' as const,
                     kept: true,
+                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
                 };
             }
 

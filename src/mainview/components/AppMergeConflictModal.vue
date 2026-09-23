@@ -111,7 +111,12 @@ watch(
                         <p class="text-xl font-semibold text-white">{{ modalTitle }}</p>
                         <p class="mt-1 text-sm opacity-50">{{ modalDescription }}</p>
                     </div>
-                    <IconButton severity="raised" v-tooltip.bottom="'Abort Merge'" @click="mergeState.abortMerge()" icon="icon-[mdi--close] text-xl" />
+                    <IconButton
+                        severity="raised"
+                        v-tooltip.bottom="isStandaloneConflictEditor ? 'Close' : 'Abort Merge'"
+                        @click="isStandaloneConflictEditor ? mergeState.closeInlineMergeEditor() : mergeState.abortMerge()"
+                        icon="icon-[mdi--close] text-xl"
+                    />
                 </div>
 
                 <div class="flex h-[70vh] gap-0 overflow-y-auto">
@@ -251,7 +256,7 @@ watch(
                         >
                             Commit Merge
                         </Button>
-                        <Button v-if="isStandaloneConflictEditor" class="whitespace-nowrap" severity="light" @click="mergeState.dismissMergeConflictModal()"> Close </Button>
+                        <Button v-if="isStandaloneConflictEditor" class="whitespace-nowrap" severity="light" @click="mergeState.closeInlineMergeEditor()"> Close </Button>
                     </div>
                 </div>
             </div>

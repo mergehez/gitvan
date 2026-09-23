@@ -199,6 +199,24 @@ export function countConflictMarkers(fileContent: string) {
     return fileContent.match(/^<<<<<<< /gm)?.length ?? 0;
 }
 
+export function parseConflictMarkerPaths(checkOutput: string) {
+    const suffix = ': leftover conflict marker';
+    const paths = new Set<string>();
+
+    for (const line of checkOutput.split('\n')) {
+        if (!line.endsWith(suffix)) {
+            continue;
+        }
+
+        const path = line.slice(0, -suffix.length).replace(/:\d+$/, '');
+        if (path) {
+            paths.add(path);
+        }
+    }
+
+    return paths;
+}
+
 export function labelForStatus(status: ChangeStatus) {
     switch (status) {
         case 'modified':
@@ -266,13 +284,15 @@ export function parsePorcelainTrackedEntries(output: string) {
             continue;
         }
 
-        if (!line.startsWith('1 ') && !line.startsWith('u ')) {
+        const isUnmerged = line.startsWith('u ');
+        if (!isUnmerged && !line.startsWith('1 ')) {
             continue;
         }
 
-        const parts = line.split(' ', 9);
+        const parts = line.split(' ');
         const xy = parts[1] ?? '..';
-        const path = parts[8]?.trim();
+        // `u ` records carry the three stage hashes before the path; `1 ` records carry two.
+        const path = parts.slice(isUnmerged ? 10 : 8).join(' ');
 
         if (!path || !hasVisiblePorcelainChange(xy)) {
             continue;

@@ -13,6 +13,7 @@ import {
     isPreviewTooLarge,
     labelForStatus,
     normalizeGitIgnoreEntry,
+    parseConflictMarkerPaths,
     parseNameStatusOutput,
     parsePorcelainTrackedEntries,
     readGitRevisionFile,
@@ -132,12 +133,16 @@ export const changesGit = {
             showWhitespaceChanges?: boolean;
         } = {}
     ): Promise<RepoChangesData> {
-        const [stagedRaw, unstagedRaw, untrackedRaw, trackedStatusRaw] = await Promise.all([
+        const [stagedRaw, unstagedRaw, untrackedRaw, trackedStatusRaw, conflictCheckRaw] = await Promise.all([
             runGit(['diff', '--staged', '--name-status', '-z', '--find-renames', '--'], repoPath),
             runGit(['diff', '--name-status', '-z', '--find-renames', '--'], repoPath),
             runGit(['ls-files', '--others', '--exclude-standard', '-z'], repoPath),
             runGit(['status', '--porcelain=v2'], repoPath),
+            runGit(['diff', 'HEAD', '--check', '--'], repoPath, [0, 1, 2, 128]).catch(() => ''),
         ]);
+
+        // A file can keep conflict markers after its unmerged stages are gone, so the index alone is not enough.
+        const conflictMarkerPaths = parseConflictMarkerPaths(conflictCheckRaw);
 
         const stagedMap = new Map(parseNameStatusOutput(stagedRaw).map((entry) => [entry.path, entry]));
         const unstagedEntries = parseNameStatusOutput(unstagedRaw);
@@ -184,6 +189,7 @@ export const changesGit = {
                     previousPath: stagedEntry?.previousPath ?? unstagedEntry?.previousPath ?? undefined,
                     stagedStatus,
                     unstagedStatus,
+                    hasConflictMarkers: conflictMarkerPaths.has(path) ? true : undefined,
                     displayStatus: labelForStatus(primaryStatus),
                 } satisfies FileChangeEntry;
             });
@@ -233,6 +239,14 @@ export const changesGit = {
             stagedStats: parseNumstatTotals(stagedNumstat),
             unstagedStats: parseNumstatTotals(unstagedNumstat),
         };
+    },
+    async listUnmergedRepoFiles(repoPath: string): Promise<string[]> {
+        const output = await runGit(['diff', '--name-only', '--diff-filter=U', '--'], repoPath, [0, 1, 128]);
+
+        return output
+            .split('\n')
+            .map((value) => value.trim())
+            .filter(Boolean);
     },
     async getFileDiff(repoPath: string, filePath: string, kind: FileDiffRequestKind): Promise<FileDiffData> {
         const absolutePath = join(repoPath, filePath);
@@ -369,13 +383,13 @@ export const changesGit = {
         await runGit(['add', '--all', '--', '.'], repoPath);
     },
     async unstageRepoFile(repoPath: string, filePath: string) {
-        await runGit(['restore', '--staged', '--', filePath], repoPath);
+        await runGit(['reset', '--quiet', '--', filePath], repoPath);
     },
     async unstageRepoFiles(repoPath: string, filePaths: string[]) {
         if (!filePaths.length) {
             return;
         }
-        await runGit(['restore', '--staged', '--', ...filePaths], repoPath);
+        await runGit(['reset', '--quiet', '--', ...filePaths], repoPath);
     },
     async discardRepoFile(repoPath: string, filePath: string) {
         const output = await runGit(['ls-files', '--error-unmatch', '--', filePath], repoPath, [0, 1]);
@@ -393,7 +407,8 @@ export const changesGit = {
         }
     },
     async unstageAllRepoFiles(repoPath: string) {
-        await runGit(['restore', '--staged', '--', '.'], repoPath);
+        // `restore --staged` refuses paths holding unmerged stages and needs a resolvable HEAD.
+        await runGit(['reset', '--quiet', '--', '.'], repoPath);
     },
     async applyPatch(repoPath: string, patch: string, mode: 'stage' | 'unstage' | 'discard') {
         try {

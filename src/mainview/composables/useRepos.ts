@@ -222,7 +222,14 @@ export function _useRepositories() {
             this.closePullBlockedByLocalChangesModal();
 
             if (operation === 'pull' && nextResult.status === 'conflicted') {
-                toast.showSuccessToast(nextResult.stashed ? 'Changes stashed. Pull stopped with merge conflicts.' : 'Pull stopped with merge conflicts.');
+                const conflictingFileCount = nextResult.conflictingFiles.length;
+                const conflictSummary = conflictingFileCount > 0 ? `merge conflicts in ${conflictingFileCount} file${conflictingFileCount === 1 ? '' : 's'}` : 'merge conflicts';
+
+                toast.showErrorToast(
+                    nextResult.stashed
+                        ? `Changes stashed. Pull stopped with ${conflictSummary}; the stash entry was kept.`
+                        : `Pull stopped with ${conflictSummary}. Resolve them to finish the merge.`
+                );
                 return;
             }
 

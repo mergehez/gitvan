@@ -6,20 +6,28 @@ import { applyMutation } from './initializeStates';
 import { tasks } from './useTasks';
 import { toast } from './useToast';
 
-function _useMergeHelper() {
+export function _useMergeHelper() {
     return reactive({
         mergeConflictModalRepositoryId: undefined as number | undefined,
         mergeConflictState: undefined as MergeConflictState | undefined,
         isMergeConflictModalOpen: false,
         activeMergeConflictEditor: undefined as MergeConflictFileDetails | undefined,
+        activeMergeConflictEditorRepositoryId: undefined as number | undefined,
         resolvedMergeConflictPaths: new Set<string>(),
         _syncMergeConflictModal(nextState: MergeConflictState | undefined) {
             if (!_coreState.selectedRepoId || !nextState?.isMerging) {
                 this.mergeConflictState = nextState;
-                this.isMergeConflictModalOpen = false;
-                this.mergeConflictModalRepositoryId = undefined;
-                this.activeMergeConflictEditor = undefined;
                 this.resolvedMergeConflictPaths = new Set<string>();
+                this.mergeConflictModalRepositoryId = undefined;
+
+                // Background refreshes (polling, mutations) land here. An editor opened for a single file
+                // stays open until the user closes it or the selected repository changes.
+                if (this.activeMergeConflictEditorRepositoryId !== _coreState.selectedRepoId) {
+                    this.isMergeConflictModalOpen = false;
+                    this.activeMergeConflictEditor = undefined;
+                    this.activeMergeConflictEditorRepositoryId = undefined;
+                }
+
                 return;
             }
 
@@ -31,6 +39,7 @@ function _useMergeHelper() {
                 this.mergeConflictModalRepositoryId = _coreState.selectedRepoId;
                 this.isMergeConflictModalOpen = true;
                 this.activeMergeConflictEditor = undefined;
+                this.activeMergeConflictEditorRepositoryId = undefined;
             }
         },
         async loadMergeConflictState() {
@@ -50,9 +59,6 @@ function _useMergeHelper() {
 
             this.isMergeConflictModalOpen = true;
         },
-        dismissMergeConflictModal() {
-            this.isMergeConflictModalOpen = false;
-        },
         async openInlineMergeEditor(path: string) {
             if (!_coreState.selectedRepoId) {
                 return;
@@ -64,10 +70,12 @@ function _useMergeHelper() {
             });
 
             this.activeMergeConflictEditor = details;
+            this.activeMergeConflictEditorRepositoryId = _coreState.selectedRepoId;
             this.isMergeConflictModalOpen = true;
         },
         closeInlineMergeEditor() {
             this.activeMergeConflictEditor = undefined;
+            this.activeMergeConflictEditorRepositoryId = undefined;
 
             if (!this.mergeConflictState?.isMerging) {
                 this.isMergeConflictModalOpen = false;

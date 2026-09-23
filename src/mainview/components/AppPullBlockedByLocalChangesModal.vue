@@ -9,8 +9,6 @@ import CenteredModal from './CenteredModal.vue';
 const repos = useRepos();
 
 const modalRepo = computed(() => repos.repos.find((repo) => repo.id === repos.pullBlockedRepoId));
-const visibleFiles = computed(() => (repos.pullBlockedConflictingFiles.length > 5 ? repos.pullBlockedConflictingFiles.slice(0, 4) : repos.pullBlockedConflictingFiles));
-const remainingFileCount = computed(() => (repos.pullBlockedConflictingFiles.length > 5 ? repos.pullBlockedConflictingFiles.length - visibleFiles.value.length : 0));
 const isRetryRunning = computed(() => (repos.pullBlockedRepoId === undefined ? false : tasks.retryPullAfterStash.isRunning(String(repos.pullBlockedRepoId))));
 </script>
 
@@ -33,11 +31,10 @@ const isRetryRunning = computed(() => (repos.pullBlockedRepoId === undefined ? f
                     </div>
                 </div>
 
-                <div class="mt-4 space-y-2">
-                    <div v-for="path in visibleFiles" :key="path" class="rounded-lg border border-white/8 bg-x1 px-3 py-2 font-mono text-sm text-white/90">
+                <div class="mt-4 space-y-2 max-h-44 overflow-y-auto scrollbar-thin">
+                    <div v-for="path in repos.pullBlockedConflictingFiles" :key="path" class="rounded-lg border border-white/8 bg-x1 px-3 py-2 font-mono text-sm text-white/90">
                         {{ path }}
                     </div>
-                    <p v-if="remainingFileCount > 0" class="text-sm text-white/60">{{ remainingFileCount }} more files</p>
                 </div>
             </div>
 

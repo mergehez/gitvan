@@ -3,11 +3,15 @@ import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/type
 import { _useRepositories } from '../../composables/useRepos';
 import type { ContextMenuEntry, ContextMenuItem } from '../../directives';
 
-const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, mockCoreState, mockContextMenu } = vi.hoisted(() => {
+const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, mockCoreState, mockContextMenu, mockToast } = vi.hoisted(() => {
     const testEditor = 'Visual Studio Code.app';
 
     return {
         testEditor,
+        mockToast: {
+            showSuccessToast: vi.fn(),
+            showErrorToast: vi.fn(),
+        },
         mockRequest: {
             getCloneRepoDefaults: vi.fn(),
             pickCloneRepoDirectory: vi.fn(),
@@ -86,9 +90,7 @@ vi.mock('../../composables/useRepo.ts', () => ({
 }));
 
 vi.mock('../../composables/useToast.ts', () => ({
-    toast: {
-        showSuccessToast: vi.fn(),
-    },
+    toast: mockToast,
 }));
 
 vi.mock('../../lib/loadingIndicatorState.ts', () => ({
@@ -137,6 +139,67 @@ function createRepo(): Repo {
 function isMenuItem(entry: ContextMenuEntry | undefined): entry is ContextMenuItem {
     return Boolean(entry && 'id' in entry);
 }
+
+function createBootstrap(): AppBootstrapApi {
+    return {
+        repos: [],
+        groups: [],
+        accounts: [],
+        selectedRepoId: undefined,
+        sandboxLabsAvailable: false,
+    };
+}
+
+describe('useRepos remote operation feedback', () => {
+    beforeEach(() => {
+        mockCoreState.repos = [createRepo()];
+        mockCoreState.selectedRepoId = 1;
+        mockToast.showSuccessToast.mockClear();
+        mockToast.showErrorToast.mockClear();
+    });
+
+    it('reports a pull conflict as an attention toast with the conflicting file count', async () => {
+        const repos = _useRepositories();
+
+        await repos.handleRemoteOperationResult(1, 'pull', {
+            bootstrap: createBootstrap(),
+            status: 'conflicted',
+            stashed: false,
+            conflictingFiles: ['Data/Base/ProductAccount.cs', 'Data/Base/Account.cs'],
+        });
+
+        expect(mockToast.showErrorToast).toHaveBeenCalledWith(expect.stringContaining('merge conflicts in 2 files'));
+        expect(mockToast.showSuccessToast).not.toHaveBeenCalled();
+    });
+
+    it('keeps the stash note when a retried pull conflicts after stashing', async () => {
+        const repos = _useRepositories();
+
+        await repos.handleRemoteOperationResult(1, 'pull', {
+            bootstrap: createBootstrap(),
+            status: 'conflicted',
+            stashed: true,
+            conflictingFiles: ['Data/Base/ProductAccount.cs'],
+        });
+
+        const message = mockToast.showErrorToast.mock.calls[0]?.[0] as string;
+
+        expect(message).toContain('merge conflicts in 1 file');
+        expect(message).toContain('stash entry was kept');
+    });
+
+    it('still reports a completed pull as success', async () => {
+        const repos = _useRepositories();
+
+        await repos.handleRemoteOperationResult(1, 'pull', {
+            bootstrap: createBootstrap(),
+            status: 'completed',
+            stashed: false,
+        });
+
+        expect(mockToast.showSuccessToast).toHaveBeenCalledWith('Pull completed.');
+    });
+});
 
 describe('useRepos repo context menu', () => {
     beforeEach(() => {

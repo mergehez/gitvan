@@ -59,16 +59,19 @@ export function configureMonaco(monaco: any) {
 
     monacoConfigured = true;
 
-    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-        noSemanticValidation: true,
-        noSyntaxValidation: false,
-    });
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-        target: monaco.languages.typescript.ScriptTarget.ES2015,
-        allowNonTsExtensions: true,
-    });
+    // The language services are optional: without them the editor still works, only diagnostics are gone.
+    if (monaco.languages.typescript) {
+        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+            noSemanticValidation: true,
+            noSyntaxValidation: false,
+        });
+        monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+            target: monaco.languages.typescript.ScriptTarget.ES2015,
+            allowNonTsExtensions: true,
+        });
+    }
 
-    monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    monaco.languages.json?.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         allowComments: true,
         schemaValidation: 'error',

@@ -707,7 +707,13 @@ const _useRepository = (repo: Repo) => {
             await applyMutation(nextResult.bootstrap);
 
             if (nextResult.status === 'conflicted') {
-                toast.showSuccessToast('Stash restore stopped with conflicts. The stash was kept.');
+                const conflictingFileCount = nextResult.conflictingFiles.length;
+
+                toast.showErrorToast(
+                    conflictingFileCount > 0
+                        ? `Stash restored with conflicts in ${conflictingFileCount} file${conflictingFileCount === 1 ? '' : 's'}. Resolve them in Changes; the stash entry was kept.`
+                        : 'Stash restored with conflicts. Resolve them in Changes; the stash entry was kept.'
+                );
                 return;
             }
 

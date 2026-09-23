@@ -80,7 +80,11 @@ export function fileIconAndLanguageByPath(path: string): { lang: string; icon: s
     };
 }
 
-export function statusLetter(entry: { status?: ChangeStatus }) {
+export function statusLetter(entry: { status?: ChangeStatus; hasConflictMarkers?: boolean }) {
+    if (entry.hasConflictMarkers) {
+        return '!';
+    }
+
     const status: ChangeStatus = entry.status ?? 'clean';
 
     const map = {
@@ -98,7 +102,11 @@ export function statusLetter(entry: { status?: ChangeStatus }) {
     return map[status];
 }
 
-export function statusClass(entry: { status?: ChangeStatus; noActualChange?: boolean }) {
+export function statusClass(entry: { status?: ChangeStatus; noActualChange?: boolean; hasConflictMarkers?: boolean }) {
+    if (entry.hasConflictMarkers) {
+        return 'text-red-400';
+    }
+
     const status: ChangeStatus = entry.status ?? 'clean';
 
     if (status === 'modified' && entry.noActualChange) {
