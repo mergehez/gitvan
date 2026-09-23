@@ -4,6 +4,7 @@ import type { NativeCommand } from '../shared/types.ts';
 import Alert from './components/Alert.vue';
 import AppCloneRepositoryModal from './components/AppCloneRepositoryModal.vue';
 import AppConfirmationModal from './components/AppConfirmationModal.vue';
+import AppConfirmationPopover from './components/AppConfirmationPopover.vue';
 import AppCreateRepositoryModal from './components/AppCreateRepositoryModal.vue';
 import AppErrorBanner from './components/AppErrorBanner.vue';
 import AppIntegratedTerminalModal from './components/AppIntegratedTerminalModal.vue';
@@ -57,6 +58,7 @@ onBeforeUnmount(() => {
     <template v-if="!!tasks.abortMerge">
         <AppCloneRepositoryModal />
         <AppConfirmationModal />
+        <AppConfirmationPopover />
         <AppCreateRepositoryModal />
         <AppIntegratedTerminalModal />
         <AppMergeConflictModal />

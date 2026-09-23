@@ -20,6 +20,40 @@ describe('AppConfirmationModal', () => {
         }
     });
 
+    it('stays closed while the confirmation is anchored to an on-screen trigger', async () => {
+        const wrapper = mount(AppConfirmationModal, {
+            global: {
+                directives: {
+                    tooltip: {},
+                },
+                stubs: {
+                    Transition: false,
+                    IconButton: {
+                        template: '<button type="button" @click="$emit(\'click\')">Close</button>',
+                    },
+                },
+            },
+        });
+        const trigger = document.createElement('button');
+        trigger.getBoundingClientRect = () => ({ left: 20, top: 40, right: 40, bottom: 60, width: 20, height: 20, x: 20, y: 40, toJSON: () => ({}) }) as DOMRect;
+        document.body.appendChild(trigger);
+
+        const pendingConfirmation = confirmation.request({
+            title: 'Discard file changes',
+            message: "Discard changes in 'second.txt'?",
+            anchor: trigger,
+        });
+
+        await flushPromises();
+
+        expect(confirmation.state.anchorPoint).toBeDefined();
+        expect(wrapper.text()).not.toContain('Discard file changes');
+
+        confirmation.cancel();
+        await expect(pendingConfirmation).resolves.toBe(false);
+        trigger.remove();
+    });
+
     it('resolves false when the active confirmation is canceled', async () => {
         const wrapper = mount(AppConfirmationModal, {
             global: {

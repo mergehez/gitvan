@@ -11,7 +11,12 @@ function onOpenChange(isOpen: boolean) {
 </script>
 
 <template>
-    <CenteredModal :open="confirmation.state.isOpen" title="Confirmation required" content-class="max-w-xl" @update:open="onOpenChange">
+    <CenteredModal
+        :open="confirmation.state.isOpen && confirmation.state.anchorPoint === undefined"
+        title="Confirmation required"
+        content-class="max-w-xl"
+        @update:open="onOpenChange"
+    >
         <div class="space-y-5 px-6 py-5">
             <div class="space-y-3">
                 <div>
