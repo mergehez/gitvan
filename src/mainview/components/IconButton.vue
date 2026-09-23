@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { twMerge } from 'tailwind-merge';
 import { computed } from 'vue';
-import Icon from './Icon.vue';
 import type { TButtonSeverity } from './Button.vue';
 import Button from './Button.vue';
+import Icon from './Icon.vue';
 
 const props = withDefaults(
     defineProps<{
@@ -10,12 +11,13 @@ const props = withDefaults(
         icon: `icon-\[${string}`;
         smaller?: boolean;
         disabled?: boolean;
+        class?: string;
     }>(),
     {
         severity: 'light',
     }
 );
-const finalClass = computed(() => (props.smaller ? 'p-0.5 text-2xs' : 'p-1 text-sm'));
+const finalClass = computed(() => twMerge(props.smaller ? 'p-0.5 text-2xs' : 'p-1 text-sm', props.class));
 </script>
 
 <template>
