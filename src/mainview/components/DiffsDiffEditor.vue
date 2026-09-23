@@ -118,6 +118,7 @@ function createRenderedDiff(name: string, original: string, modified: string, ig
         // callback(patch) {
         // console.log('patch', patch);
         // },
+
     });
     console.log('hunk count', rawDiff.hunks.length);
     const rawHunks: (ChangeContent & { hunkSpecs: string; diffsHunkIdx: number })[] = [];

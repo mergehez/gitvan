@@ -215,7 +215,7 @@ export const changesGit = {
         const stagedNumstat = await runGit(['diff', '--staged', '--numstat', '--'], repoPath).catch(() => '');
         const unstagedNumstat = await runGit(['diff', '--numstat', '--'], repoPath).catch(() => '');
 
-        function parseNumstatTotals(output: string) {
+        function parseNumstatTotals(output: string): RepoChangesData['stagedStats'] {
             let addedLines = 0;
             let removedLines = 0;
 
@@ -230,7 +230,7 @@ export const changesGit = {
                 if (!Number.isNaN(removed)) removedLines += removed;
             }
 
-            return { addedLines, removedLines };
+            return { addedLines, removedLines, hasChanges: addedLines !== 0 || removedLines !== 0 };
         }
 
         return {

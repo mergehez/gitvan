@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ChangeStatus } from '../../shared/types.ts';
 import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
@@ -8,6 +8,7 @@ import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
 import { useSettings } from '../composables/useSettings';
 import { tasks } from '../composables/useTasks';
+import { confirmDiscards, usePersistedFlag } from '../composables/useUiPreferences';
 import type { ContextMenuEntry } from '../directives';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
 import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
@@ -29,8 +30,7 @@ const openWithEditors = computed(() => {
     return settings.getOpenWithEditors();
 });
 
-const stagedFileSort = useFileSort('changes-staged');
-const unstagedFileSort = useFileSort('changes-unstaged');
+const changesFileSort = useFileSort('changes');
 const stashFilesFileSort = useFileSort('stash-files');
 
 const showDescription = ref(false);
@@ -47,6 +47,7 @@ type ChangeTreeEntry = TTreeData & {
     title: string;
     subtitle?: string;
     id: string;
+    hasConflictMarkers?: boolean;
     noActualChange?: boolean;
     cosmeticCheckTooLarge?: boolean;
 };
@@ -73,46 +74,104 @@ function hasBackendCosmeticCheckTooLarge(kind: 'staged' | 'unstaged', path: stri
     return kind === 'staged' ? entry?.stagedTooLargeForCosmeticCheck === true : entry?.unstagedTooLargeForCosmeticCheck === true;
 }
 
-const treeItems = computed<TreeItem[]>(() => {
-    return [
-        {
-            id: 'staged',
-            title: 'Staged Changes',
-            isStaged: true,
-            children: sortFilesByMode(
-                (repo.value?.changes?.staged ?? []).map((e) => ({
-                    id: `staged-${e.path}`,
-                    title: e.path,
-                    subtitle: e.previousPath,
-                    path: e.path,
-                    status: e.stagedStatus,
-                    noActualChange: hasBackendNoActualChange('staged', e.path),
-                    cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('staged', e.path),
-                    isStaged: true,
-                })),
-                stagedFileSort.mode.value
-            ),
-        },
-        {
-            id: 'unstaged',
-            title: 'Changes',
-            isStaged: false,
-            children: sortFilesByMode(
-                (repo.value?.changes?.unstaged ?? []).map((e) => ({
-                    id: `unstaged-${e.path}`,
-                    title: e.path,
-                    subtitle: e.previousPath,
-                    path: e.path,
-                    status: e.unstagedStatus,
-                    noActualChange: hasBackendNoActualChange('unstaged', e.path),
-                    cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge('unstaged', e.path),
-                    isStaged: false,
-                })),
-                unstagedFileSort.mode.value
-            ),
-        },
-    ];
+const allTreeItems = computed<TreeItem[]>(() => {
+    return [buildChangeSection(true), buildChangeSection(false)];
 });
+
+const fileFilter = ref('');
+const isFileFilterOpen = usePersistedFlag('search-bar-open', false);
+const fileFilterInputRef = ref<HTMLInputElement>();
+const changesPanelRef = ref<HTMLElement>();
+const activeFileFilter = computed(() => fileFilter.value.trim().toLowerCase());
+
+function buildChangeSection(isStaged: boolean): TreeItem {
+    const kind = isStaged ? 'staged' : 'unstaged';
+    const entries = (isStaged ? repo.value?.changes?.staged : repo.value?.changes?.unstaged) ?? [];
+
+    return {
+        id: kind,
+        title: isStaged ? 'Staged Changes' : 'Changes',
+        isStaged,
+        children: sortFilesByMode(
+            entries.map((e) => ({
+                id: `${kind}-${e.path}`,
+                title: e.path,
+                subtitle: e.previousPath,
+                path: e.path,
+                status: isStaged ? e.stagedStatus : e.unstagedStatus,
+                hasConflictMarkers: e.hasConflictMarkers,
+                noActualChange: hasBackendNoActualChange(kind, e.path),
+                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge(kind, e.path),
+                isStaged,
+            })),
+            changesFileSort.mode.value
+        ),
+    };
+}
+
+// Only the rendered lists narrow to the filter; selection and bulk actions keep seeing every entry.
+const treeItems = computed<TreeItem[]>(() => {
+    if (!activeFileFilter.value) {
+        return allTreeItems.value;
+    }
+
+    return allTreeItems.value.map((section) => {
+        const children = section.children.filter(
+            (child) => child.path.toLowerCase().includes(activeFileFilter.value) || (child.subtitle?.toLowerCase().includes(activeFileFilter.value) ?? false)
+        );
+
+        return { ...section, children, count: section.children.length > 0 ? `${children.length}/${section.children.length}` : undefined };
+    });
+});
+
+const changeEntryCount = computed(() => allTreeItems.value.reduce((count, section) => count + section.children.length, 0));
+
+function openFileFilter() {
+    isFileFilterOpen.value = true;
+    void nextTick(() => {
+        fileFilterInputRef.value?.focus();
+        fileFilterInputRef.value?.select();
+    });
+}
+
+function closeFileFilter() {
+    fileFilter.value = '';
+    isFileFilterOpen.value = false;
+}
+
+function toggleFileFilter() {
+    if (isFileFilterOpen.value) {
+        closeFileFilter();
+        return;
+    }
+
+    openFileFilter();
+}
+
+watch(
+    () => repo.value.id,
+    () => closeFileFilter()
+);
+
+// Never take the shortcut away from an editor or dialog that owns it (Monaco find, modal inputs).
+function isEditingOutsideChangesPanel() {
+    const active = document.activeElement;
+
+    return (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && !changesPanelRef.value?.contains(active);
+}
+
+function onFileFilterKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') {
+        return;
+    }
+
+    if (fileFilter.value) {
+        fileFilter.value = '';
+        return;
+    }
+
+    closeFileFilter();
+}
 
 const selectedDiffConflictCount = computed(() => {
     const matches = repo.value.curDiff?.entry.modified.match(/^<<<<<<< /gm);
@@ -284,7 +343,7 @@ function entryKind(item: ChangeTreeEntry) {
 }
 
 function entriesForKind(kind: 'staged' | 'unstaged') {
-    return (treeItems.value.find((item) => item.isStaged === (kind === 'staged'))?.children as ChangeTreeEntry[] | undefined) ?? [];
+    return (allTreeItems.value.find((item) => item.isStaged === (kind === 'staged'))?.children as ChangeTreeEntry[] | undefined) ?? [];
 }
 
 function selectedIdsForKind(kind: 'staged' | 'unstaged') {
@@ -533,16 +592,29 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     return entries;
 }
 
+// Section headers only carry the bulk classifications now; sorting and the search toggle live in the view menu.
 function buildChangeHeaderContextMenuEntries(item: ChangeTreeHeaderItem): ContextMenuEntry[] {
-    const sortState = item.isStaged ? stagedFileSort : unstagedFileSort;
-    const entries: ContextMenuEntry[] = [...buildFileSortMenuEntries(sortState.mode.value, (mode) => sortState.setMode(mode), item.isStaged ? 'staged-sort' : 'unstaged-sort')];
+    return item.isStaged ? [] : buildBulkChangeClassificationMenuEntries('unstaged');
+}
 
-    if (!item.isStaged) {
-        entries.push({ type: 'separator', id: 'change-header-separator-sort' });
-        entries.push(...buildBulkChangeClassificationMenuEntries('unstaged'));
-    }
-
-    return entries;
+function buildChangesViewMenuEntries(): ContextMenuEntry[] {
+    return [
+        {
+            id: 'changes-view-toggle-search',
+            label: isFileFilterOpen.value ? 'Hide Search Bar' : 'Show Search Bar',
+            disabled: changeEntryCount.value === 0 && !isFileFilterOpen.value,
+            action: toggleFileFilter,
+        },
+        {
+            id: 'changes-view-confirm-discards',
+            label: 'Confirm Discards',
+            checked: confirmDiscards.value,
+            action: () => {
+                confirmDiscards.value = !confirmDiscards.value;
+            },
+        },
+        ...buildFileSortMenuEntries(changesFileSort.mode.value, (mode) => changesFileSort.setMode(mode), 'changes-view'),
+    ];
 }
 
 function buildStashFilesHeaderContextMenuEntries(): ContextMenuEntry[] {
@@ -669,6 +741,12 @@ function onInputEnter(event: KeyboardEvent) {
 function listenToKeyboardShortcuts(event: KeyboardEvent) {
     if (!event.metaKey || event.shiftKey) return;
 
+    if (event.key === 'f' && !isEditingOutsideChangesPanel()) {
+        openFileFilter();
+        event.preventDefault();
+        return;
+    }
+
     if (event.key === 'p' && repo.value.canPush() && !tasks.isOperationRunning(`runRemoteOperation:push-${repo.value.id}`)) {
         repos.runRepoRemoteOperation(repo.value.id, 'push');
         event.preventDefault();
@@ -693,57 +771,55 @@ onUnmounted(() => {
         local-storage-key="changesSidebarWidth"
     >
         <template #left>
-            <aside class="flex h-full flex-col border-b border-white/10 xl:border-r xl:border-b-0">
+            <aside ref="changesPanelRef" class="flex h-full flex-col border-b border-white/10 xl:border-r xl:border-b-0">
                 <div class="flex items-center justify-between py-2 font-semibold tracking-[0.04em] text-default gap-1 pl-1">
                     <!-- <span class="pl-2">Changes</span> -->
                     <!-- <div class="flex items-center gap-1 text-x7"> -->
                     <Button
                         smaller
-                        class="flex-1 px-1"
+                        class="flex-1 px-0.5 font-normal"
                         severity="secondary"
                         :disabled="!repo.canFetch()"
                         v-tooltip="'Fetch'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:fetch-${repo.id}`)"
                         @click="repos.runRepoRemoteOperation(repo.id, 'fetch')"
                     >
-                        <span class="icon icon-[mingcute--refresh-3-line] text-sm"></span> {{ 'Fetch' }}
+                        <span class="icon icon-[mingcute--refresh-3-line] text-sm truncate"></span> {{ 'Fetch' }}
                     </Button>
                     <Button
                         smaller
-                        class="flex-1 px-1"
+                        class="flex-1 px-0.5"
                         severity="secondary"
                         :disabled="!repo.canPull()"
                         v-tooltip="'Pull'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:pull-${repo.id}`)"
                         @click="repos.runRepoRemoteOperation(repo.id, 'pull')"
                     >
-                        <span class="icon icon-[fluent--arrow-down-12-filled] text-sm"></span> {{ 'Pull' }}
+                        <span class="icon icon-[fluent--arrow-down-12-filled] text-sm truncate"></span> {{ 'Pull' }}
                     </Button>
                     <Button
                         smaller
-                        class="flex-1 px-1"
+                        class="flex-1 px-0.5"
                         severity="secondary"
                         :disabled="!repo.canPush()"
                         v-tooltip="'Push'"
                         v-loading="tasks.isOperationRunning(`runRemoteOperation:push-${repo.id}`)"
                         @click="repos.runRepoRemoteOperation(repo.id, 'push')"
                     >
-                        <span class="icon icon-[fluent--arrow-up-12-filled] text-sm"></span> {{ 'Push' }}
+                        <span class="icon icon-[fluent--arrow-up-12-filled] text-sm truncate"></span> {{ 'Push' }}
                     </Button>
-                    <Button
-                        smaller
-                        class="flex-1 px-1"
+                    <IconButton
                         severity="secondary"
-                        :disabled="!repo.canCommit()"
-                        v-tooltip="repo.commitForm.amend ? 'Amend' : 'Commit'"
-                        v-loading="tasks.isOperationRunning('commitRepo')"
-                        @click="repo.commitRepository()"
-                    >
-                        <span class="icon icon-[mingcute--check-fill] text-sm"></span> {{ repo.commitForm.amend ? 'Amend' : 'Commit' }}
-                    </Button>
+                        smaller
+                        class="shrink-0 h-full px-0.5"
+                        data-testid="changes-view-menu"
+                        icon="icon-[mdi--dots-vertical] text-sm"
+                        v-menu.button.bottom.end="buildChangesViewMenuEntries"
+                        v-tooltip="'Changes view options'"
+                    />
                 </div>
 
-                <div class="pl-1 pb-3">
+                <div class="pl-1" :class="isFileFilterOpen ? 'pb-2' : 'pb-3'">
                     <div
                         v-if="repo.commitForm.amend"
                         class="mb-2 flex items-center justify-between rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200"
@@ -775,19 +851,47 @@ onUnmounted(() => {
                         class="mt-2 w-full resize-none rounded border border-x6 bg-x0 px-2.5 py-1.5 text-xs text-white placeholder:opacity-70 focus:border-white/20"
                     >
                     </textarea>
-                    <Button severity="primary" class="mt-1 w-full" small :disabled="!repo.canCommit()" @click="repo.commitRepository()">
+                    <Button
+                        severity="primary"
+                        class="mt-1 w-full"
+                        small
+                        :disabled="!repo.canCommit()"
+                        v-loading="tasks.isOperationRunning('commitRepo')"
+                        @click="repo.commitRepository()"
+                    >
                         <span class="icon icon-[mdi--check] mr-1.5 text-xs"></span>
                         <span>{{ repo.commitForm.amend ? 'Amend' : 'Commit' }}</span>
                     </Button>
                 </div>
 
                 <div class="flex-1 overflow-auto pb-2 scrollbar-thin">
+                    <div v-if="isFileFilterOpen" class="px-1 pb-2 flex items-center gap-1">
+                        <div class="flex items-center gap-1.5 border border-x5 px-2 rounded-md flex-1">
+                            <span class="icon icon-[iconamoon--search-fill] shrink-0 text-sm opacity-40"></span>
+                            <input
+                                ref="fileFilterInputRef"
+                                v-model="fileFilter"
+                                type="search"
+                                placeholder="Search files..."
+                                class="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-x7 py-1"
+                                @keydown="onFileFilterKeydown"
+                            />
+                        </div>
+                        <!-- <IconButton
+                            severity="raised"
+                            smaller
+                            icon="icon-[mdi--close] shrink-0 text-sm opacity-60"
+                            v-tooltip="'Close search'"
+                            @click.prevent="isFileFilterOpen = false"
+                        ></IconButton> -->
+                    </div>
+
                     <div class="space-y-3">
                         <ChangesFileTree
                             v-for="item in treeItems"
                             :key="item.title"
                             :item="item"
-                            empty-text="No files"
+                            :empty-text="activeFileFilter ? 'No files match the search' : 'No files'"
                             :selection="visibleSelectionForKind(item.isStaged ? 'staged' : 'unstaged')"
                             :getContextMenuItems="getContextMenuItems"
                             :getHeaderContextMenuItems="buildChangeHeaderContextMenuEntries"
@@ -797,10 +901,10 @@ onUnmounted(() => {
                                 <span
                                     class="mr-1 text-xs flex items-center gap-1 tracking-tight"
                                     v-tooltip="
-                                        item.isStaged && repo.changes?.stagedStats
-                                            ? 'Diff: +{{ repo.changes.stagedStats.addedLines }} -{{ repo.changes.stagedStats.removedLines }}'
-                                            : !item.isStaged && repo.changes?.unstagedStats
-                                              ? 'Diff: +{{ repo.changes.unstagedStats.addedLines }} -{{ repo.changes.unstagedStats.removedLines }}'
+                                        item.isStaged && repo.changes?.stagedStats?.hasChanges
+                                            ? `Diff: +${repo.changes.stagedStats.addedLines} -${repo.changes.stagedStats.removedLines}`
+                                            : !item.isStaged && repo.changes?.unstagedStats?.hasChanges
+                                              ? `Diff: +${repo.changes.unstagedStats.addedLines} -${repo.changes.unstagedStats.removedLines}`
                                               : 'No changes'
                                     "
                                 >

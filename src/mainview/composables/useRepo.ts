@@ -24,6 +24,7 @@ import { useAuth } from './useAuth.ts';
 import { useSettings } from './useSettings.ts';
 import { tasks } from './useTasks.ts';
 import { toast } from './useToast.ts';
+import { confirmDiscards } from './useUiPreferences.ts';
 
 const LOCKED_FILES_KEY_PREFIX = 'gitvan-locked-files-';
 
@@ -54,6 +55,15 @@ function saveLockedFiles(repoId: number, files: Set<string>) {
     } catch {
         // ignore storage errors
     }
+}
+
+/** Discards only ask for confirmation while the changes view menu toggle is on. */
+async function confirmDiscard(params: { title: string; message: string; detail?: string; confirmLabel?: string }) {
+    if (!confirmDiscards.value) {
+        return true;
+    }
+
+    return await confirmAction(params);
 }
 
 export type ChangeSelection = {
@@ -249,7 +259,7 @@ const _useRepository = (repo: Repo) => {
             toast.showSuccessToast(`Change ${verb}.`);
         },
         async discardFile(path: string) {
-            const confirmed = await confirmAction({
+            const confirmed = await confirmDiscard({
                 title: 'Discard file changes',
                 message: `Discard changes in '${path}'?`,
                 detail: 'This permanently removes the current uncommitted changes in that file.',
@@ -271,7 +281,7 @@ const _useRepository = (repo: Repo) => {
                 return;
             }
 
-            const confirmed = await confirmAction({
+            const confirmed = await confirmDiscard({
                 title: 'Discard file changes',
                 message: finalPaths.length === 1 ? `Discard changes in '${finalPaths[0]}'?` : `Discard changes in ${finalPaths.length} files?`,
                 detail: 'This permanently removes the current uncommitted changes in the selected files.',
@@ -305,7 +315,7 @@ const _useRepository = (repo: Repo) => {
                 return;
             }
 
-            const confirmed = await confirmAction({
+            const confirmed = await confirmDiscard({
                 title: 'Discard all changes',
                 message:
                     lockedPaths.length == 0
