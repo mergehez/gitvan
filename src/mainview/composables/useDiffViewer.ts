@@ -1,5 +1,5 @@
 import { computed, type MaybeRefOrGetter, toValue } from 'vue';
-import { areEquivalentIgnoringDiffChars } from '../../shared/diffIgnoredChars.ts';
+import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../shared/diffIgnoredChars.ts';
 import type { FileDiffData } from '../../shared/types.ts';
 import { formatBytes } from '../lib/utils.ts';
 import { useSettings } from './useSettings.ts';
@@ -37,7 +37,7 @@ export function hasNoActualDiffChanges(diff: FileDiffData, ignoredChars: string,
         !diff.entry.previewMessage &&
         !nonCodePreview &&
         diff.entry.original !== diff.entry.modified &&
-        areEquivalentIgnoringDiffChars(diff.entry.original, diff.entry.modified, ignoredChars, !showWhitespaceChanges)
+        areEquivalentIgnoringDiffChars(diff.entry.original, diff.entry.modified, ignoredChars, !showWhitespaceChanges, { sortModuleImports: isJavaScriptTypeScriptPath(diff.path) })
     );
 }
 

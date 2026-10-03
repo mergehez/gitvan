@@ -193,6 +193,36 @@ describe('changesGit partial file operations', () => {
         expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(true);
     });
 
+    it('marks reordered imports of a script file as no actual change', async () => {
+        const original = "import { b } from './b';\nimport { a } from './a';\n\nconsole.log(a + b);\n";
+        const repo = createRepoWithFile('app.ts', original, "import { a } from './a';\nimport { b } from './b';\n\nconsole.log(a + b);\n");
+        cleanups.push(() => repo.cleanup());
+
+        const changes = await changesGit.getRepoChanges(repo.repoPath, {
+            ignoredChars: '',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.unstaged).toHaveLength(1);
+        expect(changes.unstaged[0]?.path).toBe('app.ts');
+        expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(true);
+    });
+
+    it('keeps reordered imports of a non-script file as an actual change', async () => {
+        const original = "import { b } from './b';\nimport { a } from './a';\n";
+        const repo = createRepoWithFile('story.txt', original, "import { a } from './a';\nimport { b } from './b';\n");
+        cleanups.push(() => repo.cleanup());
+
+        const changes = await changesGit.getRepoChanges(repo.repoPath, {
+            ignoredChars: '',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.unstaged).toHaveLength(1);
+        expect(changes.unstaged[0]?.path).toBe('story.txt');
+        expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(false);
+    });
+
     it('skips the cosmetic check and flags files larger than 50kb', async () => {
         const largeContent = 'role: "admin";\n'.repeat(4000);
         const repo = createRepoWithFile('big.txt', largeContent, largeContent.replaceAll('"', "'"));

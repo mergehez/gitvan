@@ -1,6 +1,6 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { areEquivalentIgnoringDiffChars } from '../../../shared/diffIgnoredChars.js';
+import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../../shared/diffIgnoredChars.js';
 import type { FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/types.js';
 import { runGit } from './git-common.js';
 import {
@@ -490,6 +490,7 @@ async function hasNoActualChangeForKind(
     }
 
     const absolutePath = join(repoPath, filePath);
+    const diffIgnoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(filePath) };
 
     function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
         return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
@@ -505,7 +506,7 @@ async function hasNoActualChangeForKind(
         const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `HEAD:${filePath}`), readGitRevisionFile(repoPath, `:${filePath}`)]);
 
         return {
-            noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false)),
+            noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
             tooLarge: false,
         };
     }
@@ -519,7 +520,7 @@ async function hasNoActualChangeForKind(
     const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFile(absolutePath))]);
 
     return {
-        noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false)),
+        noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
         tooLarge: false,
     };
 }

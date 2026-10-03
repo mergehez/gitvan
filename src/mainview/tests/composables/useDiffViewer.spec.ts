@@ -32,11 +32,11 @@ function createMockSettings() {
     } satisfies DiffViewerSettingsMock);
 }
 
-function createDiff(original: string, modified: string): FileDiffData {
+function createDiff(original: string, modified: string, path = 'README.md'): FileDiffData {
     return {
-        path: 'README.md',
+        path,
         entry: {
-            label: 'README.md',
+            label: path,
             kind: 'unstaged',
             patch: '',
             original,
@@ -71,5 +71,21 @@ describe('useDiffViewer', () => {
 
         expect(state.value?.onlyWhitespaceChanges).toBe(false);
         expect(state.value?.noActualChange).toBe(true);
+    });
+
+    it('marks reordered imports of a script file as no actual change', () => {
+        const state = useDiffViewer(
+            computed(() => createDiff("import { b } from './b';\nimport { a } from './a';\n", "import { a } from './a';\nimport { b } from './b';\n", 'src/values.ts'))
+        );
+
+        expect(state.value?.noActualChange).toBe(true);
+    });
+
+    it('keeps reordered imports of a non-script file as an actual change', () => {
+        const state = useDiffViewer(
+            computed(() => createDiff("import { b } from './b';\nimport { a } from './a';\n", "import { a } from './a';\nimport { b } from './b';\n", 'notes.txt'))
+        );
+
+        expect(state.value?.noActualChange).toBe(false);
     });
 });

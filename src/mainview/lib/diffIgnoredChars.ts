@@ -1,6 +1,4 @@
-export function normalizeDiffIgnoredChars(value: string | undefined) {
-    return Array.from(new Set((value ?? '').replace(/\s+/gu, '').slice(0, 64))).join('');
-}
+import { normalizeDiffIgnoredChars, orderModulePreludeLines, type DiffIgnoreOptions } from '../../shared/diffIgnoredChars';
 
 function isIncidentalIgnoredWhitespace(line: string, index: number, ignored: Set<string>) {
     let previousIndex = index - 1;
@@ -16,17 +14,17 @@ function isIncidentalIgnoredWhitespace(line: string, index: number, ignored: Set
     return (previousIndex >= 0 && ignored.has(line[previousIndex]!)) || (nextIndex < line.length && ignored.has(line[nextIndex]!));
 }
 
-export function normalizeComparableDiffText(value: string, ignoredChars: string, hideWhitespace: boolean) {
-    return stripIgnoredCharsWithMaps(value, ignoredChars, hideWhitespace).text;
+export function normalizeComparableDiffText(value: string, ignoredChars: string, hideWhitespace: boolean, options: DiffIgnoreOptions = {}) {
+    return stripIgnoredCharsWithMaps(value, ignoredChars, hideWhitespace, options).text;
 }
 
-export function areEquivalentIgnoringDiffChars(original: string, modified: string, ignoredChars: string, hideWhitespace: boolean) {
-    return normalizeComparableDiffText(original, ignoredChars, hideWhitespace) === normalizeComparableDiffText(modified, ignoredChars, hideWhitespace);
+export function areEquivalentIgnoringDiffChars(original: string, modified: string, ignoredChars: string, hideWhitespace: boolean, options: DiffIgnoreOptions = {}) {
+    return normalizeComparableDiffText(original, ignoredChars, hideWhitespace, options) === normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, options);
 }
 
-export function stripIgnoredCharsWithMaps(text: string, ignoredChars: string, hideWhitespace = false) {
+export function stripIgnoredCharsWithMaps(text: string, ignoredChars: string, hideWhitespace = false, options: DiffIgnoreOptions = {}) {
     const ignored = new Set(normalizeDiffIgnoredChars(ignoredChars).split(''));
-    const lines = text.split('\n');
+    const lines = options.sortModuleImports === true ? orderModulePreludeLines(text.split('\n')) : text.split('\n');
     const lineMaps: number[][] = [];
 
     const normalizedText = lines

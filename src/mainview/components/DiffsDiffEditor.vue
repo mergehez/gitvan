@@ -11,6 +11,7 @@ import {
 } from '@pierre/diffs';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { useSettings } from '../composables/useSettings';
+import { isJavaScriptTypeScriptPath } from '../../shared/diffIgnoredChars';
 import { normalizeComparableDiffText } from '../lib/diffIgnoredChars';
 type HunkActionTone = 'default' | 'danger';
 
@@ -104,8 +105,9 @@ function createFile(name: string, contents: string): FileContents {
 }
 
 function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean) {
-    const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, !showWhitespaceChanges);
-    const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, !showWhitespaceChanges);
+    const ignoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(name) };
+    const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, !showWhitespaceChanges, ignoreOptions);
+    const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, !showWhitespaceChanges, ignoreOptions);
 
     const hasVisibleChanges = normalizedOriginal !== normalizedModified;
     const hideDecorations = original !== modified && !hasVisibleChanges;
