@@ -338,7 +338,7 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                         {{ readableDate(new Date(repo.currCommit.authoredAt)) }}
                     </p>
                 </div>
-                <p v-if="repo.currCommit.body" class="mt-4 whitespace-pre-wrap text-sm leading-7 text-default">{{ repo.currCommit.body }}</p>
+                <p v-if="repo.currCommit.body" class="mt-1 px-2 whitespace-pre-wrap text-sm leading-7 text-default max-h-30 overflow-y-auto bg-x1">{{ repo.currCommit.body }}</p>
                 <div class="px-2 flex gap-2 h-full overflow-auto">
                     <EtSplitter
                         class="flex-1 overflow-y-auto scrollbar-thin"
