@@ -151,10 +151,14 @@ const electronPlugin = (paths: Options): PluginOption => {
     paths.devServer = resolve(paths.devServer);
     paths.apiMethods = resolve(paths.apiMethods);
 
+    let isProductionBuild = false;
+
     return {
         name: 'export-api-methods',
 
-        config() {
+        config(_config, env) {
+            isProductionBuild = env.command === 'build';
+
             return {
                 environments: {
                     ssr: {
@@ -166,6 +170,15 @@ const electronPlugin = (paths: Options): PluginOption => {
             };
         },
         buildStart() {
+            // `bun do mac` runs a production build, so stop whatever still holds the app
+            // ports first: the running installed app serves its backend on the API port
+            // and a leftover dev server holds the UI port. Otherwise the rebuild (and the
+            // later /Applications replacement) races the still-open app.
+            if (isProductionBuild) {
+                console.log('Stopping the running app and dev servers before building...');
+                killStaleServers(appConfig.apiPort, appConfig.vuePort);
+            }
+
             generateApiMethods(paths);
         },
         configureServer(server) {

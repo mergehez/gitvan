@@ -1134,8 +1134,14 @@ export const app = {
         await git.deleteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName);
         return buildBootstrap();
     },
-    getHistory: async (ps: { repoId: number }): Promise<HistoryData> => {
-        return git.getRepoHistory(db.getRepo(ps.repoId)!.path);
+    getHistory: async (ps: { repoId: number; limit?: number; skip?: number; search?: string; path?: string; followRenames?: boolean }): Promise<HistoryData> => {
+        return git.getRepoHistory(db.getRepo(ps.repoId)!.path, {
+            limit: ps.limit,
+            skip: ps.skip,
+            search: ps.search,
+            path: ps.path,
+            followRenames: ps.followRenames,
+        });
     },
     getCommittedTree: async (ps: { repoId: number; commitSha?: string }): Promise<CommittedTreeData> => {
         return git.getCommittedTree(db.getRepo(ps.repoId)!.path, ps.commitSha);

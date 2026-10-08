@@ -331,6 +331,19 @@ export type CommittedFileData = {
 
 export type HistoryData = {
     commits: CommitSummary[];
+    /** True when older commits exist beyond the ones currently loaded. */
+    hasMore?: boolean;
+};
+
+export type HistoryRequest = {
+    limit?: number;
+    skip?: number;
+    /** Case-insensitive, literal commit message search across the whole history. */
+    search?: string;
+    /** Restrict the history to commits that touched this path. */
+    path?: string;
+    /** Follow the path across renames (slower). Only meaningful together with `path`. */
+    followRenames?: boolean;
 };
 
 export type BranchSummary = {

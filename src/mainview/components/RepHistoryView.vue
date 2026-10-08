@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { CommitSummary, CommitTag } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
+import { useFileHistory } from '../composables/useFileHistory';
 import { useFileSort } from '../composables/useFileSort';
 import { useRepos } from '../composables/useRepos';
 import { tasks } from '../composables/useTasks';
 import type { ContextMenuEntry } from '../directives';
 import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
+import { authorColor } from '../lib/authorColors';
 import { readableDate } from '../lib/utils';
 import CenteredInputModal from './CenteredInputModal.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
@@ -16,9 +18,147 @@ import type { FileTreeItem } from './FileTree.vue';
 import FileTree from './FileTree.vue';
 import IconButton from './IconButton.vue';
 
+const HISTORY_SEARCH_DEBOUNCE_MS = 500;
+
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);
+const { openFileHistory } = useFileHistory();
 const historyFilesSort = useFileSort('history-files');
+// Kept in sync with the repo so switching views does not drop an active search.
+const historySearch = ref(repo.value.historySearchQuery);
+const trimmedHistorySearch = computed(() => historySearch.value.trim());
+const isHistorySearching = computed(() => trimmedHistorySearch.value.length > 0);
+const isFileHistoryActive = computed(() => Boolean(repo.value.fileHistoryPath));
+const isHistorySearchPending = computed(() => isHistorySearching.value && trimmedHistorySearch.value !== repo.value.historySearchQuery);
+const isHistorySearchLoading = computed(() => isHistorySearching.value && (repo.value.isSearchingHistory || isHistorySearchPending.value));
+const displayedHistoryCommits = computed(() => {
+    if (isFileHistoryActive.value) {
+        return repo.value.fileHistoryResults?.commits ?? [];
+    }
+
+    return isHistorySearching.value ? (repo.value.historySearchResults?.commits ?? []) : (repo.value.history?.commits ?? []);
+});
+const displayedHistoryHasMore = computed(() => {
+    if (isFileHistoryActive.value) {
+        return Boolean(repo.value.fileHistoryResults?.hasMore);
+    }
+
+    return isHistorySearching.value ? Boolean(repo.value.historySearchResults?.hasMore) : Boolean(repo.value.history?.hasMore);
+});
+const isLoadingMoreDisplayedHistory = computed(() => {
+    if (isFileHistoryActive.value) {
+        return repo.value.isLoadingMoreFileHistory;
+    }
+
+    return isHistorySearching.value ? repo.value.isLoadingMoreHistorySearch : repo.value.isLoadingMoreHistory;
+});
+const historyEmptyText = computed(() => {
+    if (isFileHistoryActive.value) {
+        return repo.value.isLoadingFileHistory ? 'Loading file history...' : 'No commits touched this file';
+    }
+
+    if (!isHistorySearching.value) {
+        return 'No history found';
+    }
+
+    return isHistorySearchLoading.value ? 'Searching...' : 'No commits match your search';
+});
+const historyLoadMoreLabel = computed(() => (isHistorySearching.value && !isFileHistoryActive.value ? 'Load more results' : 'Load more commits'));
+const historySearchStatusLabel = computed(() => {
+    if (isHistorySearchLoading.value) {
+        return 'Searching...';
+    }
+
+    const count = displayedHistoryCommits.value.length;
+    const hasMore = displayedHistoryHasMore.value;
+
+    return `${count}${hasMore ? '+' : ''} result${!hasMore && count === 1 ? '' : 's'}`;
+});
+
+let historySearchDebounceHandle: number | undefined;
+
+function onHistorySearchInput() {
+    if (historySearchDebounceHandle !== undefined) {
+        window.clearTimeout(historySearchDebounceHandle);
+        historySearchDebounceHandle = undefined;
+    }
+
+    const query = trimmedHistorySearch.value;
+
+    if (!query) {
+        const hadSearch = Boolean(repo.value.historySearchQuery);
+        repo.value.clearHistorySearch();
+
+        if (hadSearch) {
+            void repo.value.loadHistory();
+        }
+
+        return;
+    }
+
+    historySearchDebounceHandle = window.setTimeout(() => {
+        historySearchDebounceHandle = undefined;
+        void repo.value.searchHistory(query);
+    }, HISTORY_SEARCH_DEBOUNCE_MS);
+}
+
+watch(historySearch, onHistorySearchInput);
+
+onBeforeUnmount(() => {
+    if (historySearchDebounceHandle !== undefined) {
+        window.clearTimeout(historySearchDebounceHandle);
+        historySearchDebounceHandle = undefined;
+    }
+});
+
+async function onLoadMoreHistory() {
+    if (isFileHistoryActive.value) {
+        await repo.value.loadMoreFileHistory();
+        return;
+    }
+
+    if (isHistorySearching.value) {
+        await repo.value.loadMoreHistorySearch();
+        return;
+    }
+
+    await repo.value.loadMoreHistory();
+}
+
+async function onSelectCommitRow(item: { id: string }) {
+    if (isFileHistoryActive.value) {
+        await repo.value.selectFileHistoryCommit(item.id);
+        return;
+    }
+
+    await repo.value.selectCommit(item.id);
+}
+
+function closeFileHistory() {
+    const wasSearching = Boolean(repo.value.historySearchQuery);
+    repo.value.closeFileHistory();
+
+    // An active search already has results to show; otherwise the recent-commit page was
+    // skipped while the file history was pinned, so reload it.
+    if (!wasSearching) {
+        void repo.value.loadHistory();
+    }
+}
+
+function buildHistoryFileContextMenuEntries(item: { path?: string; title: string }): ContextMenuEntry[] {
+    const path = item.path ?? item.title;
+
+    return [
+        {
+            id: `history-file-history:${path}`,
+            label: 'File History',
+            action: async () => {
+                await openFileHistory(path);
+            },
+        },
+    ];
+}
+
 const latestCommitSha = computed(() => repo.value.history?.commits[0]?.sha ?? undefined);
 const selectedCommitDiffViewerState = useDiffViewer(computed(() => repo.value.currCommitDiff));
 const isCreateTagModalOpen = ref(false);
@@ -63,23 +203,27 @@ async function onUndoCommitItem(item: { id: string; isUnpushed?: boolean }) {
 type CommitListItem = Pick<CommitSummary, 'shortSha' | 'tags' | 'isUnpushed'> & {
     id: string;
     title: string;
-    by: string;
+    authorName: string;
+    authorEmail: string;
+    authorColor: string;
     at: Date;
 };
 const treeItem = computed<FileTreeItem<CommitListItem, {}>>(() => {
     return {
         id: '-',
         title: '',
-        children:
-            repo.value.history?.commits.map((e) => ({
-                id: e.sha,
-                title: e.summary,
-                shortSha: e.shortSha,
-                at: new Date(e.authoredAt),
-                by: `${e.authorName} <${e.authorEmail}>`,
-                tags: e.tags,
-                isUnpushed: e.isUnpushed,
-            })) ?? [],
+        children: displayedHistoryCommits.value.map((e) => ({
+            id: e.sha,
+            title: e.summary,
+            shortSha: e.shortSha,
+            at: new Date(e.authoredAt),
+            authorName: e.authorName,
+            authorEmail: e.authorEmail,
+            // Keyed on the email so a renamed display name keeps its colour.
+            authorColor: authorColor(e.authorEmail || e.authorName),
+            tags: e.tags,
+            isUnpushed: e.isUnpushed,
+        })),
     };
 });
 
@@ -272,12 +416,53 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
         local-storage-key="historyCommitsSidebarWidth"
     >
         <template #left>
+            <div v-if="isFileHistoryActive" class="sticky top-0 z-10 flex items-center gap-2 border-b border-white/10 bg-x0 px-2 py-1.5" data-testid="file-history-header">
+                <button
+                    type="button"
+                    data-testid="file-history-back"
+                    class="flex shrink-0 items-center gap-1 rounded border border-x5 bg-x1 px-1.5 py-0.5 text-2xs transition hover:bg-white/6"
+                    @click="closeFileHistory"
+                >
+                    <span class="icon icon-[mdi--arrow-left]"></span>
+                    All commits
+                </button>
+                <button
+                    v-if="!repo.fileHistoryFollowRenames || repo.isIncludingFileHistoryRenames"
+                    type="button"
+                    data-testid="file-history-include-renames"
+                    class="shrink-0 rounded border border-x5 bg-x1 px-1.5 py-0.5 text-2xs transition hover:bg-white/6 disabled:opacity-50"
+                    :disabled="repo.isIncludingFileHistoryRenames"
+                    v-tooltip="'Also follow this file across renames (might be slow)'"
+                    @click="repo.includeFileHistoryRenames()"
+                >
+                    {{ repo.isIncludingFileHistoryRenames ? 'Including renames...' : 'Include renames' }}
+                </button>
+                <span
+                    v-else
+                    class="shrink-0 rounded border border-amber-300/35 bg-amber-400/12 px-1.5 py-px text-[10px] font-medium leading-none text-amber-100"
+                    v-tooltip="'Following renames across the whole history'"
+                >
+                    renames
+                </span>
+                <p class="min-w-0 flex-1 truncate text-2xs opacity-70" :title="repo.fileHistoryPath">{{ repo.fileHistoryPath }}</p>
+            </div>
+            <div v-else class="sticky top-0 z-10 flex items-center gap-2 bg-x0 px-2 py-1.5">
+                <input
+                    v-model="historySearch"
+                    type="search"
+                    placeholder="Search commits..."
+                    data-testid="history-search"
+                    class="min-w-0 flex-1 rounded-lg border border-x5 bg-x0 px-2 py-1 text-xs text-white outline-none transition placeholder:text-x7 focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/20"
+                    @keydown.escape="historySearch = ''"
+                />
+                <span v-if="isHistorySearching" class="shrink-0 text-2xs tracking-tight opacity-60">{{ historySearchStatusLabel }}</span>
+            </div>
             <FileTree
                 :item="treeItem"
-                empty-text="No history found"
+                :empty-text="historyEmptyText"
                 item-class="px-0!"
                 :selection="repo.currCommitSha"
-                :onSelect="(t) => repo.selectCommit(t.id)"
+                :onSelect="(t) => onSelectCommitRow(t)"
                 :get-context-menu-items="buildCommitContextMenuEntries"
                 noActions
             >
@@ -287,9 +472,12 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                         <span v-if="item.isUnpushed" class="icon icon-[mdi--arrow-up-thick] text-lg opacity-70"></span>
                         <div class="w-full flex-1 pl-1">
                             <p class="text-xs font-semibold whitespace-pre-wrap break-normal wrap-anywhere leading-tight">{{ item.title }}</p>
-                            <div class="flex justify-between w-full">
-                                <p class="text-2xs tracking-tight opacity-80">{{ item.by }}</p>
-                                <p class="text-2xs tracking-tight opacity-80">{{ readableDate(item.at).replace(' at ', ' ') }}</p>
+                            <div class="flex w-full items-center justify-between gap-2">
+                                <p class="flex min-w-0 items-center gap-1 text-2xs tracking-tight">
+                                    <span class="truncate" :style="{ color: item.authorColor }">{{ item.authorName }}</span>
+                                    <span class="truncate opacity-45">&lt;{{ item.authorEmail }}&gt;</span>
+                                </p>
+                                <p class="shrink-0 text-2xs tracking-tight opacity-80">{{ readableDate(item.at).replace(' at ', ' ') }}</p>
                             </div>
                         </div>
                         <div class="absolute top-0 right-1 min-w-0 items-center justify-end gap-1 hidden group-hover:flex">
@@ -325,6 +513,18 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                         </span>
                     </div>
                 </template>
+                <template #footer>
+                    <div v-if="displayedHistoryHasMore || isLoadingMoreDisplayedHistory" class="px-4 py-2" data-testid="history-load-more">
+                        <button
+                            type="button"
+                            class="rounded border border-x5 bg-x1 px-2 py-1 text-2xs transition hover:bg-white/6 disabled:opacity-50"
+                            :disabled="isLoadingMoreDisplayedHistory"
+                            @click="onLoadMoreHistory"
+                        >
+                            {{ isLoadingMoreDisplayedHistory ? 'Loading...' : historyLoadMoreLabel }}
+                        </button>
+                    </div>
+                </template>
             </FileTree>
         </template>
         <template #right>
@@ -357,6 +557,7 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                                 show-path-tooltip
                                 no-actions
                                 :onSelect="(t) => t.path && repo.selectCommitFile(t.path)"
+                                :getContextMenuItems="buildHistoryFileContextMenuEntries"
                                 :getHeaderContextMenuItems="buildHistoryFilesHeaderContextMenuEntries"
                             >
                                 <template #before-status="{ item }">

@@ -1,4 +1,4 @@
-import type { CommitDetail, CommittedFileData, CommittedTreeData, FileDiffData, HistoryData } from '../../../shared/types.js';
+import type { CommitDetail, CommittedFileData, CommittedTreeData, FileDiffData, HistoryData, HistoryRequest } from '../../../shared/types.js';
 import { runGit } from './git-common.js';
 import {
     buildDiffStats,
@@ -55,6 +55,16 @@ function isBinaryBuffer(buffer: Buffer | undefined) {
     return false;
 }
 
+const DEFAULT_HISTORY_PAGE_SIZE = 60;
+
+function normalizePageCount(value: number | undefined, fallback: number, minimum: number) {
+    if (value === undefined || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(minimum, Math.trunc(value));
+}
+
 export const historyGit = {
     async _getHeadCommitSha(repoPath: string) {
         const output = await runGit(['rev-parse', '--verify', 'HEAD'], repoPath, [0, 128]);
@@ -98,32 +108,66 @@ export const historyGit = {
     async _assertValidTagName(repoPath: string, tagName: string) {
         await runGit(['check-ref-format', '--allow-onelevel', `refs/tags/${tagName}`], repoPath);
     },
-    async getRepoHistory(repoPath: string): Promise<HistoryData> {
+    async getRepoHistory(repoPath: string, request: HistoryRequest = {}): Promise<HistoryData> {
+        const limit = normalizePageCount(request.limit, DEFAULT_HISTORY_PAGE_SIZE, 1);
+        const skip = normalizePageCount(request.skip, 0, 0);
+        const search = request.search?.trim();
+        const path = request.path?.trim();
+
+        // `git log --follow` applies --skip to the raw commit walk rather than to the matched
+        // commits (so skipping 2 raw commits could drop zero or many rows). Followed pages are
+        // therefore fetched with --max-count and sliced locally.
+        const pagesFollowedHistory = Boolean(path && request.followRenames);
+        const fetchSkip = pagesFollowedHistory ? 0 : skip;
+        const fetchLimit = pagesFollowedHistory ? skip + limit : limit;
+        const pageStart = pagesFollowedHistory ? skip : 0;
+        const pageEnd = pagesFollowedHistory ? skip + limit : limit;
+
+        const logArgs = ['log', '--date=iso-strict', '--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%d%x1f%s', '--max-count', String(fetchLimit + 1), '--skip', String(fetchSkip)];
+
+        if (search) {
+            // Literal, case-insensitive message matching so user input never has to be
+            // escaped as a regex.
+            logArgs.push('-i', '-F', `--grep=${search}`);
+        }
+
+        if (path) {
+            if (request.followRenames) {
+                logArgs.push('--follow');
+            }
+
+            logArgs.push('--', path);
+        }
+
+        // Matches can sit anywhere in history, so the whole unpushed set is needed
+        // instead of a window of it.
+        const needsWholeUnpushedSet = Boolean(search || path);
+
         const [output, unpushedCommits] = await Promise.all([
-            runGit(['log', '--date=iso-strict', '--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%d%x1f%s', '-n', '60'], repoPath),
-            this._getUnpushedCommitSet(repoPath, 60),
+            runGit(logArgs, repoPath),
+            needsWholeUnpushedSet ? this._getUnpushedCommitSet(repoPath) : this._getUnpushedCommitSet(repoPath, skip + limit + 1),
         ]);
 
-        return {
-            commits: output
-                .split('\n')
-                .filter(Boolean)
-                .map((line) => {
-                    const [sha, shortSha, authorName, authorEmail, authoredAt, refsRaw, summary] = line.split('\u001f');
-                    const isUnpushed = unpushedCommits.has(sha);
+        const lines = output.split('\n').filter(Boolean);
 
-                    return {
-                        sha,
-                        shortSha,
-                        summary,
-                        authorName,
-                        authorEmail,
-                        authoredAt,
-                        refs: parseRefs(refsRaw ?? ''),
-                        tags: parseCommitTags(refsRaw ?? '', isUnpushed),
-                        isUnpushed,
-                    };
-                }),
+        return {
+            commits: lines.slice(pageStart, pageEnd).map((line) => {
+                const [sha, shortSha, authorName, authorEmail, authoredAt, refsRaw, summary] = line.split('\u001f');
+                const isUnpushed = unpushedCommits.has(sha);
+
+                return {
+                    sha,
+                    shortSha,
+                    summary,
+                    authorName,
+                    authorEmail,
+                    authoredAt,
+                    refs: parseRefs(refsRaw ?? ''),
+                    tags: parseCommitTags(refsRaw ?? '', isUnpushed),
+                    isUnpushed,
+                };
+            }),
+            hasMore: lines.length > pageEnd,
         };
     },
     async getCommittedTree(repoPath: string, commitSha?: string): Promise<CommittedTreeData> {

@@ -200,5 +200,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
                 </div>
             </div>
         </div>
+
+        <slot name="footer"></slot>
     </section>
 </template>

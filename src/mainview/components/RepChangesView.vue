@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ChangeStatus } from '../../shared/types.ts';
 import { type ChangeFileContextMenuAction, type ChangeFileContextMenuIgnoreOption } from '../../shared/types.ts';
 import { useDiffViewer } from '../composables/useDiffViewer';
+import { useFileHistory } from '../composables/useFileHistory';
 import { useFileSort } from '../composables/useFileSort';
 import { useMergeHelper } from '../composables/useMerge';
 import { useRepos } from '../composables/useRepos';
@@ -25,6 +26,7 @@ import IconButton from './IconButton.vue';
 const repos = useRepos();
 const settings = useSettings();
 const repo = computed(() => repos.getSelectedRepo()!);
+const { openFileHistory } = useFileHistory();
 const mergeState = useMergeHelper();
 const openWithEditors = computed(() => {
     return settings.getOpenWithEditors();
@@ -544,6 +546,20 @@ function buildChangeContextMenuEntries(items: ChangeTreeEntry[]): ContextMenuEnt
     if (hasSingleSelection) {
         if (canAddSeperator()) {
             entries.push({ type: 'separator', id: `change-separator-file:${firstItem.id}` });
+        }
+
+        const firstItemPath = firstItem.path;
+        const isNewFile = firstItem.status === 'untracked' || firstItem.status === 'added';
+
+        // A file that only exists in the working tree has no commits to show yet.
+        if (firstItemPath && !isNewFile) {
+            entries.push({
+                id: `change-file-history:${firstItem.id}`,
+                label: 'File History',
+                action: async () => {
+                    await openFileHistory(firstItemPath);
+                },
+            });
         }
 
         entries.push({

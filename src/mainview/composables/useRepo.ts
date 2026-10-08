@@ -106,6 +106,10 @@ const _useRepository = (repo: Repo) => {
     const settings = useSettings();
     const auth = useAuth();
 
+    // Monotonic token so a slow history search cannot overwrite a newer one.
+    let historySearchToken = 0;
+    let fileHistoryToken = 0;
+
     const state = reactive({
         ...repo,
 
@@ -136,6 +140,17 @@ const _useRepository = (repo: Repo) => {
         curDiff: undefined as FileDiffData | undefined,
 
         history: undefined as HistoryData | undefined,
+        isLoadingMoreHistory: false,
+        historySearchQuery: '',
+        historySearchResults: undefined as HistoryData | undefined,
+        isSearchingHistory: false,
+        isLoadingMoreHistorySearch: false,
+        fileHistoryPath: undefined as string | undefined,
+        fileHistoryFollowRenames: false,
+        fileHistoryResults: undefined as HistoryData | undefined,
+        isLoadingFileHistory: false,
+        isLoadingMoreFileHistory: false,
+        isIncludingFileHistoryRenames: false,
         currCommitSha: undefined as string | undefined,
         currCommit: undefined as CommitDetail | undefined,
         currCommitFilePath: undefined as string | undefined,
@@ -526,7 +541,22 @@ const _useRepository = (repo: Repo) => {
             }
 
             if (settings.state.activeView === 'history') {
-                await this.loadHistory();
+                // A pinned file history owns the commit list, then an active search, and
+                // only otherwise the recent-commit page.
+                if (this.fileHistoryPath) {
+                    if (this.fileHistoryResults) {
+                        await this.refreshFileHistory();
+                    } else {
+                        await this.loadFileHistory();
+                    }
+                    return;
+                }
+
+                if (this.historySearchQuery) {
+                    await this.refreshHistorySearch();
+                } else {
+                    await this.loadHistory();
+                }
                 return;
             }
         },
@@ -569,7 +599,13 @@ const _useRepository = (repo: Repo) => {
         },
 
         async loadHistory() {
-            const nextHistory = await tasks.getHistory.run({ repoId: this.id });
+            // Re-request every commit the user has already scrolled to so refreshes
+            // (polling, mutations) do not collapse the list back to the first page.
+            const loadedCount = this.history?.commits.length ?? 0;
+            const nextHistory = await tasks.getHistory.run({
+                repoId: this.id,
+                limit: loadedCount || undefined,
+            });
 
             this.history = nextHistory;
             const nextCommitSha =
@@ -584,6 +620,294 @@ const _useRepository = (repo: Repo) => {
             }
 
             await this.selectCommit(nextCommitSha);
+        },
+        async loadMoreHistory() {
+            const history = this.history;
+
+            if (!history?.hasMore || this.isLoadingMoreHistory) {
+                return false;
+            }
+
+            this.isLoadingMoreHistory = true;
+
+            try {
+                const nextPage = await tasks.getHistory.run({
+                    repoId: this.id,
+                    skip: history.commits.length,
+                });
+
+                // A refresh (polling or a mutation) replaced the list while this page was loading.
+                if (this.history !== history) {
+                    return false;
+                }
+
+                const knownShas = new Set(history.commits.map((commit) => commit.sha));
+                const appendedCommits = nextPage.commits.filter((commit) => !knownShas.has(commit.sha));
+
+                this.history = {
+                    commits: [...history.commits, ...appendedCommits],
+                    hasMore: nextPage.hasMore,
+                };
+
+                return appendedCommits.length > 0;
+            } finally {
+                this.isLoadingMoreHistory = false;
+            }
+        },
+        async searchHistory(query: string) {
+            const normalizedQuery = query.trim();
+            const token = ++historySearchToken;
+            this.historySearchQuery = normalizedQuery;
+
+            if (!normalizedQuery) {
+                this.historySearchResults = undefined;
+                this.isSearchingHistory = false;
+                this.isLoadingMoreHistorySearch = false;
+                return;
+            }
+
+            this.isSearchingHistory = true;
+
+            try {
+                const nextResults = await tasks.getHistory.run({ repoId: this.id, search: normalizedQuery });
+
+                if (token !== historySearchToken) {
+                    return;
+                }
+
+                this.historySearchResults = nextResults;
+            } finally {
+                if (token === historySearchToken) {
+                    this.isSearchingHistory = false;
+                }
+            }
+        },
+        async refreshHistorySearch() {
+            const query = this.historySearchQuery;
+
+            if (!query) {
+                return;
+            }
+
+            const token = ++historySearchToken;
+            // Re-request the pages already loaded so background refreshes do not collapse
+            // the visible result list back to its first page.
+            const loadedCount = this.historySearchResults?.commits.length ?? 0;
+
+            try {
+                const nextResults = await tasks.getHistory.run({
+                    repoId: this.id,
+                    search: query,
+                    limit: loadedCount || undefined,
+                });
+
+                if (token !== historySearchToken) {
+                    return;
+                }
+
+                this.historySearchResults = nextResults;
+            } finally {
+                // A refresh supersedes any query still in flight, so it owns the pending flag.
+                if (token === historySearchToken) {
+                    this.isSearchingHistory = false;
+                }
+            }
+        },
+        async loadMoreHistorySearch() {
+            const results = this.historySearchResults;
+            const query = this.historySearchQuery;
+
+            if (!results?.hasMore || !query || this.isLoadingMoreHistorySearch || this.isSearchingHistory) {
+                return false;
+            }
+
+            this.isLoadingMoreHistorySearch = true;
+
+            try {
+                const nextPage = await tasks.getHistory.run({
+                    repoId: this.id,
+                    search: query,
+                    skip: results.commits.length,
+                });
+
+                // A new search (or a refresh) replaced the results while this page was loading.
+                if (this.historySearchResults !== results) {
+                    return false;
+                }
+
+                const knownShas = new Set(results.commits.map((commit) => commit.sha));
+                const appendedCommits = nextPage.commits.filter((commit) => !knownShas.has(commit.sha));
+
+                this.historySearchResults = {
+                    commits: [...results.commits, ...appendedCommits],
+                    hasMore: nextPage.hasMore,
+                };
+
+                return appendedCommits.length > 0;
+            } finally {
+                this.isLoadingMoreHistorySearch = false;
+            }
+        },
+        clearHistorySearch() {
+            historySearchToken += 1;
+            this.historySearchQuery = '';
+            this.historySearchResults = undefined;
+            this.isSearchingHistory = false;
+            this.isLoadingMoreHistorySearch = false;
+        },
+        beginFileHistory(path: string) {
+            fileHistoryToken += 1;
+            this.fileHistoryPath = path;
+            this.fileHistoryFollowRenames = false;
+            this.fileHistoryResults = undefined;
+            this.isLoadingFileHistory = false;
+            this.isLoadingMoreFileHistory = false;
+            this.isIncludingFileHistoryRenames = false;
+        },
+        async includeFileHistoryRenames() {
+            if (!this.fileHistoryPath || this.fileHistoryFollowRenames) {
+                return;
+            }
+
+            // The followed list can contain commits the plain path history did not, so
+            // start again from the newest page instead of appending to the old rows.
+            this.fileHistoryFollowRenames = true;
+            this.isIncludingFileHistoryRenames = true;
+
+            try {
+                await this.loadFileHistory();
+            } finally {
+                this.isIncludingFileHistoryRenames = false;
+            }
+        },
+        closeFileHistory() {
+            fileHistoryToken += 1;
+            this.fileHistoryPath = undefined;
+            this.fileHistoryFollowRenames = false;
+            this.fileHistoryResults = undefined;
+            this.isLoadingFileHistory = false;
+            this.isLoadingMoreFileHistory = false;
+            this.isIncludingFileHistoryRenames = false;
+        },
+        async loadFileHistory() {
+            const path = this.fileHistoryPath;
+
+            if (!path) {
+                return;
+            }
+
+            const token = ++fileHistoryToken;
+            this.isLoadingFileHistory = true;
+
+            try {
+                const nextResults = await tasks.getHistory.run({
+                    repoId: this.id,
+                    path,
+                    followRenames: this.fileHistoryFollowRenames || undefined,
+                });
+
+                if (token !== fileHistoryToken) {
+                    return;
+                }
+
+                this.fileHistoryResults = nextResults;
+                await this.selectFileHistoryCommit(nextResults.commits[0]?.sha);
+            } finally {
+                if (token === fileHistoryToken) {
+                    this.isLoadingFileHistory = false;
+                }
+            }
+        },
+        async refreshFileHistory() {
+            const path = this.fileHistoryPath;
+
+            if (!path) {
+                return;
+            }
+
+            const token = ++fileHistoryToken;
+            // Re-request the pages already loaded so background refreshes do not collapse
+            // the visible list back to its first page.
+            const loadedCount = this.fileHistoryResults?.commits.length ?? 0;
+
+            try {
+                const nextResults = await tasks.getHistory.run({
+                    repoId: this.id,
+                    path,
+                    followRenames: this.fileHistoryFollowRenames || undefined,
+                    limit: loadedCount || undefined,
+                });
+
+                if (token !== fileHistoryToken) {
+                    return;
+                }
+
+                this.fileHistoryResults = nextResults;
+            } finally {
+                // A refresh supersedes a load still in flight, so it owns the pending flag.
+                if (token === fileHistoryToken) {
+                    this.isLoadingFileHistory = false;
+                }
+            }
+        },
+        async loadMoreFileHistory() {
+            const results = this.fileHistoryResults;
+            const path = this.fileHistoryPath;
+
+            if (!results?.hasMore || !path || this.isLoadingMoreFileHistory || this.isLoadingFileHistory) {
+                return false;
+            }
+
+            this.isLoadingMoreFileHistory = true;
+
+            try {
+                const nextPage = await tasks.getHistory.run({
+                    repoId: this.id,
+                    path,
+                    followRenames: this.fileHistoryFollowRenames || undefined,
+                    skip: results.commits.length,
+                });
+
+                // A refresh (or a new file history) replaced the list while this page was loading.
+                if (this.fileHistoryResults !== results) {
+                    return false;
+                }
+
+                const knownShas = new Set(results.commits.map((commit) => commit.sha));
+                const appendedCommits = nextPage.commits.filter((commit) => !knownShas.has(commit.sha));
+
+                this.fileHistoryResults = {
+                    commits: [...results.commits, ...appendedCommits],
+                    hasMore: nextPage.hasMore,
+                };
+
+                return appendedCommits.length > 0;
+            } finally {
+                this.isLoadingMoreFileHistory = false;
+            }
+        },
+        async selectFileHistoryCommit(commitSha: string | undefined) {
+            if (!commitSha) {
+                return;
+            }
+
+            const path = this.fileHistoryPath;
+            await this.selectCommit(commitSha);
+
+            if (!path || !this.currCommit) {
+                return;
+            }
+
+            // With `--follow` older rows can carry the file under its previous path, so
+            // match on the rename pair and fall back to the same file name.
+            const matchedFile =
+                this.currCommit.files.find((file) => file.path === path) ??
+                this.currCommit.files.find((file) => file.previousPath === path) ??
+                this.currCommit.files.find((file) => file.path.split('/').pop() === path.split('/').pop());
+
+            if (matchedFile && matchedFile.path !== this.currCommitFilePath) {
+                await this.selectCommitFile(matchedFile.path);
+            }
         },
         async selectCommit(commitSha: string) {
             this.currCommitSha = commitSha;
@@ -646,6 +970,8 @@ const _useRepository = (repo: Repo) => {
             this.explorerCommitSha = undefined;
             this.currCommittedFilePath = undefined;
             this.currCommittedFile = undefined;
+            this.closeFileHistory();
+            this.clearHistorySearch();
             this.history = undefined;
             this.currCommitSha = undefined;
             this.currCommit = undefined;

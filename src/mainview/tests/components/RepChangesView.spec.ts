@@ -6,9 +6,14 @@ import { confirmDiscards } from '../../composables/useUiPreferences';
 import type { ContextMenuEntry, ContextMenuItem } from '../../directives';
 
 let selectedRepo: Record<string, unknown>;
+let mockOpenFileHistory: ReturnType<typeof vi.fn>;
 
 vi.mock('../../composables/useRepos', () => ({
     useRepos: () => ({ getSelectedRepo: () => selectedRepo }),
+}));
+
+vi.mock('../../composables/useFileHistory', () => ({
+    useFileHistory: () => ({ openFileHistory: mockOpenFileHistory }),
 }));
 
 vi.mock('../../composables/useSettings', () => ({
@@ -48,6 +53,7 @@ const changesFileTreeStub = defineComponent({
     props: {
         item: { type: Object, required: true },
         emptyText: { type: String, required: false },
+        getContextMenuItems: { type: Function, required: false },
         getHeaderContextMenuItems: { type: Function, required: false },
         onSelect: { type: Function, required: false },
     },
@@ -135,6 +141,22 @@ function menuItem(entries: ContextMenuEntry[], pattern: RegExp) {
     return entries.find((entry): entry is ContextMenuItem => 'label' in entry && pattern.test(String((entry as ContextMenuItem).label)));
 }
 
+/** Per-file menu entries for a row, straight from the section that renders it. */
+function itemMenuEntries(wrapper: ReturnType<typeof mount>, path: string) {
+    const section = wrapper
+        .findAllComponents(changesFileTreeStub)
+        .find((candidate) => ((candidate.props('item') as { children: Array<{ path: string }> }).children ?? []).some((child) => child.path === path));
+
+    if (!section) {
+        throw new Error(`Expected a file tree section containing ${path}.`);
+    }
+
+    const getEntries = section.props('getContextMenuItems') as ((item: unknown) => ContextMenuEntry[]) | undefined;
+    const item = ((section.props('item') as { children: Array<{ path: string }> }).children ?? []).find((child) => child.path === path);
+
+    return getEntries ? getEntries(item) : [];
+}
+
 async function toggleSearchBar(wrapper: ReturnType<typeof mount>) {
     const entry = menuItem(viewMenuEntries(wrapper), /(show|hide) search bar/i);
 
@@ -184,6 +206,7 @@ function fetchButton(wrapper: ReturnType<typeof mount>) {
 describe('RepChangesView file filter', () => {
     beforeEach(() => {
         selectedRepo = createRepo();
+        mockOpenFileHistory = vi.fn(async () => undefined);
         localStorage.clear();
         confirmDiscards.value = true;
     });
@@ -350,5 +373,27 @@ describe('RepChangesView file filter', () => {
         await toggleSearchBar(wrapper);
 
         expect(localStorage.getItem('gitvan-ui-search-bar-open')).toBe('true');
+    });
+
+    it('offers File History for a tracked file', async () => {
+        const wrapper = mountView();
+
+        const entry = menuItem(itemMenuEntries(wrapper, 'Data/Core/ProductAccount.cs'), /^file history$/i);
+
+        expect(entry).toBeTruthy();
+
+        await entry!.action?.();
+
+        expect(mockOpenFileHistory).toHaveBeenCalledWith('Data/Core/ProductAccount.cs');
+    });
+
+    it('does not offer File History for a file that was never committed', () => {
+        (selectedRepo.changes as { unstaged: unknown[] }).unstaged = [
+            { path: 'brand-new.txt', previousPath: undefined, stagedStatus: 'clean', unstagedStatus: 'untracked', displayStatus: 'Untracked' },
+        ];
+
+        const wrapper = mountView();
+
+        expect(menuItem(itemMenuEntries(wrapper, 'brand-new.txt'), /^file history$/i)).toBeFalsy();
     });
 });
