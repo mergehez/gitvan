@@ -175,6 +175,12 @@ export function useDb() {
                     ${accountTable.createTableSql()}
                     ${groupsTable.createTableSql()}
                     ${repoTable.createTableSql()}
+
+                    -- SQLite does not index a foreign key, so the group and account joins and
+                    -- the default-account lookup would each scan their table.
+                    CREATE INDEX IF NOT EXISTS idx_repositories_group_id ON repositories(group_id);
+                    CREATE INDEX IF NOT EXISTS idx_repositories_account_id ON repositories(account_id);
+                    CREATE INDEX IF NOT EXISTS idx_accounts_is_default ON accounts(is_default);
                 `);
 
                 // `CREATE TABLE IF NOT EXISTS` cannot add a column to a database that was

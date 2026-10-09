@@ -70,6 +70,15 @@ describe('schema', () => {
 
         expect(columns).toContain('group_id');
     });
+
+    it('creates the lookup indexes that a foreign key does not provide', () => {
+        const indexes = useDatabase()
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name")
+            .all<{ name: string }>()
+            .map((row) => row.name);
+
+        expect(indexes).toEqual(['idx_accounts_is_default', 'idx_repositories_account_id', 'idx_repositories_group_id']);
+    });
 });
 
 describe('repositories', () => {

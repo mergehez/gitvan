@@ -20,6 +20,7 @@ type DatabaseStatement = {
 export type DatabaseClient = {
     exec: (sql: string) => void;
     prepare: (sql: string) => DatabaseStatement;
+    transaction: <T>(callback: () => T) => T;
     close: () => void;
 };
 
@@ -67,6 +68,7 @@ function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?
             statementCache.set(sql, prepared);
             return prepared;
         },
+        transaction: <T>(callback: () => T) => db.transaction(callback)(),
         close: () => {
             statementCache.clear();
             db.close();
@@ -87,6 +89,7 @@ function createDbClient(userDataDir: string): DatabaseClient {
     return {
         exec: (sql: string) => db.exec(sql),
         prepare: (sql: string) => db.prepare(sql),
+        transaction: <T>(callback: () => T) => db.transaction(callback),
         close: () => db.close(),
     };
 }
@@ -110,16 +113,21 @@ export function useDatabase() {
     function normalizeSequence(tableName: string, additionalOrderBy: string = '') {
         const rows = db.prepare(`SELECT id FROM ${tableName} ORDER BY sequence ASC, ${additionalOrderBy} created_at ASC, id ASC`).all<{ id: number }>();
         const updateSequence = db.prepare(`UPDATE ${tableName} SET sequence = ? WHERE id = ?`);
-        rows.forEach((row, index) => {
-            updateSequence.run(index + 1, row.id);
+
+        db.transaction(() => {
+            rows.forEach((row, index) => {
+                updateSequence.run(index + 1, row.id);
+            });
         });
     }
 
     function applySequenceOrder(tableName: string, orderedIds: number[]) {
         const updateSequence = db.prepare(`UPDATE ${tableName} SET sequence = ? WHERE id = ?`);
 
-        orderedIds.forEach((entryId, index) => {
-            updateSequence.run(index + 1, entryId);
+        db.transaction(() => {
+            orderedIds.forEach((entryId, index) => {
+                updateSequence.run(index + 1, entryId);
+            });
         });
     }
 
@@ -185,6 +193,7 @@ export function useDatabase() {
         createRuntimeDatabaseClient: createRuntimeDatabaseClient,
         prepare: (sql: string) => db.prepare(sql),
         exec: (sql: string) => db.exec(sql),
+        transaction: <T>(callback: () => T) => db.transaction(callback),
         close: () => db.close(),
         toNumber: toNumber,
         getSetting<T>(key: string, fallbackValue: T) {

@@ -57,3 +57,47 @@ describe('createRuntimeDatabaseClient statement cache', () => {
         }
     });
 });
+
+describe('createRuntimeDatabaseClient transactions', () => {
+    function createItemsClient() {
+        const client = createRuntimeDatabaseClient(':memory:');
+        client.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)');
+
+        return client;
+    }
+
+    it('commits every write in the callback', () => {
+        const client = createItemsClient();
+
+        try {
+            const insert = client.prepare('INSERT INTO items(name) VALUES (?)');
+            client.transaction(() => {
+                insert.run('alpha');
+                insert.run('beta');
+            });
+
+            expect(client.prepare('SELECT COUNT(*) AS count FROM items').get<{ count: number }>()).toEqual({ count: 2 });
+        } finally {
+            client.close();
+        }
+    });
+
+    it('rolls back every write when the callback throws', () => {
+        const client = createItemsClient();
+
+        try {
+            const insert = client.prepare('INSERT INTO items(name) VALUES (?)');
+
+            expect(() =>
+                client.transaction(() => {
+                    insert.run('alpha');
+                    throw new Error('boom');
+                })
+            ).toThrow('boom');
+
+            expect(client.prepare('SELECT COUNT(*) AS count FROM items').get<{ count: number }>()).toEqual({ count: 0 });
+        } finally {
+            client.close();
+        }
+    });
+});
