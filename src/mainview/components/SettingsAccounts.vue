@@ -247,7 +247,7 @@ async function reorderAccounts({ item, fromIndex, toIndex }: { item: { id: numbe
         <aside class="flex flex-col py-4">
             <div class="flex items-center gap-3 pb-3">
                 <h1 class="text-xl font-semibold text-white">Accounts</h1>
-                <IconButton severity="secondary" @click="selAccountId = 'create'" icon="icon-[mdi--plus]" />
+                <IconButton severity="secondary" data-testid="settings-create-account" @click="selAccountId = 'create'" icon="icon-[mdi--plus]" />
             </div>
 
             <p v-if="auth.accounts.length === 0" class="px-3 py-2 text-sm text-x7">No accounts created yet.</p>

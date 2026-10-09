@@ -41,6 +41,7 @@ function makeDefaultTerminal(path: string) {
             <div
                 v-for="terminal in settings.state.terminals"
                 :key="terminal.path"
+                :data-testid="`settings-terminal-${terminal.path}`"
                 class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-x0/80 px-4 py-3"
             >
                 <div class="min-w-0">

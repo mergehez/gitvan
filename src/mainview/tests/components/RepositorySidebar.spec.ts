@@ -191,7 +191,7 @@ const iconButtonStub = defineComponent({
     computed: {
         testId(): string {
             if (this.icon?.includes('cog-outline')) {
-                return 'settings-button';
+                return 'repos-settings';
             }
 
             if (this.icon?.includes('mdi--plus')) {
@@ -199,11 +199,11 @@ const iconButtonStub = defineComponent({
             }
 
             if (this.icon?.includes('folder-plus-outline')) {
-                return 'add-group-button';
+                return 'repos-add-group';
             }
 
             if (this.icon?.includes('ic--refresh')) {
-                return 'refresh-button';
+                return 'repos-refresh';
             }
 
             return 'icon-button';
@@ -346,7 +346,7 @@ describe('RepositorySidebar', () => {
     it('opens the settings window with the repositories panel selected', async () => {
         const wrapper = mountSidebar();
 
-        await wrapper.get('[data-testid="settings-button"]').trigger('click');
+        await wrapper.get('[data-testid="repos-settings"]').trigger('click');
 
         expect(mockSettings.openSettingsWindow).toHaveBeenCalledWith('repositories');
 

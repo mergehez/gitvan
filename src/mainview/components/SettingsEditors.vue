@@ -37,7 +37,12 @@ function makeDefaultEditor(path: string) {
         <div v-if="settings.state.editors.length === 0" class="mt-4 rounded-lg border border-dashed border-white/10 px-4 py-4 text-sm text-x7">No editors configured yet.</div>
 
         <div v-else class="mt-4 space-y-2">
-            <div v-for="editor in settings.state.editors" :key="editor.path" class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-x0/80 px-4 py-3">
+            <div
+                v-for="editor in settings.state.editors"
+                :key="editor.path"
+                :data-testid="`settings-editor-${editor.path}`"
+                class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-x0/80 px-4 py-3"
+            >
                 <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-white">{{ editor.label }}</p>
                     <p class="mt-1 truncate text-xs text-x7">{{ editor.path }}</p>

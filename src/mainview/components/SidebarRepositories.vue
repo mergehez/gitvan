@@ -557,6 +557,7 @@ function fetchGroupRepos(groupId: number) {
 
             <IconButton
                 severity="secondary"
+                data-testid="repos-settings"
                 :disabled="isButtonBusyBlocked"
                 v-tooltip.bottom="'Repository Settings'"
                 @click="settings.openSettingsWindow('repositories')"
