@@ -565,6 +565,7 @@ function fetchGroupRepos(groupId: number) {
 
             <IconButton
                 severity="secondary"
+                data-testid="repos-add-group"
                 :disabled="isButtonBusyBlocked"
                 v-tooltip.bottom="'Add Repository Group'"
                 @click="openNewGroupModal = true"
@@ -573,6 +574,7 @@ function fetchGroupRepos(groupId: number) {
 
             <IconButton
                 severity="secondary"
+                data-testid="repos-refresh"
                 :disabled="isButtonBusyBlocked"
                 v-tooltip.bottom.html="'Refresh Repositories<br/>(Sync Gitvan state with filesystem)'"
                 @click="repos.refreshRepositories()"
