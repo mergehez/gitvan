@@ -143,7 +143,6 @@ const repoTable = useTable<RepoRow, 'group_name' | 'account_label'>(
         account_id: 'accounts(id)',
     }
 );
-console.log(repoTable.createTableSql());
 
 const accountTable = useTable<AccountRow>('accounts', {
     id: 'INTEGER PRIMARY KEY AUTOINCREMENT',

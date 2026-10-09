@@ -259,9 +259,7 @@ const hunkActionsConfig = computed<HunkActionsConfig | undefined>(() => {
         },
         onDiscard: async (patch) => {
             if (!repo.value.curDiff || !patch) return;
-            const hunkPatch = patch;
-            console.log('[onDiscard]', { patchLen: hunkPatch.length, preview: hunkPatch.slice(0, 200) });
-            await repo.value.applyPatch(hunkPatch, 'discard', 'hunk');
+            await repo.value.applyPatch(patch, 'discard', 'hunk');
         },
     };
 });

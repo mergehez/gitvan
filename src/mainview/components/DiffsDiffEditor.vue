@@ -88,12 +88,7 @@ function createRenderedDiff(name: string, original: string, modified: string, ig
         return { renderedDiff: null, hasVisibleChanges: false, hideDecorations };
     }
 
-    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified), {
-        // callback(patch) {
-        // console.log('patch', patch);
-        // },
-    });
-    console.log('hunk count', rawDiff.hunks.length);
+    const rawDiff = parseDiffFromFile(createFile(name, original), createFile(name, modified));
     const rawHunks: (ChangeContent & { hunkSpecs: string; diffsHunkIdx: number })[] = [];
 
     for (let hunkIdx = 0; hunkIdx < rawDiff.hunks.length; hunkIdx++) {
@@ -301,7 +296,6 @@ function onHunkButtonHover(e: MouseEvent) {
     const btnRect = btn.getBoundingClientRect();
     hunkActionsWrapper.style.top = `${btnRect.top}px`;
     hunkActionsWrapper.style.left = `${btnRect.left + btnRect.width / 2}px`;
-    console.log('hover', { btnRect, actionsRect: hunkActionsWrapper.getBoundingClientRect() });
 }
 
 function addHunkElsToDom(label: string, addLine: HTMLElement, i: number) {
@@ -404,7 +398,6 @@ function setHunkAnchors() {
         const selector = hunk.additionLineIndex == 0 ? `:scope > div` : `:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`;
         const addLine = gutter.querySelector<HTMLElement>(selector);
         if (!addLine) {
-            console.warn('addLine not found for hunk', { i, hunk, hunks });
             continue;
         }
         addHunkElsToDom(`#${i + 1} (${hunk.hunkSpecs})`, addLine, i);
