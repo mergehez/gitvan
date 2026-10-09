@@ -42,14 +42,26 @@ async function callApi<TResult>(method: string, params?: unknown): Promise<TResu
     return (await response.json()) as TResult;
 }
 
+type EditorApp = {
+    path: string;
+    label: string;
+};
+
 type EditorSettings = {
     activeView: string;
     diffIgnoredChars: string;
     diffIgnoredCharsEnabled: boolean;
     showWhitespaceChanges: boolean;
     showBranches: boolean;
+    editors: EditorApp[];
+    terminals: Array<EditorApp & { locked?: boolean }>;
+    defaultEditorPath?: string;
+    defaultTerminalPath?: string;
     [key: string]: unknown;
 };
+
+/** Accounts the specs create carry this label prefix so they can be told apart from System Git. */
+const specAccountPrefix = 'Spec ';
 
 /**
  * Puts the settings the specs change back to their defaults. Nothing else resets them, so without
@@ -65,12 +77,65 @@ async function resetEditorSettings() {
         diffIgnoredCharsEnabled: true,
         showWhitespaceChanges: false,
     };
+    // Added editors and non-built-in terminals are only ever seeded by a spec, so they are dropped
+    // whenever any are present instead of on every run. The built-in terminals cannot be removed.
+    const seededApps = current.editors.length > 0 || current.terminals.some((terminal) => terminal.locked !== true);
 
-    if (Object.entries(defaults).every(([key, value]) => current[key] === value)) {
+    if (!seededApps && Object.entries(defaults).every(([key, value]) => current[key] === value)) {
         return;
     }
 
-    await callApi('updateEditorSettings', { settings: { ...current, ...defaults } });
+    await callApi('updateEditorSettings', {
+        settings: {
+            ...current,
+            ...defaults,
+            ...(seededApps ? { editors: [], defaultEditorPath: undefined, terminals: [], defaultTerminalPath: undefined } : {}),
+        },
+    });
+}
+
+/** Seeds the editor and terminal lists the Settings panels manage, which no UI can add otherwise. */
+export async function seedEditorApps(seed: { editors?: EditorApp[]; terminals?: EditorApp[]; defaultEditorPath?: string; defaultTerminalPath?: string }) {
+    const current = await callApi<EditorSettings>('getEditorSettings');
+
+    await callApi('updateEditorSettings', { settings: { ...current, ...seed } });
+}
+
+/** Removes the accounts a spec created; System Git is never touched. */
+async function resetSpecAccounts() {
+    const bootstrap = await callApi<{ accounts: Array<{ id: number; label: string }> }>('getBootstrap');
+    const specAccounts = bootstrap.accounts.filter((account) => account.label.startsWith(specAccountPrefix));
+
+    for (const account of specAccounts) {
+        await callApi('deleteAccount', { accountId: account.id });
+    }
+}
+
+type BootstrapState = {
+    repos: Array<{ id: number; groupId?: number | null }>;
+    groups: Array<{ id: number; name: string }>;
+};
+
+/**
+ * The sandbox reset recreates only the repositories still in the Sandbox group, so a lab a spec
+ * moved elsewhere survives with its old sort position and a group a spec created survives as well.
+ * Everything goes back into the Sandbox group first, which leaves the reset a canonical state.
+ */
+async function resetRepoGroups() {
+    const bootstrap = await callApi<BootstrapState>('getBootstrap');
+    const sandbox = bootstrap.groups.find((group) => group.name === 'Sandbox');
+
+    if (sandbox) {
+        const strays = bootstrap.repos.filter((repo) => (repo.groupId ?? undefined) !== sandbox.id);
+
+        for (const repo of strays) {
+            await callApi('updateRepoGroup', { repoId: repo.id, groupId: sandbox.id });
+        }
+    }
+
+    for (const group of bootstrap.groups.filter((group) => group.name !== 'Sandbox')) {
+        await callApi('deleteTrackedRepoGroup', { groupId: group.id });
+    }
 }
 
 async function selectRepo(page: Page, name: string, openChangesView: boolean) {
@@ -100,6 +165,8 @@ export type OpenSandboxRepoOptions = {
  */
 export async function openSandboxRepo(page: Page, name: string, options: OpenSandboxRepoOptions = {}) {
     await resetEditorSettings();
+    await resetSpecAccounts();
+    await resetRepoGroups();
     await page.goto('/');
 
     // The reset button lives in the sidebar, which only renders once the bootstrap has landed.
