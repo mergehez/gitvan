@@ -84,6 +84,10 @@ const sandboxResetScripts = [
         folder: 'cosmetics',
         script: 'reset-cosmetics-repo.mjs',
     },
+    {
+        folder: 'empty',
+        script: 'reset-empty-repo.mjs',
+    },
 ] as const;
 
 type RepoRemoteAuth = {

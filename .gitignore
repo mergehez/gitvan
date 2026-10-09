@@ -21,6 +21,7 @@ sandbox/pull-stash-lab/repo/
 sandbox/pull-stash-lab/origin.git/
 sandbox/pull-stash-lab/upstream/
 sandbox/deep-history-lab/repo/
+sandbox/empty-lab/repo/
 artifacts/
 src/mainview/directivesOld/
 test-results/
