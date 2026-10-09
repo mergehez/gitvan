@@ -298,10 +298,15 @@ export function useDb() {
         upsertRepo(path: string, name: string, groupId?: number) {
             const existing = db.prepare('SELECT id FROM repositories WHERE path = ?').get<{ id: number }>(path);
             const defaultAccount = db.prepare('SELECT id FROM accounts WHERE is_default = 1 ORDER BY id ASC LIMIT 1').get<{ id: number } | undefined>();
-            const touchRepo = db.prepare('UPDATE repositories SET name = ?, last_opened_at = CURRENT_TIMESTAMP, group_id = ? WHERE path = ?');
 
             if (existing) {
-                touchRepo.run(name, path, groupId ?? null);
+                if (groupId === undefined) {
+                    // Re-adding a path we already track refreshes its name and keeps its group.
+                    db.prepare('UPDATE repositories SET name = ?, last_opened_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, existing.id);
+                } else {
+                    db.prepare('UPDATE repositories SET name = ?, last_opened_at = CURRENT_TIMESTAMP, group_id = ? WHERE id = ?').run(name, groupId, existing.id);
+                }
+
                 return existing.id;
             }
 
@@ -309,7 +314,6 @@ export function useDb() {
                 const result = db
                     .prepare('INSERT INTO repositories(name, path, account_id, sequence, group_id) VALUES(?, ?, ?, ?, ?)')
                     .run(name, path, defaultAccount.id, db.getNextSequence('repositories'), groupId ?? null);
-                touchRepo.run(name, path, groupId ?? null);
 
                 return db.toNumber(result.lastInsertRowid);
             }
@@ -317,11 +321,12 @@ export function useDb() {
             const result = db
                 .prepare('INSERT INTO repositories(name, path, sequence, group_id) VALUES(?, ?, ?, ?)')
                 .run(name, path, db.getNextSequence('repositories'), groupId ?? null);
-            touchRepo.run(name, path, groupId ?? null);
+
             return db.toNumber(result.lastInsertRowid);
         },
         setSelectedRepoId(id: number | undefined) {
-            db.prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('selectedRepoId', JSON.stringify(id));
+            // JSON.stringify turns undefined into undefined, which SQLite rejects as NOT NULL.
+            db.prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('selectedRepoId', JSON.stringify(id ?? null));
         },
         getSelectedRepoId() {
             const row = db.prepare('SELECT value FROM settings WHERE key = ?').get<{ value: string }>('selectedRepoId');
@@ -330,7 +335,7 @@ export function useDb() {
                 return undefined;
             }
 
-            return JSON.parse(row.value) as number | undefined;
+            return (JSON.parse(row.value) as number | null) ?? undefined;
         },
         getSetting<T>(key: string, fallbackValue: T) {
             const row = db.prepare('SELECT value FROM settings WHERE key = ?').get<{ value: string }>(key);
@@ -367,7 +372,8 @@ export function useDb() {
             return db.toNumber(result.lastInsertRowid);
         },
         deleteGroup(id: number) {
-            db.prepare('DELETE FROM repositories WHERE group_id = ?').run(id);
+            // Deleting a group ungroups its repositories; removing them along with it would
+            // silently drop the user's repositories from the sidebar.
             db.prepare('UPDATE repositories SET group_id = NULL WHERE group_id = ?').run(id);
             db.prepare('DELETE FROM groups WHERE id = ?').run(id);
         },
