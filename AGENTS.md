@@ -78,7 +78,7 @@ Examples:
 - Run the browser specs after every UI change, before committing:
 
     ```bash
-    bun run test:e2e     # 20 specs, about a minute
+    bun run test:e2e     # the browser suite, a few minutes
     ```
 
     Nothing has to be started first: `playwright.config.ts` boots `bun run dev` itself and waits on the

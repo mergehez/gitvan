@@ -150,18 +150,11 @@ database per run, so it never touches the developer's app data.
 
 ### Browser specs (highest user risk first)
 
-- [ ] Pull blocked by local changes using the unused `pull-conflict-lab`: the modal, "Stash
-      changes and retry", the success and conflict toasts, and Publish Branch.
-- [ ] Repository lifecycle and groups: create a local repository and see it in the sidebar,
-      remove with confirmation, rename repository and group, create/delete/move a group, move a
-      repository between groups, drag-reorder in Settings > Repositories, and Refresh.
 - [ ] The Explorer view: the snapshot commit selector, tree selection, text preview, and the
       empty states. The view has no test id and no coverage.
 - [ ] History depth: search, load-more, commit and file selection with the diff pane, File
       History pin/back/"Include renames", undo the latest commit, amend the latest unpushed
       commit, and Add Tag from the commit context menu.
-- [ ] The branches sidebar: toggling it from the repository name button, the local and remote
-      lists, checkout by click, and the Add Local/Remote Branch modal.
 - [ ] Changes-view chrome: the file filter (`Cmd+F`), the sort menus, lock/unlock, copy path,
       Ignore..., the "Open with..." submenu, and the "No files match the search" state.
 - [ ] Tags beyond CRUD: Push Tag, Push All Tags, Delete Tag on Remote, sort by newest/name and
@@ -169,6 +162,9 @@ database per run, so it never touches the developer's app data.
 - [ ] The four Settings panels: group editing and reorder, editors and terminals
       (remove/make-default, which need no native picker), and account create/update/delete/
       reorder plus the token-validation error path.
+- [ ] Repository lifecycle leftovers: creating a local repository needs the native directory
+      picker, which 404s in browser dev mode, and the drag-reorder in Settings > Repositories is
+      uncovered. Remove, rename, group create/rename/delete/move and Refresh now have specs.
 - [ ] A boundary guard for the twelve RPCs that exist only in `src/electron/main.ts`
       (`pickDirectory`, `pickEditorApplication`, `openFileInEditor`, `openExternalUrl`, the four
       terminal session methods, ...). They 404 in browser dev mode, so assert the UI shows a
