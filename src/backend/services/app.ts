@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { executeCommand } from '../../electronUtils/executeCommand.js';
 import type {
@@ -503,6 +503,21 @@ function requireRepo(repoId: number) {
     }
 
     return repo;
+}
+
+/**
+ * Turns a repository-relative path into the absolute one the host opens. A path that resolves
+ * outside the repository (`../secrets.txt`) is rejected rather than handed to the OS.
+ */
+function resolveWithinRepo(repoPath: string, relativePath: string) {
+    const root = resolve(repoPath);
+    const resolved = resolve(root, relativePath);
+
+    if (resolved !== root && !resolved.startsWith(`${root}${sep}`)) {
+        throw new Error('The path is outside the repository.');
+    }
+
+    return resolved;
 }
 
 export const app = {
@@ -1084,7 +1099,7 @@ export const app = {
         return git.getFileDiff(requireRepo(ps.repoId).path, ps.path, ps.kind);
     },
     resolveRepoFilePath: (ps: { repoId: number; path: string }) => {
-        return join(requireRepo(ps.repoId).path, ps.path);
+        return resolveWithinRepo(requireRepo(ps.repoId).path, ps.path);
     },
     stageFile: async (ps: { repoId: number; path: string }) => {
         await git.stageRepoFile(requireRepo(ps.repoId).path, ps.path);

@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../../../../backend/services/app.js';
 import { useDb } from '../../../../backend/services/database.js';
@@ -64,5 +64,44 @@ describe('app handlers for a repository that no longer exists', () => {
 describe('app bootstrap', () => {
     it('reports no repositories and no selection for a fresh database', async () => {
         await expect(app.getBootstrap()).resolves.toMatchObject({ repos: [], groups: [], selectedRepoId: undefined });
+    });
+});
+
+describe('app.resolveRepoFilePath', () => {
+    let repoPath: string;
+    let repoId: number;
+
+    // Kept last in the file so the bootstrap test above still sees an empty database.
+    beforeAll(() => {
+        repoPath = mkdtempSync(join(tmpdir(), 'gitvan-app-paths-'));
+        repoId = useDb().upsertRepo(repoPath, 'paths');
+    });
+
+    afterAll(() => {
+        useDb().removeRepo(repoId);
+        rmSync(repoPath, { recursive: true, force: true });
+    });
+
+    it('resolves a repository-relative path', () => {
+        expect(app.resolveRepoFilePath({ repoId, path: 'src/app.ts' })).toBe(join(repoPath, 'src', 'app.ts'));
+    });
+
+    it('resolves the repository root for an empty path', () => {
+        expect(app.resolveRepoFilePath({ repoId, path: '' })).toBe(repoPath);
+    });
+
+    it('normalizes a path that stays inside the repository', () => {
+        expect(app.resolveRepoFilePath({ repoId, path: 'nested/../inside.txt' })).toBe(join(repoPath, 'inside.txt'));
+    });
+
+    it('rejects a path that escapes the repository', () => {
+        expect(() => app.resolveRepoFilePath({ repoId, path: '../outside.txt' })).toThrow(/outside the repository/);
+        expect(() => app.resolveRepoFilePath({ repoId, path: '../../etc/passwd' })).toThrow(/outside the repository/);
+        expect(() => app.resolveRepoFilePath({ repoId, path: 'nested/../../escape.txt' })).toThrow(/outside the repository/);
+        expect(() => app.resolveRepoFilePath({ repoId, path: '/etc/passwd' })).toThrow(/outside the repository/);
+    });
+
+    it('rejects a sibling directory that shares the repository prefix', () => {
+        expect(() => app.resolveRepoFilePath({ repoId, path: `../${basename(repoPath)}-evil/secret` })).toThrow(/outside the repository/);
     });
 });
