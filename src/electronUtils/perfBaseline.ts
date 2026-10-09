@@ -249,7 +249,7 @@ async function runBulkDiscard(options: Options): Promise<Result[]> {
     return [
         await measure(
             `bulk discard (${options.files} untracked files)`,
-            'one git process pair per file',
+            'one index lookup plus one clean for the whole batch',
             async () => {
                 for (const path of paths) {
                     writeFileSync(join(repoPath, path), 'dirty\n', 'utf8');

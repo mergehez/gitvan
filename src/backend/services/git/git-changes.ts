@@ -403,8 +403,22 @@ export const changesGit = {
         await runGit(['clean', '-fd', '--', filePath], repoPath);
     },
     async discardRepoFiles(repoPath: string, filePaths: string[]) {
-        for (const filePath of filePaths) {
-            await this.discardRepoFile(repoPath, filePath);
+        if (!filePaths.length) {
+            return;
+        }
+
+        // One index lookup partitions the whole batch, so each side is one git process
+        // instead of a lookup plus a mutation per file.
+        const trackedRaw = await runGit(['ls-files', '-z', '--error-unmatch', '--', ...filePaths], repoPath, [0, 1]);
+        const trackedPaths = new Set(trackedRaw.split('\0').filter(Boolean));
+        const untrackedPaths = filePaths.filter((filePath) => !trackedPaths.has(filePath));
+
+        if (trackedPaths.size > 0) {
+            await runGit(['restore', '--worktree', '--', ...trackedPaths], repoPath);
+        }
+
+        if (untrackedPaths.length > 0) {
+            await runGit(['clean', '-fd', '--', ...untrackedPaths], repoPath);
         }
     },
     async unstageAllRepoFiles(repoPath: string) {

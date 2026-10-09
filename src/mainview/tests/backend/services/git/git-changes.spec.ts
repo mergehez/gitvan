@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -237,6 +237,71 @@ describe('changesGit partial file operations', () => {
         expect(changes.unstaged[0]?.path).toBe('big.txt');
         expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(false);
         expect(changes.unstaged[0]?.unstagedTooLargeForCosmeticCheck).toBe(true);
+    });
+});
+
+describe('changesGit bulk discard', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function createRepoWithTrackedFile() {
+        const repoPath = mkdtempSync(join(tmpdir(), 'gitvan-bulk-discard-'));
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        runGit(repoPath, ['init']);
+        runGit(repoPath, ['config', 'user.name', 'Gitvan Test']);
+        runGit(repoPath, ['config', 'user.email', 'gitvan@example.com']);
+        writeFileSync(join(repoPath, 'tracked.txt'), 'base\n', 'utf8');
+        runGit(repoPath, ['add', 'tracked.txt']);
+        runGit(repoPath, ['commit', '-m', 'Initial commit']);
+
+        return repoPath;
+    }
+
+    it('restores tracked edits and deletes untracked files in one call', async () => {
+        const repoPath = createRepoWithTrackedFile();
+        writeFileSync(join(repoPath, 'tracked.txt'), 'edited\n', 'utf8');
+        writeFileSync(join(repoPath, 'untracked.txt'), 'new\n', 'utf8');
+        writeFileSync(join(repoPath, 'also-untracked.txt'), 'new\n', 'utf8');
+
+        await changesGit.discardRepoFiles(repoPath, ['tracked.txt', 'untracked.txt', 'also-untracked.txt']);
+
+        expect(readFileSync(join(repoPath, 'tracked.txt'), 'utf8')).toBe('base\n');
+        expect(existsSync(join(repoPath, 'untracked.txt'))).toBe(false);
+        expect(existsSync(join(repoPath, 'also-untracked.txt'))).toBe(false);
+    });
+
+    it('restores a tracked file that was deleted from the working tree', async () => {
+        const repoPath = createRepoWithTrackedFile();
+        rmSync(join(repoPath, 'tracked.txt'));
+
+        await changesGit.discardRepoFiles(repoPath, ['tracked.txt']);
+
+        expect(readFileSync(join(repoPath, 'tracked.txt'), 'utf8')).toBe('base\n');
+    });
+
+    it('removes untracked directories passed as a file path', async () => {
+        const repoPath = createRepoWithTrackedFile();
+        mkdirSync(join(repoPath, 'nested'));
+        writeFileSync(join(repoPath, 'nested', 'inner.txt'), 'new\n', 'utf8');
+
+        await changesGit.discardRepoFiles(repoPath, ['nested/inner.txt']);
+
+        expect(existsSync(join(repoPath, 'nested', 'inner.txt'))).toBe(false);
+    });
+
+    it('does nothing for an empty path list', async () => {
+        const repoPath = createRepoWithTrackedFile();
+        writeFileSync(join(repoPath, 'tracked.txt'), 'edited\n', 'utf8');
+
+        await changesGit.discardRepoFiles(repoPath, []);
+
+        expect(readFileSync(join(repoPath, 'tracked.txt'), 'utf8')).toBe('edited\n');
     });
 });
 
