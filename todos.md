@@ -31,6 +31,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Read each blob once for the cosmetic-change check.
 - Made the periodic refresh status-only, paused it while hidden, and reused an unchanged file diff.
 - Reported a repository that was removed mid-request as a handled outcome instead of a raw type error.
+- Removed an account even when its keychain entry cannot be deleted, instead of failing after the row was gone.
 
 ## Next
 
@@ -154,14 +155,9 @@ database per run, so it never touches the developer's app data.
 
 ### Browser specs (highest user risk first)
 
-- [ ] Tags beyond CRUD: Push Tag, Push All Tags, Delete Tag on Remote, sort by newest/name and
-      Copy Tag Name.
-- [ ] The four Settings panels: group editing and reorder, editors and terminals
-      (remove/make-default, which need no native picker), and account create/update/delete/
-      reorder plus the token-validation error path.
-- [ ] Repository lifecycle leftovers: creating a local repository needs the native directory
-      picker, which 404s in browser dev mode, and the drag-reorder in Settings > Repositories is
-      uncovered. Remove, rename, group create/rename/delete/move and Refresh now have specs.
+- [ ] Settings leftovers: the provider token-validation error path needs the provider's API, or a
+      stub that can fail on demand. Group editing and reorder, editors and terminals
+      (remove/make-default), and account create/update/delete/reorder now have specs.
 - [ ] Explorer leftovers: "No commits found." needs a repository with no commits at all, and
       "Select a file to inspect the committed contents." is unreachable because loading a
       snapshot always selects its first file. The snapshot selector, tree selection, text
@@ -169,8 +165,8 @@ database per run, so it never touches the developer's app data.
 - [ ] A boundary guard for the twelve RPCs that exist only in `src/electron/main.ts`
       (`pickDirectory`, `pickEditorApplication`, `openFileInEditor`, `openExternalUrl`, the four
       terminal session methods, ...). They 404 in browser dev mode, so assert the UI shows a
-      recoverable error instead of hanging, or add dev-server stubs so Add Existing Repository
-      becomes testable.
+      recoverable error instead of hanging, or add dev-server stubs — which would also make
+      creating a local repository testable.
 
 ### Backend unit tests
 
