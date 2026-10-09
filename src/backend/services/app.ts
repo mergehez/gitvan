@@ -73,6 +73,10 @@ const sandboxResetScripts = [
         script: 'reset-pull-stash-repo.mjs',
     },
     {
+        folder: 'deep-history',
+        script: 'reset-deep-history-repo.mjs',
+    },
+    {
         folder: 'partial-changes',
         script: 'reset-partial-repo.mjs',
     },
