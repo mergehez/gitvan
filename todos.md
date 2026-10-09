@@ -27,10 +27,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 ## Next
 
-- [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
-    - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
-    - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
-
 - [ ] **[URGENT]** The changes view spawns up to four git processes per modified file with no concurrency cap.
     - What it is: `getRepoChanges` (`src/backend/services/git/git-changes.ts:198`) fans out over every entry and calls `hasNoActualChangeForKind` in an unbounded `Promise.all`; that helper (`git-changes.ts:529`) runs `git cat-file -s` and `git show` for both the index and the working tree per file. A working tree with a hundred modified files issues roughly four hundred concurrent git processes and reads every file's full content into JS, on every sidebar refresh.
     - How it will be implemented: derive the cosmetic classification from a single `git diff --numstat -z` (or `--raw`) pass instead of per-file commands, and route any remaining per-file git work through a small bounded pool of four to eight workers.
@@ -50,6 +46,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - [ ] **[URGENT]** Spawned git processes have no timeout and no cancellation.
     - What it is: `executeCommand` (`src/electronUtils/executeCommand.ts:15`) spawns without a timeout or an `AbortSignal`, and `callApiPost` (`src/electronUtils/helpers.ts:21`) has no request timeout either. A `fetch`, `pull`, `push` or `clone` against an unreachable remote never resolves, which blocks the Electron main process on the invoke; the dev server's `runWithTimeout` only rejects the HTTP promise and orphans the child process.
     - How it will be implemented: add a per-call timeout plus an `AbortSignal` to `executeCommand` that kills the child on expiry, pass generous but finite values for network operations, and propagate the abort when the request closes.
+
+- [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
+    - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
+    - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
 
 - [ ] **[NOT_URGENT]** Loading indicators leak entries onto the global z-index stack.
     - What it is: `toggleLoading` (`src/mainview/directives/VLoading.ts:65`) discards the return value of `overlayState.toggleZIndex(true, …)`, so every `updated` while a loader is visible pushes a new value onto the module-level `zIndStack` (`directives/useOverlaysState.ts:3`) that is never removed; `increaseZIndex` then computes `Math.max(...zIndStack)` over an ever-growing array.
