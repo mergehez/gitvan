@@ -35,6 +35,7 @@ import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
 import { invalidateAllRepoSidebarStatuses, invalidateRepoSidebarStatus, readRepoSidebarStatus } from './repoStatusCache.js';
+import { invalidateAllUnpushedCommitSets, invalidateUnpushedCommitSet } from './git/unpushedCommitCache.js';
 
 const db = useDb();
 
@@ -713,6 +714,7 @@ export const app = {
         // Polling and the manual refresh are what notice working-tree edits made outside
         // Gitvan, so they always re-read the real status instead of the cached one.
         invalidateAllRepoSidebarStatuses();
+        invalidateAllUnpushedCommitSets();
         return buildBootstrap();
     },
     resetSandboxRepos: async () => {
@@ -723,6 +725,7 @@ export const app = {
 
         // The labs are recreated at paths that may already be cached.
         invalidateAllRepoSidebarStatuses();
+        invalidateAllUnpushedCommitSets();
 
         let groupSandbox = db.getGroupByName('Sandbox');
         if (!groupSandbox) {
@@ -760,6 +763,7 @@ export const app = {
 
         if (removedRepoPath) {
             invalidateRepoSidebarStatus(removedRepoPath);
+            invalidateUnpushedCommitSet(removedRepoPath);
         }
 
         if (db.getSelectedRepoId() === ps.repoId) {

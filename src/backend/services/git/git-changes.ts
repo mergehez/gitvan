@@ -28,6 +28,7 @@ import {
     readWorkingTreeFileSize,
     textByteSize,
 } from './git-helpers.js';
+import { readCachedUnpushedCommitSet } from './unpushedCommitCache.js';
 
 export const changesGit = {
     async getRepoSidebarStatus(repoPath: string): Promise<RepoSidebarStatus> {
@@ -95,10 +96,7 @@ export const changesGit = {
             }
 
             // A branch with no commits yet publishes nothing, and git reports that with exit 128.
-            const publishableCommits =
-                !hasUpstream && branch && branch !== 'Detached HEAD'
-                    ? Number.parseInt(await runGit(['rev-list', '--count', 'HEAD', '--not', '--remotes'], repoPath, [0, 128]), 10) || 0
-                    : 0;
+            const publishableCommits = !hasUpstream && branch && branch !== 'Detached HEAD' ? await readPublishableCommitCount(repoPath) : 0;
 
             return {
                 branch,
@@ -530,8 +528,9 @@ export const changesGit = {
             throw new GitCommandError('The commit to edit no longer exists. Refresh the history and try again.', ['git', 'rev-parse', commitSha], '');
         }
 
-        // Rewriting a pushed commit would silently diverge the branch from its remote.
-        const unpushedCommits = await getUnpushedCommitSet(repoPath);
+        // Rewriting a pushed commit would silently diverge the branch from its remote. This is a
+        // destructive guard, so it reads the set fresh instead of trusting the shared cache.
+        const unpushedCommits = await getUnpushedCommitSet(repoPath, undefined, { cache: false });
         if (!unpushedCommits.has(targetSha)) {
             throw new GitCommandError('Only unpushed commits can be edited.', ['git', 'rev-list', 'HEAD', '--not', '--remotes'], '');
         }
@@ -596,6 +595,20 @@ async function countUntrackedLines(repoPath: string, absolutePath: string) {
     const added = Number(numstat.trim().split('\t')[0]);
 
     return Number.isFinite(added) ? added : 0;
+}
+
+/**
+ * Exact number of commits a branch would publish. The sidebar shows it as a number, so a capped
+ * walk cannot answer it; a full set another view already computed is reused instead of walking.
+ */
+async function readPublishableCommitCount(repoPath: string) {
+    const cached = readCachedUnpushedCommitSet(repoPath);
+
+    if (cached) {
+        return (await cached).size;
+    }
+
+    return Number.parseInt(await runGit(['rev-list', '--count', 'HEAD', '--not', '--remotes'], repoPath, [0, 128]), 10) || 0;
 }
 
 /**

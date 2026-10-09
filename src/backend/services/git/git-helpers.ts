@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import type { ChangeStatus, CommitFileEntry } from '../../../shared/types.js';
 import { runGit, runGitBuffer, runGitBufferWithInput, runGitWithInput } from './git-common.js';
+import { readCachedUnpushedCommitSet, readUnpushedCommitSet } from './unpushedCommitCache.js';
 
 const previewByteLimit = 1024 * 1024;
 export const fileTooBigPreviewMessage = 'File too big to preview';
@@ -549,7 +550,28 @@ export function parseCommitTags(rawRefs: string, isUnpushed: boolean) {
 }
 
 /** Commits reachable from HEAD that no remote has, optionally capped to the newest ones. */
-export async function getUnpushedCommitSet(repoPath: string, maxCount?: number) {
+export async function getUnpushedCommitSet(repoPath: string, maxCount?: number, options: { cache?: boolean } = {}) {
+    const useCache = options.cache ?? true;
+
+    if (maxCount) {
+        // A capped walk only answers membership for the commits a page displays, so a full set
+        // that is already cached answers it for free.
+        const cached = useCache ? readCachedUnpushedCommitSet(repoPath) : undefined;
+        if (cached) {
+            return await cached;
+        }
+
+        return await computeUnpushedCommitSet(repoPath, maxCount);
+    }
+
+    if (!useCache) {
+        return await computeUnpushedCommitSet(repoPath);
+    }
+
+    return await readUnpushedCommitSet(repoPath, () => computeUnpushedCommitSet(repoPath));
+}
+
+async function computeUnpushedCommitSet(repoPath: string, maxCount?: number) {
     const args = ['rev-list'];
 
     if (maxCount) {

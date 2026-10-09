@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { executeCommand } from '../../../electronUtils/executeCommand.js';
 import { invalidateRepoSidebarStatus } from '../repoStatusCache.js';
+import { invalidateUnpushedCommitSet } from './unpushedCommitCache.js';
 
 /** Local git work is fast; a command still running after this is stuck rather than slow. */
 const localGitTimeoutMs = 2 * 60_000;
@@ -53,6 +54,7 @@ function invalidateStatusForMutatingCommand(args: string[], cwd: string) {
     const subcommand = gitSubcommand(args);
     if (subcommand && statusInvalidatingSubcommands.has(subcommand)) {
         invalidateRepoSidebarStatus(cwd);
+        invalidateUnpushedCommitSet(cwd);
     }
 }
 
