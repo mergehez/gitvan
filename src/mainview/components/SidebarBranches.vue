@@ -88,8 +88,8 @@ async function createBranch() {
                 :selection="localBranches.selection"
                 :onSelect="(r) => onBranchSelect(r, true)"
             >
-                <template #header-actions="{ item }">
-                    <IconButton severity="raised" smaller @click.stop="startAddBranch(item.id)" icon="icon-[mdi--plus]" />
+                <template #header-actions>
+                    <IconButton severity="raised" smaller @click.stop="startAddBranch('local')" icon="icon-[mdi--plus]" />
                 </template>
             </FileTree>
             <FileTree
@@ -100,8 +100,8 @@ async function createBranch() {
                 :selection="remoteBranches.selection"
                 :onSelect="(r) => onBranchSelect(r, false)"
             >
-                <template #header-actions="{ item }">
-                    <IconButton severity="raised" smaller @click.stop="startAddBranch(item.id)" icon="icon-[mdi--plus]" />
+                <template #header-actions>
+                    <IconButton severity="raised" smaller @click.stop="startAddBranch('remote')" icon="icon-[mdi--plus]" />
                 </template>
             </FileTree>
         </div>
