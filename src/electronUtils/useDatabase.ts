@@ -160,41 +160,10 @@ export function useDatabase() {
             }
 
             db = createDbClient(userDataDir);
-            db.exec(`
-                PRAGMA journal_mode = WAL;
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    label TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    auth_kind TEXT NOT NULL,
-                    username TEXT,
-                    host TEXT,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    is_default INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS groups (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS repositories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    path TEXT NOT NULL UNIQUE,
-                    sequence INTEGER NOT NULL DEFAULT 0,
-                    account_id INTEGER,
-                    terminal_path TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    last_opened_at TEXT,
-                    FOREIGN KEY (account_id) REFERENCES accounts(id)
-                );
-            `);
+            // The schema belongs to the app (`backend/services/database.ts`), which creates it in
+            // onDbCreated. Creating it here as well used to win the race with `CREATE TABLE IF NOT
+            // EXISTS` and left every brand-new database without the newer columns.
+            db.exec('PRAGMA journal_mode = WAL;');
 
             onDbCreated(db);
         },

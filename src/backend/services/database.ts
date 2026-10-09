@@ -178,6 +178,11 @@ export function useDb() {
                     ${repoTable.createTableSql()}
                 `);
 
+                // `CREATE TABLE IF NOT EXISTS` cannot add a column to a database that was
+                // created without it, so databases made before `group_id` joined the schema
+                // need it added explicitly.
+                db.ensureColumn('repositories', 'group_id', 'INTEGER');
+
                 const accountCount = accountTable.getCount(db);
 
                 if (accountCount === 0) {
