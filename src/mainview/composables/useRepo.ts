@@ -111,6 +111,8 @@ const _useRepository = (repo: Repo) => {
     // Monotonic token so a slow history search cannot overwrite a newer one.
     let historySearchToken = 0;
     let fileHistoryToken = 0;
+    // Monotonic token so a slow diff cannot overwrite the file selected after it.
+    let diffRequestToken = 0;
 
     const state = reactive({
         ...repo,
@@ -537,6 +539,8 @@ const _useRepository = (repo: Repo) => {
             })();
 
             if (!nextSelection) {
+                // Nothing is selected any more, so a diff still loading must not land either.
+                diffRequestToken++;
                 this.currChangePath = undefined;
                 this.currChangeKind = undefined;
                 this.curDiff = undefined;
@@ -1019,6 +1023,8 @@ const _useRepository = (repo: Repo) => {
             });
         },
         clearViewState() {
+            // The view is gone, so a diff still loading must not reopen it.
+            diffRequestToken++;
             this.changes = undefined;
             this.currChangePath = undefined;
             this.currChangeKind = undefined;
@@ -1059,6 +1065,7 @@ const _useRepository = (repo: Repo) => {
                 settings.state.showWhitespaceChanges ? '1' : '0',
                 entry?.contentKey ?? '',
             ].join('|');
+            const requestToken = ++diffRequestToken;
 
             this.currChangePath = selection.path;
             this.currChangeKind = selection.kind;
@@ -1073,6 +1080,12 @@ const _useRepository = (repo: Repo) => {
                 path: selection.path,
                 kind: selection.kind,
             });
+
+            // The changes view auto-selects a file, so a click can overtake this request. The
+            // response that arrives late belongs to a file the user has already moved away from.
+            if (requestToken !== diffRequestToken) {
+                return;
+            }
 
             this.curDiff = nextDiff;
             this.lastDiffRequestKey = requestKey;

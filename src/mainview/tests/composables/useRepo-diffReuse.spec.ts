@@ -154,6 +154,49 @@ describe('useRepo reuses an unchanged changes diff', () => {
         expect(repo.currChangePath).toBe('b.txt');
     });
 
+    it('keeps the newer selection when an earlier diff resolves last', async () => {
+        const repo = useRepo(createRepo());
+
+        let resolveFirst: ((diff: FileDiffData) => void) | undefined;
+        getFileDiffRun.mockImplementationOnce(
+            async () =>
+                await new Promise<FileDiffData>((resolve) => {
+                    resolveFirst = resolve;
+                })
+        );
+        getFileDiffRun.mockImplementation(async (params: { path: string }) => createDiff(params.path));
+
+        const first = repo.selectChange({ kind: 'unstaged', path: 'a.txt' });
+        const second = repo.selectChange({ kind: 'unstaged', path: 'b.txt' });
+        await second;
+
+        // The auto-selection's slow response lands after the user's click and must be dropped.
+        resolveFirst!(createDiff('a.txt'));
+        await first;
+
+        expect(repo.currChangePath).toBe('b.txt');
+        expect(repo.curDiff?.path).toBe('b.txt');
+    });
+
+    it('does not reopen the diff for a selection cleared while its diff was loading', async () => {
+        const repo = useRepo(createRepo());
+
+        let resolveDiff: ((diff: FileDiffData) => void) | undefined;
+        getFileDiffRun.mockImplementationOnce(
+            async () =>
+                await new Promise<FileDiffData>((resolve) => {
+                    resolveDiff = resolve;
+                })
+        );
+
+        const selection = repo.selectChange({ kind: 'unstaged', path: 'a.txt' });
+        repo.clearViewState();
+        resolveDiff!(createDiff('a.txt'));
+        await selection;
+
+        expect(repo.curDiff).toBeUndefined();
+    });
+
     it('reuses the commit detail and its file diff for the same commit selection', async () => {
         const repo = useRepo(createRepo());
         getCommitDetailRun.mockResolvedValue({
