@@ -14,6 +14,7 @@ import type {
     Repo,
     RepoChangesData,
     RepoStashDetail,
+    TagsData,
     RepoStashEntry,
 } from '../../shared/types.ts';
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
@@ -145,6 +146,9 @@ const _useRepository = (repo: Repo) => {
         historySearchResults: undefined as HistoryData | undefined,
         isSearchingHistory: false,
         isLoadingMoreHistorySearch: false,
+        tags: undefined as TagsData | undefined,
+        isLoadingTags: false,
+        selectedTagName: undefined as string | undefined,
         fileHistoryPath: undefined as string | undefined,
         fileHistoryFollowRenames: false,
         fileHistoryResults: undefined as HistoryData | undefined,
@@ -537,6 +541,11 @@ const _useRepository = (repo: Repo) => {
 
             if (settings.state.activeView === 'explorer') {
                 await this.loadCommittedTree();
+                return;
+            }
+
+            if (settings.state.activeView === 'tags') {
+                await this.loadTags();
                 return;
             }
 
@@ -972,6 +981,9 @@ const _useRepository = (repo: Repo) => {
             this.currCommittedFile = undefined;
             this.closeFileHistory();
             this.clearHistorySearch();
+            this.tags = undefined;
+            this.selectedTagName = undefined;
+            this.isLoadingTags = false;
             this.history = undefined;
             this.currCommitSha = undefined;
             this.currCommit = undefined;
@@ -1115,6 +1127,17 @@ const _useRepository = (repo: Repo) => {
             this.commitForm.summary = '';
             this.commitForm.description = '';
         },
+        async getCommitMessage(commitSha: string) {
+            return await tasks.getCommitMessage.run({ repoId: this.id, commitSha });
+        },
+        /** Rewrites an unpushed commit's message and replays its descendants. */
+        async rewordCommit(params: { commitSha: string; summary: string; description: string }) {
+            const nextBootstrap = await tasks.rewordCommit.run({ repoId: this.id, ...params });
+
+            // The rewrite replaces the commit an amend form may still be holding on to.
+            this.resetCommitForm();
+            await applyMutation(nextBootstrap);
+        },
         async undoSelectedCommit() {
             const canRewriteSelectedCommit = Boolean(this.currCommit && this.currCommit.sha === this.history?.commits[0]?.sha && this.currCommit.isUnpushed);
 
@@ -1143,23 +1166,68 @@ const _useRepository = (repo: Repo) => {
             const latestCommit = this.history?.commits[0];
             return latestCommit?.isUnpushed ? latestCommit : undefined;
         },
-        editableTagsForCommit(commit: CommitSummary | undefined) {
-            if (!commit?.isUnpushed) {
-                return [];
+        selectedTag() {
+            return this.tags?.tags.find((tag) => tag.name === this.selectedTagName);
+        },
+        async loadTags() {
+            this.isLoadingTags = true;
+
+            try {
+                const nextTags = await tasks.getTags.run({ repoId: this.id });
+                this.tags = nextTags;
+
+                const nextSelectedTagName =
+                    (this.selectedTagName && nextTags.tags.some((tag) => tag.name === this.selectedTagName) && this.selectedTagName) || nextTags.tags[0]?.name;
+
+                if (!nextSelectedTagName) {
+                    // Nothing to inspect, so do not leave another view's commit in the pane.
+                    this.selectedTagName = undefined;
+                    this.currCommitSha = undefined;
+                    this.currCommit = undefined;
+                    this.currCommitFilePath = undefined;
+                    this.currCommitDiff = undefined;
+                    return;
+                }
+
+                await this.selectTag(nextSelectedTagName);
+            } finally {
+                this.isLoadingTags = false;
+            }
+        },
+        async selectTag(tagName: string) {
+            this.selectedTagName = tagName;
+
+            const tag = this.tags?.tags.find((candidate) => candidate.name === tagName);
+            if (!tag) {
+                return;
             }
 
-            return commit.tags.filter((tag) => tag.isUnpushed);
+            await this.selectCommit(tag.commitSha);
         },
-        async createTag(commitSha: string, tagName: string) {
+        /** Every local tag can be managed, whether or not its commit has been pushed. */
+        editableTagsForCommit(commit: CommitSummary | undefined) {
+            return commit?.tags ?? [];
+        },
+        async createTag(commitSha: string, tagName: string, message?: string) {
             const normalizedTagName = tagName.trim();
+            const normalizedMessage = message?.trim() || undefined;
+
             if (!normalizedTagName) {
                 return;
             }
 
-            const nextBootstrap = await tasks.createTag.run({ repoId: this.id, commitSha, tagName: normalizedTagName }, `${commitSha}:${normalizedTagName}`);
+            if (settings.state.activeView === 'tags') {
+                // The reload that follows the mutation keeps this tag selected.
+                this.selectedTagName = normalizedTagName;
+            }
+
+            const nextBootstrap = await tasks.createTag.run(
+                { repoId: this.id, commitSha, tagName: normalizedTagName, message: normalizedMessage },
+                `${commitSha}:${normalizedTagName}`
+            );
 
             await applyMutation(nextBootstrap);
-            toast.showSuccessToast(`Tag "${normalizedTagName}" created.`);
+            toast.showSuccessToast(normalizedMessage ? `Annotated tag "${normalizedTagName}" created.` : `Tag "${normalizedTagName}" created.`);
         },
         async renameTag(tagName: string, nextTagName: string) {
             const normalizedTagName = tagName.trim();
@@ -1167,6 +1235,10 @@ const _useRepository = (repo: Repo) => {
 
             if (!normalizedTagName || !normalizedNextTagName || normalizedTagName === normalizedNextTagName) {
                 return;
+            }
+
+            if (settings.state.activeView === 'tags' && this.selectedTagName === normalizedTagName) {
+                this.selectedTagName = normalizedNextTagName;
             }
 
             const nextBootstrap = await tasks.renameTag.run(
@@ -1186,7 +1258,7 @@ const _useRepository = (repo: Repo) => {
             const confirmed = await confirmAction({
                 title: 'Delete tag',
                 message: `Delete tag '${normalizedTagName}'?`,
-                detail: 'This removes the local tag reference from the repository.',
+                detail: 'This removes the local tag reference from the repository. A tag already pushed to the remote is not affected.',
                 confirmLabel: 'Delete tag',
             });
 
@@ -1198,6 +1270,45 @@ const _useRepository = (repo: Repo) => {
 
             await applyMutation(nextBootstrap);
             toast.showSuccessToast(`Tag "${normalizedTagName}" deleted.`);
+        },
+        async pushTag(tagName: string) {
+            const normalizedTagName = tagName.trim();
+            if (!normalizedTagName) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.pushTag.run({ repoId: this.id, tagName: normalizedTagName }, normalizedTagName);
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast(`Tag "${normalizedTagName}" pushed.`);
+        },
+        async pushAllTags() {
+            const nextBootstrap = await tasks.pushAllTags.run({ repoId: this.id });
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast('Tags pushed.');
+        },
+        async deleteRemoteTag(tagName: string) {
+            const normalizedTagName = tagName.trim();
+            if (!normalizedTagName) {
+                return;
+            }
+
+            const confirmed = await confirmAction({
+                title: 'Delete remote tag',
+                message: `Delete tag '${normalizedTagName}' on the remote?`,
+                detail: 'This removes the tag from the remote repository. The local tag is kept.',
+                confirmLabel: 'Delete remote tag',
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            const nextBootstrap = await tasks.deleteRemoteTag.run({ repoId: this.id, tagName: normalizedTagName }, normalizedTagName);
+
+            await applyMutation(nextBootstrap);
+            toast.showSuccessToast(`Tag "${normalizedTagName}" deleted on the remote.`);
         },
         async createBranch(branchName: string) {
             branchName = branchName.trim();

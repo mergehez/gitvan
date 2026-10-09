@@ -1,6 +1,6 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, reactive } from 'vue';
+import { defineComponent, nextTick, reactive } from 'vue';
 import RepHistoryView from '../../components/RepHistoryView.vue';
 import type { useRepos } from '../../composables/useRepos';
 import type { tasks as tasksType } from '../../composables/useTasks';
@@ -13,7 +13,7 @@ type ContextMenuState = ReturnType<typeof useContextMenu>;
 type TasksState = typeof tasksType;
 
 let selectedRepo: any;
-let mockContextMenu: Pick<ContextMenuState, 'openAtEvent'>;
+let mockContextMenu: Pick<ContextMenuState, 'openAtEvent' | 'open' | 'elementRect'>;
 let mockTasks: Pick<TasksState, 'isOperationRunning'>;
 let mockOpenFileHistory: ReturnType<typeof vi.fn>;
 
@@ -96,6 +96,15 @@ const centeredInputModalStub = defineComponent({
     template: '<div />',
 });
 
+const createTagModalStub = defineComponent({
+    name: 'CreateTagModal',
+    props: {
+        open: { type: Boolean, default: false },
+        targetLabel: { type: String, default: '' },
+    },
+    template: '<div v-if="open" data-testid="create-tag-modal">{{ targetLabel }}</div>',
+});
+
 const iconButtonStub = defineComponent({
     name: 'IconButton',
     props: {
@@ -154,6 +163,16 @@ const fileTreeStub = defineComponent({
 
 function isMenuItem(entry: ContextMenuEntry | undefined): entry is ContextMenuItem {
     return Boolean(entry && 'id' in entry);
+}
+
+function lastContextMenuEntries() {
+    const openAtEventMock = mockContextMenu.openAtEvent as ReturnType<typeof vi.fn>;
+
+    return (openAtEventMock.mock.calls.at(-1)?.[1] ?? []) as ContextMenuEntry[];
+}
+
+function findMenuItem(entries: ContextMenuEntry[], label: string) {
+    return entries.find((entry): entry is ContextMenuItem => isMenuItem(entry) && entry.label === label);
 }
 
 function createCommitSummary(sha: string, summary: string): CommitSummary {
@@ -235,6 +254,8 @@ function createRepo() {
         includeFileHistoryRenames: vi.fn(async () => undefined),
         beginAmendSelectedCommit: vi.fn(),
         undoSelectedCommit: vi.fn(),
+        getCommitMessage: vi.fn(async () => ({ summary: 'Add release tag', body: 'Explains the tag.' })),
+        rewordCommit: vi.fn(),
         editableTagsForCommit: (commit: any) => commit?.tags?.filter((tag: any) => tag.isUnpushed) ?? [],
         createTag: vi.fn(),
         renameTag: vi.fn(),
@@ -251,6 +272,7 @@ function mountHistoryView() {
                 DiffViewer: diffViewerStub,
                 ChangesFileTree: changesFileTreeStub,
                 CenteredInputModal: centeredInputModalStub,
+                CreateTagModal: createTagModalStub,
                 IconButton: iconButtonStub,
             },
             directives: {
@@ -263,9 +285,11 @@ function mountHistoryView() {
 describe('RepHistoryView', () => {
     beforeEach(() => {
         selectedRepo = createRepo();
-        mockContextMenu = {
+        mockContextMenu = reactive({
             openAtEvent: vi.fn(),
-        };
+            open: false,
+            elementRect: undefined as DOMRect | undefined,
+        });
         mockTasks = {
             isOperationRunning: vi.fn(() => false),
         };
@@ -299,6 +323,111 @@ describe('RepHistoryView', () => {
         expect(entries.some((entry) => isMenuItem(entry) && entry.label === 'Add Tag...')).toBe(true);
         expect(entries.some((entry) => isMenuItem(entry) && entry.label === 'Rename Tag...')).toBe(true);
         expect(entries.some((entry) => isMenuItem(entry) && entry.label === 'Delete Tag')).toBe(true);
+    });
+
+    it('offers Add Tag for a commit that has already been pushed', async () => {
+        selectedRepo.currCommitSha = undefined;
+        selectedRepo.history.commits = [{ ...createCommitSummary('def456', 'Fix login bug'), isUnpushed: false, tags: [] }];
+
+        const wrapper = mountHistoryView();
+        await wrapper.get('[data-testid="history-item-def456"]').trigger('contextmenu');
+
+        const openAtEventMock = mockContextMenu.openAtEvent as ReturnType<typeof vi.fn>;
+        const entries = openAtEventMock.mock.calls[0]?.[1] as ContextMenuEntry[];
+        const addTag = entries.find((entry): entry is ContextMenuItem => isMenuItem(entry) && entry.label === 'Add Tag...');
+
+        expect(addTag).toBeTruthy();
+
+        addTag!.action?.();
+        await nextTick();
+
+        expect(wrapper.get('[data-testid="create-tag-modal"]').text()).toContain('def456');
+    });
+
+    it('offers message and description editing for an unpushed commit', async () => {
+        const wrapper = mountHistoryView();
+        await wrapper.get('[data-testid="history-item-abc123"]').trigger('contextmenu');
+
+        const entries = lastContextMenuEntries();
+
+        expect(findMenuItem(entries, 'Edit Commit Message...')).toBeTruthy();
+        expect(findMenuItem(entries, 'Edit Commit Description...')).toBeTruthy();
+
+        wrapper.unmount();
+    });
+
+    it('hides the reword entries for a commit that has already been pushed', async () => {
+        selectedRepo.history.commits = [{ ...createCommitSummary('def456', 'Fix login bug'), isUnpushed: false, tags: [] }];
+
+        const wrapper = mountHistoryView();
+        await wrapper.get('[data-testid="history-item-def456"]').trigger('contextmenu');
+
+        const entries = lastContextMenuEntries();
+
+        expect(findMenuItem(entries, 'Edit Commit Message...')).toBeUndefined();
+        expect(findMenuItem(entries, 'Edit Commit Description...')).toBeUndefined();
+        expect(findMenuItem(entries, 'Add Tag...')).toBeTruthy();
+
+        wrapper.unmount();
+    });
+
+    it('edits the commit message in a popover anchored to the row', async () => {
+        const wrapper = mountHistoryView();
+        // The menu remembers the row it opened on, which is where the popover sits.
+        mockContextMenu.open = true;
+        mockContextMenu.elementRect = { right: 250, top: 40 } as DOMRect;
+        await nextTick();
+
+        await wrapper.get('[data-testid="history-item-abc123"]').trigger('contextmenu');
+        await findMenuItem(lastContextMenuEntries(), 'Edit Commit Message...')!.action?.();
+        await flushPromises();
+
+        const popover = document.querySelector<HTMLElement>('[data-testid="commit-message-popover"]');
+        expect(popover?.style.left).toBe('256px');
+        expect(popover?.style.top).toBe('46px');
+        expect(document.querySelector<HTMLInputElement>('[data-testid="commit-message-input"]')?.value).toBe('Add release tag');
+
+        const input = document.querySelector<HTMLInputElement>('[data-testid="commit-message-input"]')!;
+        input.value = 'Reworded subject';
+        input.dispatchEvent(new Event('input'));
+        await nextTick();
+
+        document.querySelector<HTMLElement>('[data-testid="commit-message-save"]')!.click();
+        await flushPromises();
+
+        expect(selectedRepo.rewordCommit).toHaveBeenCalledWith({
+            commitSha: 'abc123',
+            summary: 'Reworded subject',
+            description: 'Explains the tag.',
+        });
+        expect(document.querySelector('[data-testid="commit-message-popover"]')).toBeNull();
+
+        wrapper.unmount();
+    });
+
+    it('edits the commit description in a popover anchored to the row', async () => {
+        const wrapper = mountHistoryView();
+        await wrapper.get('[data-testid="history-item-abc123"]').trigger('contextmenu');
+        await findMenuItem(lastContextMenuEntries(), 'Edit Commit Description...')!.action?.();
+        await flushPromises();
+
+        const textarea = document.querySelector<HTMLTextAreaElement>('[data-testid="commit-description-input"]')!;
+        expect(textarea.value).toBe('Explains the tag.');
+
+        textarea.value = 'A rewritten body';
+        textarea.dispatchEvent(new Event('input'));
+        await nextTick();
+
+        document.querySelector<HTMLElement>('[data-testid="commit-message-save"]')!.click();
+        await flushPromises();
+
+        expect(selectedRepo.rewordCommit).toHaveBeenCalledWith({
+            commitSha: 'abc123',
+            summary: 'Add release tag',
+            description: 'A rewritten body',
+        });
+
+        wrapper.unmount();
     });
 
     it('loads older commits from the load-more button', async () => {

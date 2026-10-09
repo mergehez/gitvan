@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { CommitSummary, CommitTag } from '../../shared/types.ts';
-import { useDiffViewer } from '../composables/useDiffViewer';
-import { useFileHistory } from '../composables/useFileHistory';
-import { useFileSort } from '../composables/useFileSort';
+import type { CommitMessageField } from '../composables/useCommitMessageEditor';
+import { useCommitMessageEditor } from '../composables/useCommitMessageEditor';
+import { useCreateTag, useRenameTag } from '../composables/useTagEditor';
 import { useRepos } from '../composables/useRepos';
-import { tasks } from '../composables/useTasks';
-import type { ContextMenuEntry } from '../directives';
-import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
+import { useContextMenu, type ContextMenuEntry } from '../directives';
 import { authorColor } from '../lib/authorColors';
 import { readableDate } from '../lib/utils';
 import CenteredInputModal from './CenteredInputModal.vue';
-import ChangesFileTree from './ChangesFileTree.vue';
-import DiffViewer from './DiffViewer.vue';
+import CommitMessagePopover from './CommitMessagePopover.vue';
+import CreateTagModal from './CreateTagModal.vue';
+import CommitInspectPane from './CommitInspectPane.vue';
 import EtSplitter from './EtSplitter.vue';
 import type { FileTreeItem } from './FileTree.vue';
 import FileTree from './FileTree.vue';
@@ -22,8 +21,6 @@ const HISTORY_SEARCH_DEBOUNCE_MS = 500;
 
 const repos = useRepos();
 const repo = computed(() => repos.getSelectedRepo()!);
-const { openFileHistory } = useFileHistory();
-const historyFilesSort = useFileSort('history-files');
 // Kept in sync with the repo so switching views does not drop an active search.
 const historySearch = ref(repo.value.historySearchQuery);
 const trimmedHistorySearch = computed(() => historySearch.value.trim());
@@ -145,28 +142,33 @@ function closeFileHistory() {
     }
 }
 
-function buildHistoryFileContextMenuEntries(item: { path?: string; title: string }): ContextMenuEntry[] {
-    const path = item.path ?? item.title;
-
-    return [
-        {
-            id: `history-file-history:${path}`,
-            label: 'File History',
-            action: async () => {
-                await openFileHistory(path);
-            },
-        },
-    ];
-}
-
 const latestCommitSha = computed(() => repo.value.history?.commits[0]?.sha ?? undefined);
-const selectedCommitDiffViewerState = useDiffViewer(computed(() => repo.value.currCommitDiff));
-const isCreateTagModalOpen = ref(false);
-const createTagName = ref('');
-const isRenameTagModalOpen = ref(false);
-const renameTagName = ref('');
-const renameTargetTagName = ref<string>();
-const activeTagCommitSha = ref<string>();
+const createTag = useCreateTag();
+const renameTag = useRenameTag();
+const commitMessageEditor = useCommitMessageEditor();
+
+const contextMenu = useContextMenu();
+// The menu records the row it was opened on; the reword popover opens beside that row.
+// The watch only keeps a rect captured while a menu is open, so closing the menu
+// (which clears the rect) cannot move the popover afterwards.
+const rowAnchorPoint = ref<{ x: number; y: number }>();
+watch(
+    () => contextMenu.elementRect,
+    (rect) => {
+        if (contextMenu.open && rect) {
+            rowAnchorPoint.value = { x: Math.round(rect.right), y: Math.round(rect.top) };
+        }
+    }
+);
+
+async function openCommitMessageEditor(item: CommitListItem, field: CommitMessageField) {
+    await commitMessageEditor.open({
+        sha: item.id,
+        label: `${item.shortSha} · ${item.title}`,
+        field,
+        anchorPoint: rowAnchorPoint.value,
+    });
+}
 
 function canAmendCommitItem(item: { id: string; isUnpushed?: boolean }) {
     return item.id === latestCommitSha.value && item.isUnpushed;
@@ -227,28 +229,6 @@ const treeItem = computed<FileTreeItem<CommitListItem, {}>>(() => {
     };
 });
 
-const treeItemFiles = computed<FileTreeItem<{ status: string; hadConflict?: boolean }, {}>>(() => {
-    return {
-        id: repo.value.currCommit?.sha ?? '-',
-        title: 'Files',
-        children: sortFilesByMode(
-            repo.value.currCommit?.files.map((e) => ({
-                id: e.path,
-                title: e.path,
-                subtitle: e.previousPath,
-                path: e.path,
-                status: e.status,
-                hadConflict: e.hadConflict,
-            })) ?? [],
-            historyFilesSort.mode.value
-        ),
-    };
-});
-
-function buildHistoryFilesHeaderContextMenuEntries(): ContextMenuEntry[] {
-    return buildFileSortMenuEntries(historyFilesSort.mode.value, (mode) => historyFilesSort.setMode(mode), 'history-files-sort');
-}
-
 function tagBadgeClass(tag: CommitTag) {
     return tag.isUnpushed ? 'border-amber-300/35 bg-amber-400/12 text-amber-100' : 'border-blue-400 bg-blue-500 text-white';
 }
@@ -257,73 +237,13 @@ function tagsForCommit(commit: CommitSummary | undefined) {
     return repo.value.editableTagsForCommit(commit);
 }
 
-async function openCreateTagModal(commit: CommitSummary) {
-    activeTagCommitSha.value = commit.sha;
-    createTagName.value = '';
-
-    if (repo.value.currCommitSha !== commit.sha) {
-        await repo.value.selectCommit(commit.sha);
-    }
-
-    isCreateTagModalOpen.value = true;
-}
-
-function closeCreateTagModal() {
-    isCreateTagModalOpen.value = false;
-    createTagName.value = '';
-    activeTagCommitSha.value = undefined;
-}
-
-async function submitCreateTag() {
-    const commitSha = activeTagCommitSha.value;
-    const tagName = createTagName.value.trim();
-
-    if (!commitSha || !tagName) {
-        return;
-    }
-
-    await repo.value.createTag(commitSha, tagName);
-    closeCreateTagModal();
-}
-
-async function openRenameTagModal(commit: CommitSummary, tagName: string) {
-    activeTagCommitSha.value = commit.sha;
-    renameTargetTagName.value = tagName;
-    renameTagName.value = tagName;
-
-    if (repo.value.currCommitSha !== commit.sha) {
-        await repo.value.selectCommit(commit.sha);
-    }
-
-    isRenameTagModalOpen.value = true;
-}
-
-function closeRenameTagModal() {
-    isRenameTagModalOpen.value = false;
-    renameTargetTagName.value = undefined;
-    renameTagName.value = '';
-    activeTagCommitSha.value = undefined;
-}
-
-async function submitRenameTag() {
-    const currentTagName = renameTargetTagName.value;
-    const nextTagName = renameTagName.value.trim();
-
-    if (!currentTagName || !nextTagName) {
-        return;
-    }
-
-    await repo.value.renameTag(currentTagName, nextTagName);
-    closeRenameTagModal();
-}
-
 function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[] {
     const commit = {
         sha: item.id,
         shortSha: item.shortSha,
         summary: item.title,
-        authorName: item.by,
-        authorEmail: '',
+        authorName: item.authorName,
+        authorEmail: item.authorEmail,
         authoredAt: item.at instanceof Date ? item.at.toISOString() : String(item.at),
         refs: [],
         tags: item.tags,
@@ -331,40 +251,50 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
     };
     const entries: ContextMenuEntry[] = [];
 
-    if (commit.isUnpushed) {
-        entries.push({
-            id: `commit-add-tag:${commit.sha}`,
-            label: 'Add Tag...',
-            action: async () => {
-                await openCreateTagModal(commit);
+    // Only unpushed commits can be rewritten without diverging from a remote.
+    if (item.isUnpushed) {
+        entries.push(
+            {
+                id: `commit-edit-message:${commit.sha}`,
+                label: 'Edit Commit Message...',
+                action: async () => {
+                    await openCommitMessageEditor(item, 'message');
+                },
             },
-        });
+            {
+                id: `commit-edit-description:${commit.sha}`,
+                label: 'Edit Commit Description...',
+                action: async () => {
+                    await openCommitMessageEditor(item, 'description');
+                },
+            },
+            { type: 'separator', id: `commit-edit-separator:${commit.sha}` }
+        );
     }
 
+    entries.push({
+        id: `commit-add-tag:${commit.sha}`,
+        label: 'Add Tag...',
+        action: () => {
+            createTag.open({ sha: commit.sha, label: `${commit.shortSha} · ${commit.summary}` });
+        },
+    });
+
+    // Tags are local references, so any of them can be renamed or deleted here.
     const editableTags = tagsForCommit(commit);
     if (!editableTags.length) {
-        return entries.length
-            ? entries
-            : [
-                  {
-                      id: `commit-no-tag-actions:${commit.sha}`,
-                      label: 'No tag actions available',
-                      disabled: true,
-                  },
-              ];
+        return entries;
     }
 
-    if (entries.length) {
-        entries.push({ type: 'separator', id: `commit-tag-separator:${commit.sha}` });
-    }
+    entries.push({ type: 'separator', id: `commit-tag-separator:${commit.sha}` });
 
     entries.push({
         id: `commit-rename-tag:${commit.sha}`,
         label: editableTags.length === 1 ? 'Rename Tag...' : 'Rename Tag',
         action:
             editableTags.length === 1
-                ? async () => {
-                      await openRenameTagModal(commit, editableTags[0]!.name);
+                ? () => {
+                      renameTag.open(editableTags[0]!.name);
                   }
                 : undefined,
         children:
@@ -372,8 +302,8 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                 ? editableTags.map((tag) => ({
                       id: `commit-rename-tag:${commit.sha}:${tag.name}`,
                       label: tag.name,
-                      action: async () => {
-                          await openRenameTagModal(commit, tag.name);
+                      action: () => {
+                          renameTag.open(tag.name);
                       },
                   }))
                 : undefined,
@@ -528,76 +458,48 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
             </FileTree>
         </template>
         <template #right>
-            <p v-if="!repo.currCommit" class="text-sm text-x7">Select a commit to inspect it.</p>
-
-            <template v-else>
-                <div class="border-b border-white/10 pb-3 px-2">
-                    <p class="text-xl font-semibold text-white">{{ repo.currCommit.summary }}</p>
-                    <p class="text-sm opacity-50 tracking-tight">
-                        {{ repo.currCommit.shortSha }} · {{ repo.currCommit.authorName }} <{{ repo.currCommit.authorEmail }}> ·
-                        {{ readableDate(new Date(repo.currCommit.authoredAt)) }}
-                    </p>
-                </div>
-                <p v-if="repo.currCommit.body" class="mt-1 px-2 whitespace-pre-wrap text-sm leading-7 text-default max-h-30 overflow-y-auto bg-x1">{{ repo.currCommit.body }}</p>
-                <div class="px-2 flex gap-2 h-full overflow-auto">
-                    <EtSplitter
-                        class="flex-1 overflow-y-auto scrollbar-thin"
-                        base-side="left"
-                        default-width="250px"
-                        min-width="200px"
-                        max-width="50%"
-                        local-storage-key="historyCommitFilesSidebarWidth"
-                    >
-                        <template #left>
-                            <ChangesFileTree
-                                class="w-full shrink-0"
-                                :item="treeItemFiles"
-                                empty-text="No files"
-                                :selection="repo.currCommitFilePath ?? undefined"
-                                show-path-tooltip
-                                no-actions
-                                :onSelect="(t) => t.path && repo.selectCommitFile(t.path)"
-                                :getContextMenuItems="buildHistoryFileContextMenuEntries"
-                                :getHeaderContextMenuItems="buildHistoryFilesHeaderContextMenuEntries"
-                            >
-                                <template #before-status="{ item }">
-                                    <span
-                                        v-if="(item as any).hadConflict"
-                                        class="icon icon-[mingcute--git-merge-fill] text-[11px] text-amber-300"
-                                        v-tooltip="'Had merge conflicts'"
-                                    ></span>
-                                </template>
-                            </ChangesFileTree>
-                        </template>
-                        <template #right>
-                            <DiffViewer v-if="repo.currCommitDiff" :state="selectedCommitDiffViewerState"> </DiffViewer>
-                            <i v-else></i>
-                        </template>
-                    </EtSplitter>
-                </div>
-            </template>
+            <CommitInspectPane
+                :commit="repo.currCommit"
+                :diff="repo.currCommitDiff"
+                :selected-file-path="repo.currCommitFilePath"
+                sort-storage-key="history-files"
+                local-storage-key-prefix="history"
+                empty-text="Select a commit to inspect it."
+                :on-select-file="(path) => repo.selectCommitFile(path)"
+            />
         </template>
     </EtSplitter>
-    <CenteredInputModal
-        v-model:open="isCreateTagModalOpen"
-        v-model:value="createTagName"
-        title="Add Tag"
-        input-label="Tag name"
-        :can-submit="Boolean(createTagName.trim()) && !tasks.isOperationRunning('createTag')"
-        :is-loading="tasks.isOperationRunning('createTag')"
-        submit-label="Create Tag"
-        :submit="submitCreateTag"
-        :close="closeCreateTagModal"
+    <CreateTagModal
+        v-model:open="createTag.isOpen"
+        v-model:name="createTag.name"
+        v-model:message="createTag.message"
+        :target-label="createTag.target?.label ?? ''"
+        :can-submit="createTag.canSubmit"
+        :is-loading="createTag.isLoading"
+        :submit="createTag.submit"
+        :close="createTag.close"
     />
     <CenteredInputModal
-        v-model:open="isRenameTagModalOpen"
-        v-model:value="renameTagName"
+        v-model:open="renameTag.isOpen"
+        v-model:value="renameTag.nextTagName"
         title="Rename Tag"
         input-label="Tag name"
-        :can-submit="Boolean(renameTagName.trim()) && renameTagName.trim() !== renameTargetTagName && !tasks.isOperationRunning('renameTag')"
-        :is-loading="tasks.isOperationRunning('renameTag')"
+        :can-submit="renameTag.canSubmit"
+        :is-loading="renameTag.isLoading"
         submit-label="Rename Tag"
-        :submit="submitRenameTag"
-        :close="closeRenameTagModal"
+        :submit="renameTag.submit"
+        :close="renameTag.close"
+    />
+    <CommitMessagePopover
+        v-model:open="commitMessageEditor.isOpen"
+        v-model:value="commitMessageEditor.value"
+        :title="commitMessageEditor.title"
+        :target-label="commitMessageEditor.target?.label ?? ''"
+        :multiline="commitMessageEditor.isMultiline"
+        :can-submit="commitMessageEditor.canSubmit"
+        :is-loading="commitMessageEditor.isSaving"
+        :anchor-point="commitMessageEditor.anchorPoint"
+        :submit="commitMessageEditor.submit"
+        :close="commitMessageEditor.close"
     />
 </template>

@@ -16,6 +16,7 @@ import GitClientHeader from './components/GitClientHeader.vue';
 import RepChangesView from './components/RepChangesView.vue';
 import RepExplorerView from './components/RepExplorerView.vue';
 import RepHistoryView from './components/RepHistoryView.vue';
+import RepTagsView from './components/RepTagsView.vue';
 import Settings from './components/Settings.vue';
 import SidebarBranches from './components/SidebarBranches.vue';
 import SidebarRepositories from './components/SidebarRepositories.vue';
@@ -105,6 +106,7 @@ onBeforeUnmount(() => {
                                 <RepChangesView v-if="settings.state.activeView === 'changes'" />
                                 <RepExplorerView v-else-if="settings.state.activeView === 'explorer'" />
                                 <RepHistoryView v-else-if="settings.state.activeView === 'history'" />
+                                <RepTagsView v-else-if="settings.state.activeView === 'tags'" />
                                 <!-- <RepBranchesView v-else /> -->
                             </div>
                         </section>

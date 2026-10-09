@@ -66,6 +66,7 @@ const navItems = computed<Array<{ label: string; value: NavigationView; subtitle
     { value: 'changes', label: 'Changes' },
     { value: 'explorer', label: 'Explorer' },
     { value: 'history', label: 'History' },
+    { value: 'tags', label: 'Tags' },
     // { value: 'branches', label: 'Branches' },
 ]);
 </script>

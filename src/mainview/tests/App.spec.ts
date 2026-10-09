@@ -180,6 +180,7 @@ const gitClientHeaderStub = defineComponent({
             <button type="button" data-testid="switch-view-changes" @click="setActiveView('changes')">Changes</button>
             <button type="button" data-testid="switch-view-explorer" @click="setActiveView('explorer')">Explorer</button>
             <button type="button" data-testid="switch-view-history" @click="setActiveView('history')">History</button>
+            <button type="button" data-testid="switch-view-tags" @click="setActiveView('tags')">Tags</button>
             <p data-testid="active-view-name">{{ activeView }}</p>
         </div>
     `,
@@ -203,6 +204,16 @@ const historyViewStub = defineComponent({
         };
     },
     template: `<div data-testid="RepHistoryView">History View: {{ repoName }}</div>`,
+});
+
+const tagsViewStub = defineComponent({
+    name: 'RepTagsView',
+    setup() {
+        return {
+            repoName: computed(() => mockRepos.getSelectedRepo()?.name ?? 'No repository selected'),
+        };
+    },
+    template: `<div data-testid="RepTagsView">Tags View: {{ repoName }}</div>`,
 });
 
 const explorerViewStub = defineComponent({
@@ -243,6 +254,7 @@ function mountApp() {
                 RepChangesView: changesViewStub,
                 RepExplorerView: explorerViewStub,
                 RepHistoryView: historyViewStub,
+                RepTagsView: tagsViewStub,
                 RepBranchesView: branchesViewStub,
             },
         },
@@ -327,8 +339,12 @@ describe('App', () => {
         expect(wrapper.find('[data-testid="RepExplorerView"]').exists()).toBe(false);
         expect(wrapper.get('[data-testid="RepHistoryView"]').text()).toContain('Alpha');
 
-        await wrapper.get('[data-testid="switch-view-changes"]').trigger('click');
+        await wrapper.get('[data-testid="switch-view-tags"]').trigger('click');
         expect(wrapper.find('[data-testid="RepHistoryView"]').exists()).toBe(false);
+        expect(wrapper.get('[data-testid="RepTagsView"]').text()).toContain('Alpha');
+
+        await wrapper.get('[data-testid="switch-view-changes"]').trigger('click');
+        expect(wrapper.find('[data-testid="RepTagsView"]').exists()).toBe(false);
         expect(wrapper.find('[data-testid="RepBranchesView"]').exists()).toBe(false);
         expect(wrapper.get('[data-testid="RepChangesView"]').text()).toContain('Alpha');
     });
@@ -342,6 +358,15 @@ describe('App', () => {
         expect(wrapper.find('[data-testid="RepExplorerView"]').exists()).toBe(false);
         expect(wrapper.get('[data-testid="RepHistoryView"]').text()).toContain('History View');
         expect(wrapper.find('[data-testid="RepBranchesView"]').exists()).toBe(false);
+    });
+
+    it('renders the tags view when activeView is tags', () => {
+        mockSettings = createMockSettings('tags');
+
+        const wrapper = mountApp();
+
+        expect(wrapper.find('[data-testid="RepHistoryView"]').exists()).toBe(false);
+        expect(wrapper.get('[data-testid="RepTagsView"]').text()).toContain('Tags View');
     });
 
     it('opens the settings window when triggered from the native menu', async () => {
