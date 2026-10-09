@@ -41,6 +41,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Looked repositories up once per bootstrap in useRepos instead of a deep watch and a nested find.
 - Ordered the change multi-selection through one index map instead of a scan per comparison.
 - Removed the debug logging from the diff render, hover and discard paths.
+- Swept expired OAuth device sessions and answered a too-early poll without forwarding it.
+- Added the missing foreign-key indexes and ran the sequence rewrites in one transaction.
+- Size-checked an untracked file before diffing it, counting its lines from numstat instead.
 
 ## Next
 
@@ -56,21 +59,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
     - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
 
-- [ ] **[NOT_URGENT]** An untracked file is read twice before its size check rejects it.
-    - What it is: the untracked branch of `getFileDiff` (`src/backend/services/git/git-changes.ts:344`) runs `git diff --no-index` and then reads the working-tree file, and only afterwards applies the 1 MB `previewByteLimit`. A huge generated file is fully buffered and diffed before being rejected.
-    - How it will be implemented: call `readWorkingTreeFileSize` first and return the existing "file too big to preview" entry immediately when it exceeds the limit; only run `diff --no-index` and read content when the file is small enough to preview.
-
 - [ ] **[NOT_URGENT]** The conflict editor re-parses the file quadratically and rebuilds every view zone on each keystroke.
     - What it is: `ConflictMonacoEditor.onDidChangeContent` calls `syncEditorChrome` per keystroke, which reads the full model, calls `parseMergeConflictBlocks` twice, then clears and recreates a DOM node with buttons per conflict block plus `changeViewZones` and `deltaDecorations`. Inside the parse, `countLines(content.slice(0, startOffset))` (`src/mainview/lib/mergeConflicts.ts:53`) re-scans the file from offset zero for every block.
     - How it will be implemented: debounce or rAF the chrome sync, compute the newline offsets once per parse and derive `startLine` from that table instead of re-slicing, and reuse zones keyed by block rather than destroying and recreating them.
-
-- [ ] **[NOT_URGENT]** Missing indexes and non-transactional sequence rewrites.
-    - What it is: `normalizeSequence` and `applySequenceOrder` (`src/electronUtils/useDatabase.ts:95,103`) issue one write per row with no transaction; `repositories(group_id)`, `repositories(account_id)` and `accounts(is_default)` have no index, and a SQLite foreign key does not create one — so `listGroups`' join degrades to a scan per group.
-    - How it will be implemented: wrap the bulk sequence rewrites in `db.transaction(...)`, and add the three indexes with `CREATE INDEX IF NOT EXISTS` inside `configureDatabase` so existing databases pick them up.
-
-- [ ] **[NOT_URGENT]** OAuth device sessions are never evicted and the provider poll interval is not enforced.
-    - What it is: the `oauthSessions` map in `src/backend/services/oauth.ts` only removes the session currently being polled, and the provider's `intervalSeconds` is not checked server-side. An abandoned sign-in stays in memory for the process lifetime, and a renderer polling faster than the agreed interval can trip provider rate limiting.
-    - How it will be implemented: sweep expired sessions at the entry of the start and poll handlers (or on a timer), and reject a poll that arrives before the next allowed poll time instead of forwarding it to the provider.
 
 - [ ] **[NOT_URGENT]** The full file pair is normalized for "no actual change" at least twice per selection.
     - What it is: `useDiffViewer` calls `hasNoActualDiffChanges` (`src/mainview/composables/useDiffViewer.ts:33`), then `DiffsDiffEditor.createRenderedDiff` (`DiffsDiffEditor.vue:79`) calls `normalizeComparableDiffText` on both sides again, and `hasOnlyWhitespaceChanges` runs two more full-content regex replaces; `selectedDiffConflictCount` (`RepChangesView.vue:178`) regex-scans the whole modified content on top. The normalizer in `src/shared/diffIgnoredChars.ts:116` walks every character of both files per pass.
@@ -149,12 +140,8 @@ database per run, so it never touches the developer's app data.
       ours/theirs resolution, mark resolved, save resolution, abort and commit merge.
 - [ ] `git-stash.ts` has no test at all: list, detail, file diff, create, restore and discard,
       including the stash-restore conflict classification.
-- [ ] `oauth.ts` has no test at all: device flow start, polling, `slow_down` interval bump,
-      session expiry, `access_denied`, and the token exchange. Mock `fetch`; no backend test
-      touches the network today.
 - [ ] `auth.ts` has no test: the macOS keychain wrapper and its platform guard.
-- [ ] `git-changes.ts`: `getFileDiff` for all three kinds including the image preview, the 1 MB
-      cap and the no-diff fallback; `applyPatch`/`applyPartialFilePatch`; `ignoreRepoPath`;
+- [ ] `git-changes.ts`: `applyPatch`/`applyPartialFilePatch`; `ignoreRepoPath`;
       `commitRepoChanges` and `undoLastRepoCommit`; the stage/unstage/restore/delete file
       operations; `getRepoSidebarStatus` parsing for branch, ahead, behind, upstream,
       publishable commits and the error path; and the non-batched cosmetic fallback.
@@ -175,13 +162,12 @@ database per run, so it never touches the developer's app data.
       operations, merge and stash recovery, and `resolveRepoFilePath`. Also assert that paths
       escaping the repository (for example `../../etc/passwd`) are rejected.
 - [ ] `useDatabase.ts`: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the
-      legacy-database migration path. The statement cache in `createRuntimeDatabaseClient` is covered.
+      legacy-database migration path. The statement cache and transactions in
+      `createRuntimeDatabaseClient` are covered.
 - [ ] `repoStatusCache.ts`: `invalidateAllRepoSidebarStatuses` while a computation is in flight.
 
 ### Frontend unit and component tests
 
-- [ ] Composables with no spec: `useConfirmation.ts` (queueing, anchoring, confirm/cancel) and
-      `useToast.ts`.
 - [ ] `useRepo.ts`: only about fourteen of its eighty public methods are named in any spec.
       Cover the commit flow (`commitRepository`, `suggestedCommitSummary`, `canCommit`,
       amend/cancel), file operations (stage/unstage/discard/delete/revert, single and bulk),
@@ -201,9 +187,6 @@ database per run, so it never touches the developer's app data.
 
 ### Harness
 
-- [ ] Assert that `src/shared/apiMethods.ts` stays in sync with the handlers in `app.ts` and
-      `src/electron/main.ts`, so a renamed handler cannot silently vanish from the renderer's
-      task list.
 - [ ] Run `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` in CI. Nothing
       enforces the suites today, and `vite build` does not typecheck, so a green local run is
       the only signal there is.
