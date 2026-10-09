@@ -2,8 +2,8 @@
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
-import { appConfig } from './src/electronUtils/helpers';
-import electronApiMethods from './src/electronUtils/vite-plugin';
+import { appConfig } from './src/electronUtils/helpers.ts';
+import electronApiMethods from './src/electronUtils/vite-plugin.ts';
 
 export default defineConfig({
     base: './',
@@ -39,6 +39,13 @@ export default defineConfig({
     },
     test: {
         environment: 'jsdom',
+        // The app is served from 127.0.0.1, and browser dev mode derives its backend url
+        // from `window.location.hostname`; jsdom's default `localhost` would not match.
+        environmentOptions: {
+            jsdom: {
+                url: `${appConfig.vueBaseUrl}/`,
+            },
+        },
         globals: true,
         include: ['**/*.spec.ts'],
         exclude: ['**/App.real.spec.ts', '**/playwright/**'],

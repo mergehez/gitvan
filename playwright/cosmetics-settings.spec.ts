@@ -42,14 +42,6 @@ test.describe('cosmetics settings', () => {
         }
     }
 
-    async function noActualChangeBadgeVisible(page: any): Promise<boolean> {
-        try {
-            return await page.getByText('no actual change').isVisible();
-        } catch {
-            return false;
-        }
-    }
-
     async function noActualChangeBadgeVisibleInDiff(page: any): Promise<boolean> {
         try {
             const diffRoot = page.getByTestId('diffs-diff-editor-root');

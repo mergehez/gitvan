@@ -16,24 +16,24 @@ describe('sortFilesByMode', () => {
         expect(sorted).toEqual(files);
     });
 
-    it('sorts A-Z by path', () => {
+    it('sorts A-Z by file name', () => {
         const sorted = sortFilesByMode(files, 'a-z').map((file) => file.path);
-        expect(sorted).toEqual(['README.md', 'src/components/App.vue', 'src/index.ts', 'src/lib/utils.ts', 'src/main.ts']);
+        expect(sorted).toEqual(['src/components/App.vue', 'src/index.ts', 'src/main.ts', 'README.md', 'src/lib/utils.ts']);
     });
 
-    it('sorts Z-A by path', () => {
+    it('sorts Z-A by file name', () => {
         const sorted = sortFilesByMode(files, 'z-a').map((file) => file.path);
-        expect(sorted).toEqual(['src/main.ts', 'src/lib/utils.ts', 'src/index.ts', 'src/components/App.vue', 'README.md']);
+        expect(sorted).toEqual(['src/lib/utils.ts', 'README.md', 'src/main.ts', 'src/index.ts', 'src/components/App.vue']);
     });
 
     it('sorts by file type A-Z, then by name A-Z', () => {
         const sorted = sortFilesByMode(files, 'type-a-z').map((file) => file.path);
-        expect(sorted).toEqual(['README.md', 'src/index.ts', 'src/lib/utils.ts', 'src/main.ts', 'src/components/App.vue']);
+        expect(sorted).toEqual(['README.md', 'src/index.ts', 'src/main.ts', 'src/lib/utils.ts', 'src/components/App.vue']);
     });
 
     it('sorts by file type Z-A, then by name Z-A', () => {
         const sorted = sortFilesByMode(files, 'type-z-a').map((file) => file.path);
-        expect(sorted).toEqual(['src/components/App.vue', 'src/main.ts', 'src/lib/utils.ts', 'src/index.ts', 'README.md']);
+        expect(sorted).toEqual(['src/components/App.vue', 'src/lib/utils.ts', 'src/main.ts', 'src/index.ts', 'README.md']);
     });
 
     it('sorts by extension before name for file type modes', () => {

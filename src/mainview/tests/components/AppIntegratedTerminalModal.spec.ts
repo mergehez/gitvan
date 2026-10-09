@@ -38,8 +38,8 @@ vi.mock('../../composables/useSettings', () => ({
     useSettings: () => mockSettings as unknown as SettingsState,
 }));
 
-vi.mock('../../lib/gitClient', () => ({
-    gitClientRpc: {
+vi.mock('../../appClient.ts', () => ({
+    appClientRpc: {
         request: {
             createIntegratedTerminalSession: (...args: unknown[]) => createIntegratedTerminalSession(...args),
             closeIntegratedTerminalSession: (...args: unknown[]) => closeIntegratedTerminalSession(...args),
@@ -119,13 +119,6 @@ describe('AppIntegratedTerminalModal', () => {
                 showBranches: false,
             },
         });
-
-        (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class {
-            constructor(_callback: ResizeObserverCallback) {}
-            observe() {}
-            unobserve() {}
-            disconnect() {}
-        } as unknown as typeof ResizeObserver;
 
         window.electronAPI = {
             invoke: vi.fn(),
