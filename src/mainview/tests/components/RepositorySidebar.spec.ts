@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, reactive } from 'vue';
 import type { EditorSettings, Repo } from '../../../shared/types.ts';
@@ -335,6 +335,10 @@ function getTeleportedMenuButtons() {
     });
 }
 
+function nextFrame() {
+    return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 describe('RepositorySidebar', () => {
     beforeEach(() => {
         useContextMenu().closeMenu();
@@ -390,6 +394,40 @@ describe('RepositorySidebar', () => {
 
         finalMenuButtons[2]!.click();
         expect(mockRepos.pickRepo).toHaveBeenCalledWith(undefined);
+
+        wrapper.unmount();
+    });
+
+    it('keeps the add menu anchored on scroll and coalesces a burst into one frame', async () => {
+        const wrapper = mountSidebar();
+        const anchor = wrapper.get('[data-testid="repos-add"]').element.parentElement as HTMLElement;
+        let anchorRect = { bottom: 40, left: 12 };
+        const rectSpy = vi.spyOn(anchor, 'getBoundingClientRect').mockImplementation(() => ({ bottom: anchorRect.bottom, left: anchorRect.left }) as DOMRect);
+
+        await wrapper.get('[data-testid="repos-add"]').trigger('click');
+        await flushPromises();
+
+        const menu = document.body.querySelector<HTMLElement>('[data-testid="repos-add-menu"]');
+        expect(menu).not.toBeNull();
+        expect(menu!.style.top).toBe('48px');
+        expect(menu!.style.left).toBe('12px');
+        expect(rectSpy).toHaveBeenCalledTimes(1);
+
+        // Scrolling a pane the menu is not anchored to must not move it.
+        window.dispatchEvent(new Event('scroll'));
+        await nextFrame();
+        expect(menu!.style.top).toBe('48px');
+
+        // A burst of scroll events shares a single frame, so only one layout read happens.
+        anchorRect = { bottom: 80, left: 20 };
+        window.dispatchEvent(new Event('scroll'));
+        window.dispatchEvent(new Event('scroll'));
+        window.dispatchEvent(new Event('scroll'));
+        await nextFrame();
+
+        expect(menu!.style.top).toBe('88px');
+        expect(menu!.style.left).toBe('20px');
+        expect(rectSpy).toHaveBeenCalledTimes(3);
 
         wrapper.unmount();
     });

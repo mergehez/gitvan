@@ -98,16 +98,43 @@ function closeContextMenu() {
     contextMenuRepoId.value = undefined;
 }
 
-function updateAddMenuPosition() {
+let addMenuFrameHandle: number | undefined;
+
+function applyAddMenuPosition() {
+    addMenuFrameHandle = undefined;
+
     if (!addMenuAnchor.value) {
         return;
     }
 
     const anchorRect = addMenuAnchor.value.getBoundingClientRect();
-    addMenuPosition.value = {
+    const nextPosition = {
         top: anchorRect.bottom + 8,
         left: anchorRect.left,
     };
+
+    // Scrolling a pane the menu is not anchored to still fires `scroll`; only a real move
+    // should re-render the menu.
+    if (addMenuPosition.value.top === nextPosition.top && addMenuPosition.value.left === nextPosition.left) {
+        return;
+    }
+
+    addMenuPosition.value = nextPosition;
+}
+
+function scheduleAddMenuPosition() {
+    if (addMenuFrameHandle !== undefined) {
+        return;
+    }
+
+    addMenuFrameHandle = requestAnimationFrame(applyAddMenuPosition);
+}
+
+function cancelScheduledAddMenuPosition() {
+    if (addMenuFrameHandle !== undefined) {
+        cancelAnimationFrame(addMenuFrameHandle);
+        addMenuFrameHandle = undefined;
+    }
 }
 
 async function toggleAddMenu() {
@@ -118,7 +145,7 @@ async function toggleAddMenu() {
 
     isAddMenuOpen.value = true;
     await nextTick();
-    updateAddMenuPosition();
+    applyAddMenuPosition();
 }
 
 function openCloneDialog() {
@@ -168,18 +195,20 @@ watch(
 
 watch(isAddMenuOpen, (isOpen) => {
     if (!isOpen) {
-        window.removeEventListener('resize', updateAddMenuPosition);
-        window.removeEventListener('scroll', updateAddMenuPosition, true);
+        cancelScheduledAddMenuPosition();
+        window.removeEventListener('resize', scheduleAddMenuPosition);
+        window.removeEventListener('scroll', scheduleAddMenuPosition, true);
         return;
     }
 
-    window.addEventListener('resize', updateAddMenuPosition);
-    window.addEventListener('scroll', updateAddMenuPosition, true);
+    window.addEventListener('resize', scheduleAddMenuPosition);
+    window.addEventListener('scroll', scheduleAddMenuPosition, true);
 });
 
 onBeforeUnmount(() => {
-    window.removeEventListener('resize', updateAddMenuPosition);
-    window.removeEventListener('scroll', updateAddMenuPosition, true);
+    cancelScheduledAddMenuPosition();
+    window.removeEventListener('resize', scheduleAddMenuPosition);
+    window.removeEventListener('scroll', scheduleAddMenuPosition, true);
 });
 
 const treeItems = computed<FileTreeItem<Repo>[]>(() => {
@@ -686,6 +715,7 @@ function fetchGroupRepos(groupId: number) {
     <Teleport to="body">
         <div v-if="isAddMenuOpen" class="fixed inset-0 z-80" @click="closeAddMenu">
             <div
+                data-testid="repos-add-menu"
                 class="fixed z-90 overflow-hidden rounded border border-x7 bg-x3 shadow-lg shadow-x3 flex flex-col"
                 :style="{
                     top: `${addMenuPosition.top}px`,
