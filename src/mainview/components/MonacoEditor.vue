@@ -100,7 +100,7 @@ onUnmounted(() => {
 
             <slot name="before-settings-button"></slot>
 
-            <MonacoEditorSettingsButton :hide-diff-options="!isDiffEditor" />
+            <MonacoEditorSettingsButton hide-diff-options />
         </div>
 
         <div ref="editorContainerRef" class="w-full min-h-40 flex-1" :class="props.class" />

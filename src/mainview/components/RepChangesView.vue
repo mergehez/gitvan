@@ -13,10 +13,10 @@ import { confirmDiscards, usePersistedFlag } from '../composables/useUiPreferenc
 import type { ContextMenuEntry } from '../directives';
 import { buildOpenWithEntries } from '../lib/buildOpenWithEntries';
 import { buildFileSortMenuEntries, sortFilesByMode } from '../lib/fileSort';
+import type { HunkActionsConfig } from '../lib/hunkActions';
 import Alert from './Alert.vue';
 import Button from './Button.vue';
 import ChangesFileTree from './ChangesFileTree.vue';
-import type { HunkActionsConfig } from './DiffsDiffEditor.vue';
 import DiffViewer from './DiffViewer.vue';
 import EtSplitter from './EtSplitter.vue';
 import type { FileTreeItem } from './FileTree.vue';

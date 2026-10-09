@@ -235,7 +235,7 @@ test.describe('partial hunk actions', () => {
         await expect(fourthHunk).toBeVisible({ timeout: 8000 });
         const fourthHunkPatchAfter = await unstagedHunks.getDataHunkPatch(2);
         expect(fourthHunkPatchAfter).toBeTruthy();
-        await expect(fourthHunkPatchAfter).toBe(fourthHunkPatch);
+        expect(fourthHunkPatchAfter).toBe(fourthHunkPatch);
         await fourthHunk.hover();
         await page.waitForTimeout(500);
 

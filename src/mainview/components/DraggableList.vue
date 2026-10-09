@@ -30,7 +30,7 @@ const draggingIndex = ref<number | null>(null);
 const dropIndex = ref<number | null>(null);
 const dropPosition = ref<'before' | 'after' | null>(null);
 
-function onContextMenu(event: MouseEvent, item: TItem) {
+function handleContextMenu(event: MouseEvent, item: TItem) {
     if (!props.onContextMenu) {
         return;
     }
@@ -174,7 +174,7 @@ async function onDrop(event: DragEvent) {
                     :aria-label="entry.title"
                     class="flex min-w-0 w-full flex-1 items-center gap-1.5 overflow-hidden text-left"
                     @click="(event) => props.onSelect?.(entry, event as MouseEvent)"
-                    @contextmenu="(event) => onContextMenu(event, entry)"
+                    @contextmenu="(event) => handleContextMenu(event, entry)"
                 >
                     <slot name="item-leftIcon" :item="entry"></slot>
                     <div class="flex min-w-0 flex-1 items-center text-xs py-px overflow-hidden">

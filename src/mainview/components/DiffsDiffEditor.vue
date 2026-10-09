@@ -10,42 +10,14 @@ import {
     type UnresolvedFileOptions,
 } from '@pierre/diffs';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
-import { useSettings } from '../composables/useSettings';
 import { isJavaScriptTypeScriptPath } from '../../shared/diffIgnoredChars';
+import { useSettings } from '../composables/useSettings';
 import { normalizeComparableDiffText } from '../lib/diffIgnoredChars';
-type HunkActionTone = 'default' | 'danger';
-
-export type HunkActionButton = {
-    id: string;
-    label: string;
-    title?: string;
-    busy?: boolean;
-    disabled?: boolean;
-    tone?: HunkActionTone;
-    onClick: () => void;
-};
-
-export type HunkActionZone = {
-    id: string;
-    startLineNumber: number;
-    originalStartLineNumber: number;
-    hunkSpecs?: string;
-    actions: HunkActionButton[];
-};
+import type { HunkActionsConfig } from '../lib/hunkActions';
 
 const emit = defineEmits<{
     visibleDiffChange: [hasVisibleChanges: boolean | undefined];
 }>();
-
-export type HunkActionsConfig = {
-    kind: 'staged' | 'unstaged';
-    oldSizeBytes: number;
-    newSizeBytes: number;
-    patch: string;
-    onStage?: (patch: string) => void;
-    onUnstage?: (patch: string) => void;
-    onDiscard?: (patch: string) => void;
-};
 
 const props = defineProps<{
     readonly?: boolean;
@@ -120,7 +92,6 @@ function createRenderedDiff(name: string, original: string, modified: string, ig
         // callback(patch) {
         // console.log('patch', patch);
         // },
-
     });
     console.log('hunk count', rawDiff.hunks.length);
     const rawHunks: (ChangeContent & { hunkSpecs: string; diffsHunkIdx: number })[] = [];
@@ -159,7 +130,7 @@ const diffState = computed(() => {
     return createRenderedDiff(name, original, modified, props.diffIgnoredChars ?? '', props.showWhitespaceChanges ?? false);
 });
 
-type DiffOptions = UnresolvedFileOptions<undefined> & Pick<FileDiffOptions<undefined>, 'diffStyle'>;
+type DiffOptions = UnresolvedFileOptions<undefined> & Pick<FileDiffOptions<undefined, undefined>, 'diffStyle'>;
 const diffOptions = computed<DiffOptions>(() => {
     const shouldHideDecorations = diffState.value.hideDecorations;
     const isConflict = Boolean(props.conflictFile);

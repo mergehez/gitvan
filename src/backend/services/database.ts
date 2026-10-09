@@ -63,9 +63,8 @@ function useTable<Table extends Record<string, any>, TComputed extends string = 
     // const columns = columnDefs as { name: string; createDefinition: string }[];
 
     function createTableSql() {
-        const columnDefs = Object.entries(columns)
-            .map(([name, createDefinition]) => `${name} ${createDefinition}`)
-            .join(',\n    ');
+        // `columns` is a generic mapped type, so `Object.entries` widens the values to `unknown`.
+        const columnDefs = (Object.entries(columns) as Array<[string, string]>).map(([name, createDefinition]) => `${name} ${createDefinition}`).join(',\n    ');
         const foreignKeyDefs = foreignKeys
             ? Object.entries(foreignKeys)
                   .map(([col, ref]) => `FOREIGN KEY (${col}) REFERENCES ${ref}`)

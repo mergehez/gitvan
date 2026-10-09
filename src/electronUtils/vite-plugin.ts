@@ -3,7 +3,7 @@ import { exec, execSync } from 'child_process';
 import fs from 'fs';
 import { join, resolve } from 'path';
 import type { PluginOption } from 'vite';
-import { appConfig } from './helpers';
+import { appConfig } from './helpers.ts';
 
 type Options = {
     app: string;

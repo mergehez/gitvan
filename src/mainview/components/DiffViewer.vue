@@ -1,10 +1,9 @@
 <script setup lang="ts">
-//safdsf
 import { computed, ref, watch } from 'vue';
 import type { DiffViewerState } from '../composables/useDiffViewer';
 import { useSettings } from '../composables/useSettings';
+import type { HunkActionsConfig } from '../lib/hunkActions';
 import Alert from './Alert.vue';
-import type { HunkActionsConfig } from './DiffsDiffEditor.vue';
 import DiffsDiffEditor from './DiffsDiffEditor.vue';
 import IconButton from './IconButton.vue';
 import MonacoEditorSettingsButton from './MonacoEditorSettingsButton.vue';
