@@ -37,6 +37,13 @@ const currentWidth = ref(getInitialWidth());
 const isDragging = ref<boolean>(false);
 const splitterContainer = ref<HTMLElement>();
 
+// The container box is read once per drag and every move is coalesced into one frame, so a
+// drag no longer reads layout and re-renders the slotted panels on every `mousemove`.
+let containerRect: DOMRect | undefined;
+let pendingClientX: number | undefined;
+let pendingWidth: number | undefined;
+let frameHandle: number | undefined;
+
 const widths = computed(() => {
     if (props.rightHidden) return { left: '100%', right: '0' };
     if (props.leftHidden) return { left: '0', right: '100%' };
@@ -50,40 +57,57 @@ const widths = computed(() => {
     };
 });
 
+function applyPendingWidth() {
+    if (pendingClientX === undefined || !containerRect) return;
+
+    pendingWidth = props.baseSide === 'left' ? pendingClientX - containerRect.left : containerRect.right - pendingClientX;
+    currentWidth.value = `${pendingWidth}px`;
+}
+
 const startResize = (event: MouseEvent) => {
     event.preventDefault();
     isDragging.value = true;
+    containerRect = splitterContainer.value?.getBoundingClientRect();
     document.addEventListener('mousemove', onResize);
     document.addEventListener('mouseup', stopResize);
     document.body.classList.add('select-none');
 };
 
 const onResize = (event: MouseEvent) => {
-    if (!isDragging.value || !splitterContainer.value) return;
+    if (!isDragging.value) return;
 
-    const containerRect = splitterContainer.value.getBoundingClientRect();
-    let newWidth: number;
+    pendingClientX = event.clientX;
 
-    if (props.baseSide === 'left') {
-        newWidth = event.clientX - containerRect.left;
-    } else {
-        newWidth = containerRect.right - event.clientX;
-    }
-
-    currentWidth.value = `${newWidth}px`;
-
-    if (props.localStorageKey) {
-        localStorage.setItem(props.localStorageKey, newWidth.toString());
+    if (frameHandle === undefined) {
+        frameHandle = requestAnimationFrame(() => {
+            frameHandle = undefined;
+            applyPendingWidth();
+        });
     }
 };
 
 const stopResize = () => {
-    if (isDragging.value) {
-        isDragging.value = false;
-        document.removeEventListener('mousemove', onResize);
-        document.removeEventListener('mouseup', stopResize);
-        document.body.classList.remove('select-none');
+    if (!isDragging.value) return;
+
+    isDragging.value = false;
+    document.removeEventListener('mousemove', onResize);
+    document.removeEventListener('mouseup', stopResize);
+    document.body.classList.remove('select-none');
+
+    if (frameHandle !== undefined) {
+        cancelAnimationFrame(frameHandle);
+        frameHandle = undefined;
     }
+
+    applyPendingWidth();
+
+    if (props.localStorageKey && pendingWidth !== undefined) {
+        localStorage.setItem(props.localStorageKey, pendingWidth.toString());
+    }
+
+    containerRect = undefined;
+    pendingClientX = undefined;
+    pendingWidth = undefined;
 };
 
 onUnmounted(() => {

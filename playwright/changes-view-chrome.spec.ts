@@ -114,4 +114,26 @@ test.describe('changes view chrome', () => {
         // No editor is configured for a fresh run, so the picker is the only entry.
         await expect(page.getByRole('menuitem', { name: 'Pick Program', exact: true })).toBeVisible();
     });
+
+    test('drags the sidebar splitter and remembers the width', async ({ page }) => {
+        await openChangesView(page);
+
+        // The app shell's sidebar splitter comes first; the changes sidebar's is the next one.
+        const divider = page.locator('[title="Drag to resize"]').nth(1);
+        const start = await divider.boundingBox();
+        expect(start).not.toBeNull();
+
+        const centerY = start!.y + start!.height / 2;
+        await page.mouse.move(start!.x + start!.width / 2, centerY);
+        await page.mouse.down();
+        await page.mouse.move(start!.x + start!.width / 2 + 120, centerY, { steps: 6 });
+        await page.mouse.up();
+
+        const widened = await divider.boundingBox();
+        expect(widened!.x).toBeGreaterThan(start!.x + 60);
+
+        // The width is persisted when the drag ends, not on every move.
+        const stored = await page.evaluate(() => localStorage.getItem('changesSidebarWidth'));
+        expect(Number(stored)).toBeGreaterThan(0);
+    });
 });
