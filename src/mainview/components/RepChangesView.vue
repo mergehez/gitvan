@@ -376,16 +376,17 @@ function updateChangeSelection(item: ChangeTreeEntry, event?: MouseEvent, keepEx
     const kind = entryKind(item);
     const currentIds = [...selectedIdsForKind(kind)];
     const entryIds = entriesForKind(kind).map((entry) => entry.id);
+    const entryIndexes = new Map(entryIds.map((id, index) => [id, index]));
     const anchorId = selectionAnchorIds.value[kind];
+    const anchorIndex = anchorId === undefined ? undefined : entryIndexes.get(anchorId);
 
     if (keepExistingSelection && currentIds.includes(item.id)) {
         return currentIds;
     }
 
-    if (event?.shiftKey && anchorId && entryIds.includes(anchorId)) {
-        const startIndex = entryIds.indexOf(anchorId);
-        const endIndex = entryIds.indexOf(item.id);
-        const [rangeStart, rangeEnd] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+    if (event?.shiftKey && anchorId && anchorIndex !== undefined) {
+        const endIndex = entryIndexes.get(item.id) ?? -1;
+        const [rangeStart, rangeEnd] = anchorIndex <= endIndex ? [anchorIndex, endIndex] : [endIndex, anchorIndex];
         const nextIds = entryIds.slice(rangeStart, rangeEnd + 1);
         setSelectedIds(kind, nextIds);
         return nextIds;
@@ -393,7 +394,7 @@ function updateChangeSelection(item: ChangeTreeEntry, event?: MouseEvent, keepEx
 
     if (event?.metaKey || event?.ctrlKey) {
         const toggledIds = currentIds.includes(item.id) ? currentIds.filter((id) => id !== item.id) : [...currentIds, item.id];
-        const nextIds = toggledIds.length > 0 ? toggledIds.sort((left, right) => entryIds.indexOf(left) - entryIds.indexOf(right)) : [item.id];
+        const nextIds = toggledIds.length > 0 ? toggledIds.sort((left, right) => (entryIndexes.get(left) ?? -1) - (entryIndexes.get(right) ?? -1)) : [item.id];
         setSelectedIds(kind, nextIds);
         selectionAnchorIds.value[kind] = item.id;
         return nextIds;

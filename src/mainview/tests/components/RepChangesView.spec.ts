@@ -53,6 +53,7 @@ const changesFileTreeStub = defineComponent({
     props: {
         item: { type: Object, required: true },
         emptyText: { type: String, required: false },
+        selection: { required: false },
         getContextMenuItems: { type: Function, required: false },
         getHeaderContextMenuItems: { type: Function, required: false },
         onSelect: { type: Function, required: false },
@@ -87,6 +88,8 @@ function createRepo() {
         canCommit: () => false,
         isFileLocked: () => false,
         suggestedCommitSummary: () => '',
+        clearSelectedRepositoryStash: vi.fn(),
+        selectChange: vi.fn(async () => undefined),
         commitForm: { summary: '', description: '', amend: false },
         changes: {
             staged: [changeEntry('Data/Core/ProductAccount.cs', 'staged'), changeEntry('Portal/Services/DmsService.cs', 'staged')],
@@ -395,5 +398,61 @@ describe('RepChangesView file filter', () => {
         const wrapper = mountView();
 
         expect(menuItem(itemMenuEntries(wrapper, 'brand-new.txt'), /^file history$/i)).toBeFalsy();
+    });
+});
+
+describe('RepChangesView multi-selection', () => {
+    beforeEach(() => {
+        selectedRepo = createRepo();
+        localStorage.clear();
+        confirmDiscards.value = true;
+    });
+
+    /** The unstaged section is the second tree; its stub exposes the parent's select handler. */
+    function unstagedSection(wrapper: ReturnType<typeof mount>) {
+        const section = wrapper.findAllComponents(changesFileTreeStub)[1]!;
+
+        return {
+            children: (section.props('item') as { children: Array<{ id: string }> }).children,
+            onSelect: section.props('onSelect') as (child: unknown, event?: unknown) => Promise<void>,
+            selection: () => section.props('selection') as string[] | undefined,
+        };
+    }
+
+    it('selects a clicked file on its own', async () => {
+        const wrapper = mountView();
+        const section = unstagedSection(wrapper);
+
+        await section.onSelect(section.children[1]);
+        await wrapper.vm.$nextTick();
+
+        expect(section.selection()).toEqual([section.children[1]!.id]);
+    });
+
+    it('extends the selection to a contiguous range on shift-click', async () => {
+        const wrapper = mountView();
+        const section = unstagedSection(wrapper);
+
+        await section.onSelect(section.children[0]);
+        await section.onSelect(section.children[1], { shiftKey: true });
+        await wrapper.vm.$nextTick();
+
+        expect(section.selection()).toEqual([section.children[0]!.id, section.children[1]!.id]);
+    });
+
+    it('orders a toggled selection by the tree order', async () => {
+        const wrapper = mountView();
+        const section = unstagedSection(wrapper);
+
+        await section.onSelect(section.children[1]);
+        await section.onSelect(section.children[0], { metaKey: true });
+        await wrapper.vm.$nextTick();
+
+        expect(section.selection()).toEqual([section.children[0]!.id, section.children[1]!.id]);
+
+        await section.onSelect(section.children[1], { metaKey: true });
+        await wrapper.vm.$nextTick();
+
+        expect(section.selection()).toEqual([section.children[0]!.id]);
     });
 });
