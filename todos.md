@@ -150,16 +150,6 @@ database per run, so it never touches the developer's app data.
 
 ### Browser specs (highest user risk first)
 
-- [ ] Committing a change end to end: stage a file, type a summary, commit, and see the row
-      in History; the commit button stays disabled for an empty summary; `Cmd+Enter` commits;
-      "Amend" rewrites the last commit. `commitRepository` and `commitRepo` have no test at all
-      in any suite today.
-- [ ] Destructive discards: per-file "Discard change", "Discard All changes" (including the
-      locked-file skip), delete file, revert deletion, and the "Confirm Discards" menu toggle.
-      Only hunk-level discard is covered, and this is the highest data-loss risk in the app.
-- [ ] Merge conflict resolution using the unused `merge-conflict-lab`: the resolver opening on
-      its own, "Mark Resolved", the inline editor (Accept Mine / Accept Incoming / Accept Both,
-      Save and Stage), Abort Merge, Commit Merge, and the header's "Resolve Conflicts (n)".
 - [ ] Pull blocked by local changes using the unused `pull-conflict-lab`: the modal, "Stash
       changes and retry", the success and conflict toasts, and Publish Branch.
 - [ ] Repository lifecycle and groups: create a local repository and see it in the sidebar,
