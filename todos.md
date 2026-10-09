@@ -30,6 +30,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Classified cosmetic changes from batched git reads instead of per-file commands.
 - Read each blob once for the cosmetic-change check.
 - Made the periodic refresh status-only, paused it while hidden, and reused an unchanged file diff.
+- Reported a repository that was removed mid-request as a handled outcome instead of a raw type error.
 
 ## Next
 
@@ -117,10 +118,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - What it is: `console.log('hunk count', …)` runs on every diff render (`src/mainview/components/DiffsDiffEditor.vue:96`), `console.log('hover', { …, getBoundingClientRect() })` forces layout on every hunk-button hover (`DiffsDiffEditor.vue:304`), `console.warn('addLine not found for hunk', { i, hunk, hunks })` serialises whole hunk objects (`DiffsDiffEditor.vue:407`), and `console.log('[onDiscard]', …)` (`RepChangesView.vue:269`) and `console.log(repoTable.createTableSql())` (`src/backend/services/database.ts:146`) sit on user actions and module load.
     - How it will be implemented: delete them; where the information is genuinely useful, route it through the existing renderer-diagnostic channel instead of `console.log`, since only `console.error` is currently forwarded.
 
-- [ ] **[NOT_URGENT]** Requests for a repository that was just removed fail with a raw type error.
-    - What it is: nearly every method in `src/backend/services/app.ts` reads `db.getRepo(ps.repoId)!.path`, so when the renderer still has an in-flight request for a repository that `removeRepo` or `resetSandboxRepos` deleted, the handler throws `Cannot read properties of undefined (reading 'path')`. It shows up as `[devServer] getChanges: ...` / `getFileDiff: ...` in the logs and as an error banner in the app.
-    - How it will be implemented: resolve the repository path once through a helper that throws a clear "This repository is no longer tracked." error, and have the renderer drop requests for repositories that left the bootstrap instead of surfacing the failure.
-
 - [ ] **[NOT_PLANNED]** Keep the localhost Express backend and the IPC-to-HTTP transport as the single request path.
     - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:24`, `src/electronUtils/browserOnlyHelpers.ts:79`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
     - Why it is deliberate: the same transport is what makes the browser `dev2` mode and the standalone server work, and collapsing the Electron path into direct handler calls would fork the request path. Keep the extra serialization as the price of one transport; the payloads themselves are the thing to shrink.
@@ -140,3 +137,121 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - [ ] **[NOT_PLANNED]** Each changed-file row mounts a body-level tooltip, a document click listener and a forced layout read.
     - What it is: `v-tooltip` (`src/mainview/directives/VTooltip.ts:165`) appends a tooltip element to `document.body` and registers a `document` click listener per bound element, and `v-loading` (`src/mainview/directives/VLoading.ts:21,34`) calls `getComputedStyle(el).position` and reads `el.clientWidth/clientHeight` per element at mount. `RepChangesView` puts one or two of each on every unlocked row (`RepChangesView.vue:974-991`), so a large changes list creates thousands of body nodes, thousands of document listeners and thousands of forced synchronous layouts.
     - How it will be implemented: move to one shared singleton tooltip driven by delegated `mouseover`/`mouseout` on the list container (skipping the `updated` rewrite when the value string is unchanged), and make `v-loading` set the position and icon size through CSS classes instead of reading computed style and element size at mount.
+
+## Test Suite
+
+Missing tests, in the order worth writing them. This section tracks coverage only; the
+markers above track product work. Update it whenever a gap is filled instead of leaving
+stale entries behind.
+
+How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
+`bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
+database per run, so it never touches the developer's app data.
+
+### Browser specs (highest user risk first)
+
+- [ ] Committing a change end to end: stage a file, type a summary, commit, and see the row
+      in History; the commit button stays disabled for an empty summary; `Cmd+Enter` commits;
+      "Amend" rewrites the last commit. `commitRepository` and `commitRepo` have no test at all
+      in any suite today.
+- [ ] Destructive discards: per-file "Discard change", "Discard All changes" (including the
+      locked-file skip), delete file, revert deletion, and the "Confirm Discards" menu toggle.
+      Only hunk-level discard is covered, and this is the highest data-loss risk in the app.
+- [ ] Merge conflict resolution using the unused `merge-conflict-lab`: the resolver opening on
+      its own, "Mark Resolved", the inline editor (Accept Mine / Accept Incoming / Accept Both,
+      Save and Stage), Abort Merge, Commit Merge, and the header's "Resolve Conflicts (n)".
+- [ ] Pull blocked by local changes using the unused `pull-conflict-lab`: the modal, "Stash
+      changes and retry", the success and conflict toasts, and Publish Branch.
+- [ ] Repository lifecycle and groups: create a local repository and see it in the sidebar,
+      remove with confirmation, rename repository and group, create/delete/move a group, move a
+      repository between groups, drag-reorder in Settings > Repositories, and Refresh.
+- [ ] The Explorer view: the snapshot commit selector, tree selection, text preview, and the
+      empty states. The view has no test id and no coverage.
+- [ ] History depth: search, load-more, commit and file selection with the diff pane, File
+      History pin/back/"Include renames", undo the latest commit, amend the latest unpushed
+      commit, and Add Tag from the commit context menu.
+- [ ] The branches sidebar: toggling it from the repository name button, the local and remote
+      lists, checkout by click, and the Add Local/Remote Branch modal.
+- [ ] Changes-view chrome: the file filter (`Cmd+F`), the sort menus, lock/unlock, copy path,
+      Ignore..., the "Open with..." submenu, and the "No files match the search" state.
+- [ ] Tags beyond CRUD: Push Tag, Push All Tags, Delete Tag on Remote, sort by newest/name and
+      Copy Tag Name.
+- [ ] The four Settings panels: group editing and reorder, editors and terminals
+      (remove/make-default, which need no native picker), and account create/update/delete/
+      reorder plus the token-validation error path.
+- [ ] A boundary guard for the twelve RPCs that exist only in `src/electron/main.ts`
+      (`pickDirectory`, `pickEditorApplication`, `openFileInEditor`, `openExternalUrl`, the four
+      terminal session methods, ...). They 404 in browser dev mode, so assert the UI shows a
+      recoverable error instead of hanging, or add dev-server stubs so Add Existing Repository
+      becomes testable.
+
+### Backend unit tests
+
+- [ ] `git-merge.ts` has no test at all: merge conflict state, per-file conflict details,
+      ours/theirs resolution, mark resolved, save resolution, abort and commit merge.
+- [ ] `git-stash.ts` has no test at all: list, detail, file diff, create, restore and discard,
+      including the stash-restore conflict classification.
+- [ ] `oauth.ts` has no test at all: device flow start, polling, `slow_down` interval bump,
+      session expiry, `access_denied`, and the token exchange. Mock `fetch`; no backend test
+      touches the network today.
+- [ ] `auth.ts` has no test: the macOS keychain wrapper and its platform guard.
+- [ ] `git-changes.ts`: `getFileDiff` for all three kinds including the image preview, the 1 MB
+      cap and the no-diff fallback; `applyPatch`/`applyPartialFilePatch`; `ignoreRepoPath`;
+      `commitRepoChanges` and `undoLastRepoCommit`; the stage/unstage/restore/delete file
+      operations; `getRepoSidebarStatus` parsing for branch, ahead, behind, upstream,
+      publishable commits and the error path; and the non-batched cosmetic fallback.
+- [ ] `git-history.ts`: `getCommittedTree` (including ordering, types and sizes),
+      `getCommittedFile` (cap, image preview, binary detection, "no commits yet"),
+      `normalizePageCount` for invalid input, and tag refs inside `%d`.
+- [ ] `git-helpers.ts`: `normalizeGitIgnoreEntry` and `appendGitIgnoreEntry`,
+      `buildImagePreview`, `textByteSize`, `readGitMetadataFile`, `readGitIndexStageFile`,
+      `parseIncomingBranchFromMergeMessage`, `countConflictMarkers`, `parseTrackCounts`,
+      `labelForStatus`, `extractConflictPathsFromCommitBody`, `buildDiffStats`, and the
+      rename/copy branch of `parseCommitFilesWithConflicts`.
+- [ ] `git-common.ts`: the remote auth path (`createRemoteGitEnvForUrl`, the non-HTTPS
+      rejection, the host-mismatch guard and the askpass script), `runWithConcurrency`,
+      `resolveGitExecutable`, and the buffered run variants. Every existing remote test passes
+      `auth: undefined`, so the whole auth branch is dead in tests.
+- [ ] `app.ts`: the remaining handlers that only `app.spec.ts` now partially covers — bootstrap
+      and selection, repository/group/account CRUD and ordering, clone and create, remote
+      operations, merge and stash recovery, and `resolveRepoFilePath`. Also assert that paths
+      escaping the repository (for example `../../etc/passwd`) are rejected.
+- [ ] `useDatabase.ts`: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the
+      legacy-database migration path.
+- [ ] `repoStatusCache.ts`: `invalidateAllRepoSidebarStatuses` while a computation is in flight.
+
+### Frontend unit and component tests
+
+- [ ] `useTasks.ts` has no direct test, yet it is the wrapper every RPC call goes through and is
+      mocked by name in most specs: cover the running-state keys, per-identifier tracking,
+      error capture and clearing, and the long-running threshold.
+- [ ] Composables with no spec: `useConfirmation.ts` (queueing, anchoring, confirm/cancel) and
+      `useToast.ts`.
+- [ ] `useRepo.ts`: only about fourteen of its eighty public methods are named in any spec.
+      Cover the commit flow (`commitRepository`, `suggestedCommitSummary`, `canCommit`,
+      amend/cancel), file operations (stage/unstage/discard/delete/revert, single and bulk),
+      branch operations, tag operations, the stash operations, and the history/file-history
+      loaders.
+- [ ] Components with no dedicated spec, most valuable first: `DiffsDiffEditor.vue` (hunk
+      anchoring), `ConflictMonacoEditor.vue`, `Popover.vue`, `FileTree.vue` and
+      `ChangesFileTree.vue`, `DraggableList.vue`, `EtSplitter.vue`, `RepExplorerView.vue`,
+      `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`,
+      `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`,
+      `MonacoEditor.vue`, `MonacoEditorSettingsButton.vue`, and the small presentational ones
+      (`Button`, `IconButton`, `Alert`, `AppErrorBanner`, `AppSuccessToast`).
+- [ ] Directives have no test at all: `VTooltip.ts`, `VContextMenu.ts`, `VError.ts`,
+      `VLoading.ts` and `ContextMenuPanel.vue`.
+- [ ] `lib` modules with no test: `monaco.ts`, `mergeConflicts.ts`, `nativePaths.ts`,
+      `buildOpenWithEntries.ts` and `loadingIndicatorState.ts`.
+
+### Harness
+
+- [ ] Assert that `src/shared/apiMethods.ts` stays in sync with the handlers in `app.ts` and
+      `src/electron/main.ts`, so a renamed handler cannot silently vanish from the renderer's
+      task list.
+- [ ] Run `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` in CI. Nothing
+      enforces the suites today, and `vite build` does not typecheck, so a green local run is
+      the only signal there is.
+- [ ] Decide what to do with `src/mainview/tests/App.real.spec.ts`: it is excluded by
+      `vite.config.ts` and `package.json`, so it never runs, and it needs local fixture data.
+      Either gate it behind an env var and document it, or delete it.

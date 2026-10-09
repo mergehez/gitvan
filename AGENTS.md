@@ -77,18 +77,24 @@ Examples:
 - Every user-facing feature gets a browser spec under `./playwright/` or `./src/mainview/tests/e2e/`, however small it is — a new control, a dialog, a field, a public page's behaviour. A server test says the endpoint answers; only the browser says the screen actually draws the control, wires it to that endpoint and shows what came back.
 - Run the browser specs after every UI change, before committing:
 
-  ```bash
-  bun run test:e2e     # 21 specs, about two minutes
-  ```
+    ```bash
+    bun run test:e2e     # 20 specs, about a minute
+    ```
 
-  Nothing has to be started first: `playwright.config.ts` boots `bun run dev` itself and waits on the
-  backend health endpoint, and reuses an already running dev server when there is one. The specs share a
-  single app instance and run one at a time.
+    Nothing has to be started first: `playwright.config.ts` boots `bun run dev` itself and waits on the
+    backend health endpoint. The specs share a single app instance and run one at a time.
     - `bunx playwright install chromium` once, and again after `@playwright/test` updates.
-    - The specs get their own database (`PLAYWRIGHT_APP_DATA_DIR`, defaulting to a temp directory) instead
-      of the real app database, so a run never depends on, or disturbs, local repositories and settings.
+    - The run uses its own ports (5277/5276; override with `PLAYWRIGHT_VUE_PORT`/`PLAYWRIGHT_API_PORT`),
+      so it never adopts a `bun run dev` you started by hand — that server holds the real app database.
+    - It also uses a fresh database in a temp directory for every run (`PLAYWRIGHT_APP_DATA_DIR` to keep
+      one instead), so a run never depends on, or disturbs, local repositories and settings.
     - Use `openSandboxRepo(page, name)` from `./playwright/support/sandbox.ts` to open a lab; do not
-      re-implement the reset and repository selection in a spec.
+      re-implement the reset and repository selection in a spec. It resets the sandbox labs and the
+      persisted settings, so every test starts from a known state and none depends on the one before it.
+    - Import `test` and `expect` from `./playwright/support/sandbox` rather than `@playwright/test`. That
+      fixture fails a test when the backend logged an unexpected error while it ran.
+    - Wait for the app instead of sleeping: the specs use no `waitForTimeout` and no inline assertion
+      timeouts, and assertions retry against the real condition.
 
 ## Git
 

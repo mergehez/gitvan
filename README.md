@@ -168,7 +168,7 @@ This starts the Vite renderer and the Electrobun app together.
 ### Run Tests
 
 ```bash
-bun run test:ui
+bun run test:ui      # unit and component tests (Vitest)
 ```
 
 ### Run Browser Tests
@@ -178,12 +178,18 @@ bunx playwright install chromium   # once, and again after @playwright/test upda
 bun run test:e2e
 ```
 
-Nothing needs to be started first: the run boots the dev server itself and waits for the backend,
-and reuses one that is already running. The browser specs drive the sandbox repositories under
-`sandbox/` and run one at a time, because they all share that single app instance.
+Nothing needs to be started first: the run boots the dev server itself and waits for the backend.
+The browser specs drive the sandbox repositories under `sandbox/` and run one at a time, because they
+all share that single app instance.
 
-They use their own database in a temp directory, so they never read or modify the repositories and
-settings of your local app. Set `PLAYWRIGHT_APP_DATA_DIR` to keep that database somewhere else.
+The run owns the ports it uses (5277 for the UI, 5276 for the backend; override with
+`PLAYWRIGHT_VUE_PORT` and `PLAYWRIGHT_API_PORT`), so a `bun run dev` you started by hand is left alone
+and can never be adopted — that server points at your real app database.
+
+Each run gets a fresh database in a temp directory and resets the sandbox labs and the persisted
+settings before every test, so no test depends on the one before it and none of it touches the
+repositories and settings of your local app. Set `PLAYWRIGHT_APP_DATA_DIR` to keep that database
+somewhere else.
 
 ### Build The App
 
