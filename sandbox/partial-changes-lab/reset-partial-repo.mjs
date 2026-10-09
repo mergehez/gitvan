@@ -45,12 +45,15 @@ function applyChanges(lines, changes) {
 const firstFile = 'first.txt';
 const secondFile = 'second.txt';
 const stubFile = 'stub.txt';
+const untrackedFile = 'untracked.txt';
+const deletedFile = 'removed.txt';
 
 // ── Commit clean baseline ──
 writeFileSync(join(repoDir, secondFile), makeLines().join('\n') + '\n', 'utf8');
 writeFileSync(join(repoDir, firstFile), makeLines().join('\n') + '\n', 'utf8');
 writeFileSync(join(repoDir, stubFile), readFileSync(join(stubsDir, 'old.txt'), 'utf8') + '\n', 'utf8');
-git(['add', secondFile, firstFile, stubFile]);
+writeFileSync(join(repoDir, deletedFile), 'This tracked file is deleted from the working tree.\n', 'utf8');
+git(['add', secondFile, firstFile, stubFile, deletedFile]);
 git(['commit', '-m', 'Initial baseline']);
 
 // ── second file: overwrite with changes ──
@@ -84,6 +87,10 @@ git(['add', firstFile]);
 // stub file: overwrite with changes, then stage
 writeFileSync(join(repoDir, stubFile), readFileSync(join(stubsDir, 'new.txt'), 'utf8') + '\n', 'utf8');
 
+// ── untracked and deleted entries for the destructive-change specs ──
+writeFileSync(join(repoDir, untrackedFile), 'This file was never committed.\n', 'utf8');
+rmSync(join(repoDir, deletedFile), { force: true });
+
 // ── verify ──
 function countHunks(file) {
     const out = execFileSync('git', ['diff', '--unified=0', '--', file], { cwd: repoDir, encoding: 'utf8' });
@@ -101,4 +108,5 @@ console.log(`${firstFile} — 6 hunks (2× modify, 2× delete, 2× add):`);
 console.log(`  git diff --staged --unified=0 -- ${firstFile}  →  ${countStagedHunks(firstFile)} hunks\n`);
 console.log(`${stubFile} — 3 hunks (1× modify, 1× delete, 1× add):`);
 console.log(`  git diff --staged --unified=0 -- ${stubFile}  →  ${countStagedHunks(stubFile)} hunks\n`);
+console.log(`${untrackedFile} — untracked, ${deletedFile} — deleted from the working tree\n`);
 console.log(`Try:  cd ${repoDir}`);

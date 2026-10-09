@@ -8,13 +8,16 @@ This folder contains an isolated script that rebuilds a nested dummy Git reposit
 - Creates **two files** (`first.txt` and `second.txt`), each 300 lines
 - Applies changes of every hunk type: **modification** (deletion + addition), **pure deletion**, and **pure addition**
 - Leaves `second.txt` with unstaged changes and `first.txt` with fully staged changes
+- Adds `untracked.txt` (never committed) and deletes the tracked `removed.txt`, so the delete and revert-deletion flows have entries to act on
 
 ## Files
 
-| File         | State    | Hunks | Types                        |
-| ------------ | -------- | ----- | ---------------------------- |
-| `first.txt`  | staged   | 6     | 2× modify, 2× delete, 2× add |
-| `second.txt` | unstaged | 9     | 3× modify, 3× delete, 3× add |
+| File            | State     | Hunks | Types                                      |
+| --------------- | --------- | ----- | ------------------------------------------ |
+| `first.txt`     | staged    | 6     | 2× modify, 2× delete, 2× add               |
+| `second.txt`    | unstaged  | 9     | 3× modify, 3× delete, 3× add               |
+| `untracked.txt` | untracked | —     | new file, never committed                  |
+| `removed.txt`   | deleted   | —     | tracked file removed from the working tree |
 
 ## Usage
 
