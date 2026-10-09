@@ -3,16 +3,14 @@ import type { AppClientRequestApi as Api } from '../../electron/main.ts';
 import { apiMethods } from '../../shared/apiMethods';
 import { appClientRpc } from '../appClient.ts';
 
-const runningOperations = reactive({} as Record<string, number | undefined>); // key => timestamp
+// Only the keys currently in flight are kept, so the bookkeeping stays bounded by the
+// number of concurrent operations instead of growing by one entry per path and commit.
+const runningOperations = reactive(new Set<string>());
 const errors = reactive({} as Record<string, string | undefined>);
 
 const longRunningOperations = ref<string[]>([]);
 function updateLongRunningOperations() {
-    longRunningOperations.value = Object.entries(runningOperations)
-        .filter(([_, timestamp]) => {
-            return timestamp !== undefined;
-        })
-        .map(([key]) => key);
+    longRunningOperations.value = [...runningOperations];
 }
 
 export function useAsyncTask2<TMethod extends Api[keyof Api], TParams = Parameters<TMethod>[0], TResult = Awaited<ReturnType<TMethod>>>(
@@ -23,18 +21,19 @@ export function useAsyncTask2<TMethod extends Api[keyof Api], TParams = Paramete
 
     async function run(ps: TParams, identifier?: string): Promise<TResult> {
         const finalKey = identifier ? `${methodName}:${identifier}` : (methodName as string);
+        runningOperations.add(finalKey);
+        errors[methodName] = undefined;
+
+        const longRunningTimer = setTimeout(updateLongRunningOperations, 500);
+
         try {
-            runningOperations[finalKey] = Date.now();
-            errors[methodName] = undefined;
-
-            setTimeout(updateLongRunningOperations, 500);
-
             return await (method as any)(ps);
         } catch (error) {
             errors[methodName] = error instanceof Error ? error.message : String(error);
             throw error;
         } finally {
-            runningOperations[finalKey] = undefined;
+            clearTimeout(longRunningTimer);
+            runningOperations.delete(finalKey);
             updateLongRunningOperations();
         }
     }
@@ -43,15 +42,13 @@ export function useAsyncTask2<TMethod extends Api[keyof Api], TParams = Paramete
         run: run,
         isRunning: (identifier?: string) => {
             const finalKey = identifier ? `${methodName}:${identifier}` : methodName;
-            return runningOperations[finalKey] !== undefined;
+            return runningOperations.has(finalKey);
         },
         errorMessage: errors[methodName],
         clearError: () => (errors[methodName] = undefined),
     };
 }
 function getTasks() {
-    //   console.log(apiMethods);
-
     return apiMethods.reduce((acc, methodName) => {
         acc[methodName as keyof Api] = useAsyncTask2(methodName, (api) => api[methodName as keyof Api]);
         return acc;
@@ -63,9 +60,7 @@ function getTasks() {
 let _tasks = getTasks();
 
 export function initTasks() {
-    //   _tasks = getTasks();
-    //   console.warn("initTasks called", Object.keys(_tasks).join(", "));
-    //   Object.assign(tasks, _tasks);
+    // Intentionally empty: the task table is built once at module load.
 }
 
 export const tasks = reactive({
@@ -78,16 +73,16 @@ export const tasks = reactive({
         Object.values(_tasks).forEach((v) => v.clearError());
     },
     get isBusy() {
-        return Object.values(runningOperations).some((t) => t !== undefined);
+        return runningOperations.size > 0;
     },
     isOperationRunning(key: keyof Api | `${keyof Api}:${string}`) {
-        return runningOperations[key] !== undefined;
+        return runningOperations.has(key);
     },
     isAnyOperationRunning() {
-        return Object.values(runningOperations).some((t) => t !== undefined);
+        return runningOperations.size > 0;
     },
     getRunningOperation() {
-        return Object.keys(runningOperations).find((key) => runningOperations[key] !== undefined) || null;
+        return runningOperations.values().next().value ?? null;
     },
     isAnyLongRunningOperation() {
         return longRunningOperations.value.length > 0;
