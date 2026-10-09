@@ -16,5 +16,8 @@ export function handleScripts() {
         case 'audit':
             execSync('bash src/electronUtils/release-audit.sh', { stdio: 'inherit' });
             break;
+        case 'perf':
+            runFile('src/electronUtils/perfBaseline.ts', args);
+            break;
     }
 }
