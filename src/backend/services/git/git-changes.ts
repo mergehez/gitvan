@@ -2,13 +2,14 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../../shared/diffIgnoredChars.js';
 import type { FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/types.js';
-import { runGit } from './git-common.js';
+import { GitCommandError, runGit, runGitWithInput } from './git-common.js';
 import {
     appendGitIgnoreEntry,
     applyPartialFilePatch,
     buildDiffStats,
     buildImagePreview,
     fileTooBigPreviewMessage,
+    getUnpushedCommitSet,
     isImagePath,
     isPreviewTooLarge,
     labelForStatus,
@@ -472,6 +473,53 @@ export const changesGit = {
     },
     async undoLastRepoCommit(repoPath: string) {
         await runGit(['reset', '--soft', 'HEAD~1'], repoPath);
+    },
+    /**
+     * Rewrites an unpushed commit with a new message and replays its descendants on top.
+     * The tree is copied verbatim through `commit-tree`, so no staged or working-tree
+     * change can leak into the commit the way `commit --amend` would allow.
+     */
+    async rewordRepoCommit(repoPath: string, commitSha: string, summary: string, description: string) {
+        const trimmedSummary = summary.trim();
+        if (!trimmedSummary) {
+            throw new Error('Commit summary is required.');
+        }
+
+        const targetSha = await runGit(['rev-parse', '--verify', `${commitSha}^{commit}`], repoPath, [0, 128]);
+        if (!targetSha) {
+            throw new GitCommandError('The commit to edit no longer exists. Refresh the history and try again.', ['git', 'rev-parse', commitSha], '');
+        }
+
+        // Rewriting a pushed commit would silently diverge the branch from its remote.
+        const unpushedCommits = await getUnpushedCommitSet(repoPath);
+        if (!unpushedCommits.has(targetSha)) {
+            throw new GitCommandError('Only unpushed commits can be edited.', ['git', 'rev-list', 'HEAD', '--not', '--remotes'], '');
+        }
+
+        const [treeSha, parentsRaw, authorRaw] = await Promise.all([
+            runGit(['rev-parse', `${targetSha}^{tree}`], repoPath),
+            runGit(['show', '-s', '--format=%P', targetSha], repoPath),
+            runGit(['show', '-s', '--format=%an%x1f%ae%x1f%aI', targetSha], repoPath),
+        ]);
+
+        const parentArgs = parentsRaw
+            .split(' ')
+            .filter(Boolean)
+            .flatMap((parentSha) => ['-p', parentSha]);
+        const [authorName = '', authorEmail = '', authorDate = ''] = authorRaw.split('\u001f');
+        const trimmedDescription = description.trim();
+        const message = trimmedDescription ? `${trimmedSummary}\n\n${trimmedDescription}\n` : `${trimmedSummary}\n`;
+
+        const rewrittenSha = await runGitWithInput(['commit-tree', treeSha, ...parentArgs, '-F', '-'], repoPath, message, [0], true, {
+            GIT_AUTHOR_NAME: authorName,
+            GIT_AUTHOR_EMAIL: authorEmail,
+            GIT_AUTHOR_DATE: authorDate,
+        });
+
+        // Nothing but the message changes, so every replayed patch applies to an identical
+        // parent tree; `--rebase-merges` keeps any local merge commits in place and
+        // `--autostash` carries unstaged work across the rewrite untouched.
+        await runGit(['rebase', '--onto', rewrittenSha, targetSha, '--rebase-merges', '--autostash'], repoPath, [0], true);
     },
 };
 

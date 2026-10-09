@@ -4,6 +4,7 @@ import { historyGit } from './git/git-history.js';
 import { mergeGit } from './git/git-merge.js';
 import { repoGit } from './git/git-repo.js';
 import { stashGit } from './git/git-stash.js';
+import { tagsGit } from './git/git-tags.js';
 
 export const git = {
     ...repoGit,
@@ -11,4 +12,5 @@ export const git = {
     ...changesGit,
     ...historyGit,
     ...stashGit,
+    ...tagsGit,
 };

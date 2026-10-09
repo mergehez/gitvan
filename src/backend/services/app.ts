@@ -9,6 +9,7 @@ import type {
     CloneRepoDefaults,
     CommitDetail,
     CommitFormState,
+    CommitMessageData,
     CommittedFileData,
     CommittedTreeData,
     EditorSettings,
@@ -24,6 +25,7 @@ import type {
     RemoteOperation,
     Repo,
     RepoChangesData,
+    TagsData,
 } from '../../shared/types.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
 import type { RepoRow } from './database.js';
@@ -272,7 +274,7 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
         diffIgnoredChars: normalizeDiffIgnoredChars(raw.diffIgnoredChars),
         diffIgnoredCharsEnabled: raw.diffIgnoredCharsEnabled !== false,
         showWhitespaceChanges: raw.showWhitespaceChanges === true,
-        activeView: raw.activeView === 'history' || raw.activeView === 'explorer' ? raw.activeView : 'changes',
+        activeView: raw.activeView === 'history' || raw.activeView === 'explorer' || raw.activeView === 'tags' ? raw.activeView : 'changes',
         showBranches: raw.showBranches === true,
     };
 }
@@ -1130,12 +1132,19 @@ export const app = {
         await git.commitRepoChanges(db.getRepo(ps.repoId)!.path, ps.summary, ps.description, ps.amend);
         return buildBootstrap();
     },
+    rewordCommit: async (ps: { repoId: number; commitSha: string; summary: string; description: string }) => {
+        await git.rewordRepoCommit(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.summary, ps.description);
+        return buildBootstrap();
+    },
     undoLastCommit: async (ps: { repoId: number }) => {
         await git.undoLastRepoCommit(db.getRepo(ps.repoId)!.path);
         return buildBootstrap();
     },
-    createTag: async (ps: { repoId: number; commitSha: string; tagName: string }) => {
-        await git.createRepoTag(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.tagName);
+    getTags: async (ps: { repoId: number }): Promise<TagsData> => {
+        return git.getRepoTags(db.getRepo(ps.repoId)!.path);
+    },
+    createTag: async (ps: { repoId: number; commitSha: string; tagName: string; message?: string }) => {
+        await git.createRepoTag(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.tagName, ps.message);
         return buildBootstrap();
     },
     renameTag: async (ps: { repoId: number; tagName: string; nextTagName: string }) => {
@@ -1144,6 +1153,39 @@ export const app = {
     },
     deleteTag: async (ps: { repoId: number; tagName: string }) => {
         await git.deleteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName);
+        return buildBootstrap();
+    },
+    pushTag: async (ps: { repoId: number; tagName: string }) => {
+        const auth = await resolveRepoRemoteAuth(ps.repoId);
+
+        try {
+            await git.pushRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, auth);
+        } catch (error) {
+            rethrowRemoteAuthError(error, auth);
+        }
+
+        return buildBootstrap();
+    },
+    pushAllTags: async (ps: { repoId: number }) => {
+        const auth = await resolveRepoRemoteAuth(ps.repoId);
+
+        try {
+            await git.pushRepoAllTags(db.getRepo(ps.repoId)!.path, auth);
+        } catch (error) {
+            rethrowRemoteAuthError(error, auth);
+        }
+
+        return buildBootstrap();
+    },
+    deleteRemoteTag: async (ps: { repoId: number; tagName: string }) => {
+        const auth = await resolveRepoRemoteAuth(ps.repoId);
+
+        try {
+            await git.deleteRemoteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, auth);
+        } catch (error) {
+            rethrowRemoteAuthError(error, auth);
+        }
+
         return buildBootstrap();
     },
     getHistory: async (ps: { repoId: number; limit?: number; skip?: number; search?: string; path?: string; followRenames?: boolean }): Promise<HistoryData> => {
@@ -1163,6 +1205,9 @@ export const app = {
     },
     getCommitDetail: async (ps: { repoId: number; commitSha: string }): Promise<CommitDetail> => {
         return git.getCommitDetail(db.getRepo(ps.repoId)!.path, ps.commitSha);
+    },
+    getCommitMessage: async (ps: { repoId: number; commitSha: string }): Promise<CommitMessageData> => {
+        return git.getRepoCommitMessage(db.getRepo(ps.repoId)!.path, ps.commitSha);
     },
     getCommitFileDiff: async (ps: { repoId: number; commitSha: string; path: string; previousPath?: string }): Promise<FileDiffData> => {
         return git.getCommitFileDiff(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.path, ps.previousPath);

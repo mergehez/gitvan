@@ -239,3 +239,123 @@ describe('changesGit partial file operations', () => {
         expect(changes.unstaged[0]?.unstagedTooLargeForCosmeticCheck).toBe(true);
     });
 });
+
+describe('changesGit reword', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function createRepoWithUnpushedCommits() {
+        const repoPath = mkdtempSync(join(tmpdir(), 'gitvan-reword-'));
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        runGit(repoPath, ['init', '-b', 'main']);
+        runGit(repoPath, ['config', 'user.name', 'Gitvan Test']);
+        runGit(repoPath, ['config', 'user.email', 'gitvan@example.com']);
+
+        for (const name of ['first', 'second', 'third']) {
+            writeFileSync(join(repoPath, `${name}.txt`), `${name}\n`, 'utf8');
+            runGit(repoPath, ['add', '.']);
+            runGit(repoPath, ['commit', '-m', `Commit ${name}`]);
+        }
+
+        // `origin/main` stops at the first commit, so the two newer ones are unpushed.
+        runGit(repoPath, ['update-ref', 'refs/remotes/origin/main', runGit(repoPath, ['rev-parse', 'HEAD~2'])]);
+
+        return repoPath;
+    }
+
+    function commitShas(repoPath: string) {
+        return runGit(repoPath, ['log', '--format=%H']).split('\n');
+    }
+
+    it('rewords an older unpushed commit and replays its descendants', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        const secondSha = commitShas(repoPath)[1]!;
+        const originalAuthor = runGit(repoPath, ['show', '-s', '--format=%an|%ae|%aI', secondSha]);
+
+        await changesGit.rewordRepoCommit(repoPath, secondSha, 'Renamed second', 'A fresh body');
+
+        expect(runGit(repoPath, ['log', '--format=%s']).split('\n')).toEqual(['Commit third', 'Renamed second', 'Commit first']);
+        expect(runGit(repoPath, ['log', '--format=%s%n%b', '-1', 'HEAD~1'])).toBe('Renamed second\nA fresh body');
+        // The rewrite copies the author, so reworded history keeps its attribution.
+        expect(runGit(repoPath, ['show', '-s', '--format=%an|%ae|%aI', 'HEAD~1'])).toBe(originalAuthor);
+    });
+
+    it('rewords the head commit without touching its tree', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        const [headSha] = commitShas(repoPath);
+        const treeBefore = runGit(repoPath, ['rev-parse', `${headSha}^{tree}`]);
+
+        await changesGit.rewordRepoCommit(repoPath, headSha!, 'Reworded head', '');
+
+        expect(runGit(repoPath, ['log', '--format=%s', '-1'])).toBe('Reworded head');
+        expect(runGit(repoPath, ['show', '-s', '--format=%b', '-1'])).toBe('');
+        expect(runGit(repoPath, ['rev-parse', 'HEAD^{tree}'])).toBe(treeBefore);
+    });
+
+    it('rewords the root commit and keeps it parentless', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        // Without any remote-tracking ref the whole history counts as unpushed.
+        runGit(repoPath, ['update-ref', '-d', 'refs/remotes/origin/main']);
+        const rootSha = runGit(repoPath, ['rev-list', '--max-parents=0', 'HEAD']);
+
+        await changesGit.rewordRepoCommit(repoPath, rootSha, 'Reworded root', '');
+
+        expect(runGit(repoPath, ['log', '--format=%s']).split('\n')).toEqual(['Commit third', 'Commit second', 'Reworded root']);
+        expect(runGit(repoPath, ['show', '-s', '--format=%P', 'HEAD~2'])).toBe('');
+    });
+
+    it('carries a dirty working tree across the rewrite', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        const secondSha = commitShas(repoPath)[1]!;
+        writeFileSync(join(repoPath, 'third.txt'), 'edited\n', 'utf8');
+        writeFileSync(join(repoPath, 'untracked.txt'), 'new\n', 'utf8');
+
+        await changesGit.rewordRepoCommit(repoPath, secondSha, 'Renamed second', '');
+
+        // The edits stay uncommitted and unstaged, and the temporary autostash is gone.
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('third.txt');
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+        expect(runGit(repoPath, ['status', '--porcelain', '-uall'])).toContain('?? untracked.txt');
+        expect(runGit(repoPath, ['stash', 'list'])).toBe('');
+    });
+
+    it('keeps local merge commits in place', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        runGit(repoPath, ['checkout', '-b', 'side', 'HEAD~1']);
+        writeFileSync(join(repoPath, 'side.txt'), 'side\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Side work']);
+        runGit(repoPath, ['checkout', 'main']);
+        runGit(repoPath, ['merge', '--no-ff', 'side', '-m', 'Merge side']);
+        const targetSha = runGit(repoPath, ['rev-parse', 'HEAD~2']);
+
+        await changesGit.rewordRepoCommit(repoPath, targetSha, 'Renamed second', '');
+
+        const graph = runGit(repoPath, ['log', '--format=%s', '--graph']);
+        expect(graph).toContain('*   Merge side');
+        expect(graph).toContain('|\\');
+        expect(graph).toContain('Renamed second');
+    });
+
+    it('refuses to rewrite a commit that has already been pushed', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        const pushedSha = runGit(repoPath, ['rev-parse', 'HEAD~2']);
+
+        await expect(changesGit.rewordRepoCommit(repoPath, pushedSha, 'Rewritten', '')).rejects.toThrow(/Only unpushed commits can be edited/);
+
+        expect(runGit(repoPath, ['log', '--format=%s', '--skip=2', '-1'])).toBe('Commit first');
+    });
+
+    it('refuses an empty summary', async () => {
+        const repoPath = createRepoWithUnpushedCommits();
+        const headSha = commitShas(repoPath)[0]!;
+
+        await expect(changesGit.rewordRepoCommit(repoPath, headSha, '   ', '')).rejects.toThrow(/Commit summary is required/);
+    });
+});

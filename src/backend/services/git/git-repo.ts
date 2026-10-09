@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname } from 'path';
 import type { BranchesData, BranchSummary, RemoteOperation } from '../../../shared/types.js';
 import type { GitRemoteAuth } from './git-common.js';
-import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, runGit } from './git-common.js';
+import { createRemoteGitEnv, createRemoteGitEnvForUrl, GitCommandError, resolveRemoteName, runGit } from './git-common.js';
 import { normalizeBranchName, parseTrackCounts } from './git-helpers.js';
 
 export const repoGit = {
@@ -199,12 +199,7 @@ export const repoGit = {
             throw new Error('Branch name is required.');
         }
 
-        const remotesOutput = await runGit(['remote'], repoPath);
-        const remotes = remotesOutput
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean);
-        const remoteName = remotes.includes('origin') ? 'origin' : remotes[0];
+        const remoteName = await resolveRemoteName(repoPath);
 
         if (!remoteName) {
             throw new GitCommandError('Cannot create the remote branch because no remote is configured.', ['git', 'push', '-u'], '');
@@ -215,18 +210,12 @@ export const repoGit = {
         await runGit(['push', '-u', remoteName, trimmedName], repoPath, [0], true, env);
     },
     async publishRepoBranch(repoPath: string, auth?: GitRemoteAuth) {
-        const [branchOutput, remotesOutput] = await Promise.all([runGit(['branch', '--show-current'], repoPath), runGit(['remote'], repoPath)]);
+        const [branchOutput, remoteName] = await Promise.all([runGit(['branch', '--show-current'], repoPath), resolveRemoteName(repoPath)]);
 
         const branchName = branchOutput.trim();
         if (!branchName) {
             throw new GitCommandError('Cannot publish the current branch from a detached HEAD state.', ['git', 'branch', '--show-current'], '');
         }
-
-        const remotes = remotesOutput
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean);
-        const remoteName = remotes.includes('origin') ? 'origin' : remotes[0];
 
         if (!remoteName) {
             throw new GitCommandError('Cannot publish the current branch because no remote is configured.', ['git', 'push', '-u'], '');

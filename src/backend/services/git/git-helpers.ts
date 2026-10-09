@@ -458,6 +458,26 @@ export function parseCommitTags(rawRefs: string, isUnpushed: boolean) {
         .filter((tag, index, tags) => tags.findIndex((entry) => entry.name === tag.name) === index);
 }
 
+/** Commits reachable from HEAD that no remote has, optionally capped to the newest ones. */
+export async function getUnpushedCommitSet(repoPath: string, maxCount?: number) {
+    const args = ['rev-list'];
+
+    if (maxCount) {
+        args.push('--max-count', String(maxCount));
+    }
+
+    args.push('HEAD', '--not', '--remotes');
+
+    const output = await runGit(args, repoPath, [0, 128]);
+
+    return new Set(
+        output
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
+    );
+}
+
 function imageFileExtension(path: string) {
     const normalized = path.toLowerCase().split('/').pop() ?? path.toLowerCase();
     const extension = normalized.split('.').pop();

@@ -211,3 +211,24 @@ describe('historyGit.getRepoHistory file path', () => {
         expect(secondPage.hasMore).toBe(false);
     });
 });
+
+describe('historyGit.getRepoCommitMessage', () => {
+    it('reads the subject and the body of a commit', async () => {
+        const repoPath = createRepoWithCommits(1);
+        writeFileSync(join(repoPath, 'body.txt'), 'body', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Subject line', '-m', 'First body line\nSecond body line']);
+
+        const message = await historyGit.getRepoCommitMessage(repoPath, 'HEAD');
+
+        expect(message).toEqual({ summary: 'Subject line', body: 'First body line\nSecond body line' });
+    });
+
+    it('returns an empty body for a subject-only commit', async () => {
+        const repoPath = createRepoWithCommits(1);
+
+        const message = await historyGit.getRepoCommitMessage(repoPath, 'HEAD');
+
+        expect(message).toEqual({ summary: 'Commit 0', body: '' });
+    });
+});

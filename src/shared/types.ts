@@ -1,4 +1,4 @@
-export type NavigationView = 'changes' | 'explorer' | 'history';
+export type NavigationView = 'changes' | 'explorer' | 'history' | 'tags';
 // export type NavigationView = 'changes' | 'history' | 'branches';
 
 export type SettingsPanel = 'repositories' | 'accounts' | 'editors' | 'terminals';
@@ -280,6 +280,25 @@ export type CommitTag = {
     isUnpushed: boolean;
 };
 
+/** One local tag, with just enough of its target commit to render a list row. */
+export type TagSummary = {
+    name: string;
+    commitSha: string;
+    shortSha: string;
+    commitSummary: string;
+    createdAt: string;
+    isAnnotated: boolean;
+    /** Subject line of the annotated tag message. */
+    message?: string;
+    taggerName?: string;
+    /** The tagged commit has not been pushed to any remote yet. */
+    isTargetUnpushed: boolean;
+};
+
+export type TagsData = {
+    tags: TagSummary[];
+};
+
 export type CommitSummary = {
     sha: string;
     shortSha: string;
@@ -303,6 +322,11 @@ export type CommitDetail = CommitSummary & {
     body: string;
     files: CommitFileEntry[];
     patch: string;
+};
+
+export type CommitMessageData = {
+    summary: string;
+    body: string;
 };
 
 export type CommittedFileEntry = {

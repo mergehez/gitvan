@@ -181,6 +181,17 @@ export async function createRemoteGitEnv(repoPath: string, auth: GitRemoteAuth |
     return createRemoteGitEnvForUrl(remoteUrl, auth);
 }
 
+/** `origin` when it exists, otherwise the first configured remote. */
+export async function resolveRemoteName(repoPath: string) {
+    const output = await runGit(['remote'], repoPath);
+    const remotes = output
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    return remotes.includes('origin') ? 'origin' : remotes[0];
+}
+
 function createGitProcessEnv(env: NodeJS.ProcessEnv = {}) {
     const mergedEnv = {
         ...process.env,
