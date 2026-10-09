@@ -171,6 +171,20 @@ This starts the Vite renderer and the Electrobun app together.
 bun run test:ui
 ```
 
+### Run Browser Tests
+
+```bash
+# One terminal: serve the renderer and backend for a browser
+bun run dev
+
+# Another terminal
+bunx playwright install chromium   # once, and again after @playwright/test updates
+bun run test:e2e
+```
+
+The browser specs drive the sandbox repositories under `sandbox/` and run one at a time, because they
+all share that single app instance.
+
 ### Build The App
 
 ```bash
