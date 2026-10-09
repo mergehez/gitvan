@@ -24,6 +24,9 @@ const monacoModuleRef = shallowRef<MonacoModule>();
 const editorRef = shallowRef<MonacoEditorModule.editor.IStandaloneCodeEditor>();
 const modelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
 let applyingExternalValue = false;
+// Set while the editor's own `onDidChangeContent` is the reason `modelValue` changed, so the
+// watcher can skip the full-model comparison and copy it would otherwise do per keystroke.
+let valueWrittenByEditor = false;
 
 async function getMonacoModule() {
     if (!monacoModuleRef.value) {
@@ -42,6 +45,7 @@ async function ensureEditor() {
     editorRef.value.setModel(modelRef.value);
     modelRef.value.onDidChangeContent(() => {
         if (applyingExternalValue) return;
+        valueWrittenByEditor = true;
         modelValue.value = modelRef.value?.getValue() ?? '';
     });
 }
@@ -59,13 +63,15 @@ async function syncEditor() {
     const nextValue = modelValue.value ?? '';
     const nextLanguage = finalLanguage.value;
     if (modelRef.value.getLanguageId() !== nextLanguage) monacoModuleRef.value?.editor.setModelLanguage(modelRef.value, nextLanguage);
-    if (modelRef.value.getValue() !== nextValue) {
+
+    const editorOwnsValue = valueWrittenByEditor;
+    valueWrittenByEditor = false;
+
+    if (!editorOwnsValue && modelRef.value.getValue() !== nextValue) {
         applyingExternalValue = true;
         modelRef.value.setValue(nextValue);
         applyingExternalValue = false;
     }
-    editorRef.value.updateOptions(options.value);
-    editorRef.value.layout();
 }
 
 const finalLanguage = computed(() => getMonacoLanguage(props.language, props.pathForLanguage));
@@ -78,12 +84,17 @@ const options = computed(
         }) as MonacoEditorModule.editor.IStandaloneEditorConstructionOptions
 );
 
-watch(
-    () => [modelValue.value, props.language, props.pathForLanguage, props.readonly, settings.state.diffFontSize],
-    () => {
-        void syncEditor();
-    }
-);
+// Getter sources, not one getter returning an array: a fresh array would re-run the sync for any
+// dependency change, including a settings object the parent replaced with the same values. The
+// font size is handled by the options watcher, which is the only thing `updateOptions` needs.
+watch([() => modelValue.value, () => props.language, () => props.pathForLanguage, () => props.readonly], () => {
+    void syncEditor();
+});
+
+// `automaticLayout` keeps the editor sized, so no explicit `layout()` is needed here.
+watch(options, (nextOptions) => {
+    editorRef.value?.updateOptions(nextOptions);
+});
 
 onMounted(() => {
     void syncEditor();
