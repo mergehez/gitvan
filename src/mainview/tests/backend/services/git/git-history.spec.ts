@@ -232,3 +232,54 @@ describe('historyGit.getRepoCommitMessage', () => {
         expect(message).toEqual({ summary: 'Commit 0', body: '' });
     });
 });
+
+describe('historyGit commit detail and file diffs', () => {
+    function createDetailRepo() {
+        const repoPath = createRepoWithCommits(0);
+
+        writeFileSync(join(repoPath, 'small.txt'), 'before\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Base commit']);
+
+        writeFileSync(join(repoPath, 'small.txt'), 'before\nafter\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Edit small file']);
+
+        return repoPath;
+    }
+
+    it('returns the file list without a patch payload', async () => {
+        const repoPath = createDetailRepo();
+
+        const detail = await historyGit.getCommitDetail(repoPath, 'HEAD');
+
+        expect(detail.summary).toBe('Edit small file');
+        expect(detail.files.map((file) => file.path)).toEqual(['small.txt']);
+        expect(detail).not.toHaveProperty('patch');
+    });
+
+    it('serves the patch for the selected file on demand', async () => {
+        const repoPath = createDetailRepo();
+
+        const diff = await historyGit.getCommitFileDiff(repoPath, 'HEAD', 'small.txt');
+
+        expect(diff.entry.patch).toContain('+after');
+        expect(diff.entry.original).toBe('before\n');
+        expect(diff.entry.modified).toBe('before\nafter\n');
+        expect(diff.entry.previewMessage).toBeUndefined();
+    });
+
+    it('refuses a file above the preview cap before reading its patch', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'large.txt'), 'x'.repeat(1_200_000), 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a large file']);
+
+        const diff = await historyGit.getCommitFileDiff(repoPath, 'HEAD', 'large.txt');
+
+        expect(diff.entry.previewMessage).toBe('Diff too large to display');
+        expect(diff.entry.patch).toBe('Diff too large to display');
+        expect(diff.entry.original).toBe('');
+        expect(diff.entry.modified).toBe('');
+    });
+});

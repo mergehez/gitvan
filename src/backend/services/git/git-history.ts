@@ -3,6 +3,7 @@ import { runGit } from './git-common.js';
 import {
     buildDiffStats,
     buildImagePreview,
+    diffTooLargePreviewMessage,
     extractConflictPathsFromCommitBody,
     fileTooBigPreviewMessage,
     getUnpushedCommitSet,
@@ -166,10 +167,11 @@ export const historyGit = {
         return { summary, body: body.trim() };
     },
     async getCommitDetail(repoPath: string, commitSha: string): Promise<CommitDetail> {
-        const [summaryRaw, filesRaw, patch, unpushedCommits] = await Promise.all([
+        // The file list is all the pane reads; the patch for the selected file arrives
+        // lazily through `getCommitFileDiff`.
+        const [summaryRaw, filesRaw, unpushedCommits] = await Promise.all([
             runGit(['show', '-s', '--date=iso-strict', '--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%d%x1f%s%x1f%b', commitSha], repoPath),
             runGit(['show', '-m', '--first-parent', '--name-status', '--format=', '--find-renames', commitSha], repoPath),
-            runGit(['show', '-m', '--first-parent', '--stat', '--patch', '--format=medium', '--find-renames', commitSha], repoPath),
             getUnpushedCommitSet(repoPath),
         ]);
 
@@ -188,7 +190,6 @@ export const historyGit = {
             isUnpushed: unpushedCommits.has(sha),
             body: parsedBody.body,
             files: parseCommitFilesWithConflicts(filesRaw, parsedBody.conflictPaths),
-            patch,
         };
     },
     async getCommittedFile(repoPath: string, filePath: string, commitSha?: string): Promise<CommittedFileData> {
@@ -249,27 +250,30 @@ export const historyGit = {
         const originalPath = previousPath ?? filePath;
         const parentRevision = `${commitSha}^1`;
 
-        const [patch, originalSize, modifiedSize] = await Promise.all([
-            runGit(['show', '-m', '--first-parent', '--format=', '--patch', commitSha, '--', filePath], repoPath),
+        const [originalSize, modifiedSize] = await Promise.all([
             readGitRevisionFileSize(repoPath, `${parentRevision}:${originalPath}`),
             readGitRevisionFileSize(repoPath, `${commitSha}:${filePath}`),
         ]);
-        const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
 
+        // The patch is the expensive half of this response, so a file that cannot be shown
+        // is rejected before git materializes it.
         if (isPreviewTooLarge(originalSize, modifiedSize)) {
             return {
                 path: filePath,
                 entry: {
                     label: commitSha.slice(0, 7),
                     kind: 'staged',
-                    patch: patch || fileTooBigPreviewMessage,
+                    patch: diffTooLargePreviewMessage,
                     original: '',
                     modified: '',
-                    stats,
-                    previewMessage: fileTooBigPreviewMessage,
+                    stats: buildDiffStats('', originalSize, modifiedSize),
+                    previewMessage: diffTooLargePreviewMessage,
                 },
             };
         }
+
+        const patch = await runGit(['show', '-m', '--first-parent', '--format=', '--patch', commitSha, '--', filePath], repoPath);
+        const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
 
         const [original, modified] = await Promise.all([
             runGit(['show', `${parentRevision}:${originalPath}`], repoPath, [0, 128], false),

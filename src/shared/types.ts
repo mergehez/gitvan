@@ -321,7 +321,6 @@ export type CommitFileEntry = {
 export type CommitDetail = CommitSummary & {
     body: string;
     files: CommitFileEntry[];
-    patch: string;
 };
 
 export type CommitMessageData = {

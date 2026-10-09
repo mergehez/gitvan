@@ -129,7 +129,6 @@ function createCommitDetail(sha: string): CommitDetail {
         isUnpushed: false,
         body: '',
         files: [],
-        patch: '',
     };
 }
 

@@ -5,6 +5,7 @@ import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
 
 const previewByteLimit = 1024 * 1024;
 export const fileTooBigPreviewMessage = 'File too big to preview';
+export const diffTooLargePreviewMessage = 'Diff too large to display';
 
 const imageMimeTypes: Record<string, string> = {
     png: 'image/png',

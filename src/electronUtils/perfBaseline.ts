@@ -231,7 +231,7 @@ async function runCommitDetail(options: Options): Promise<Result[]> {
     return [
         await measure(
             `commit detail (${touchedFiles} files)`,
-            'includes the full patch payload and unpushed walk',
+            'file list and unpushed walk only, no patch payload',
             async () => {
                 const detail = await historyGit.getCommitDetail(repoPath, sha);
                 const bytes = Buffer.byteLength(JSON.stringify(detail), 'utf8');

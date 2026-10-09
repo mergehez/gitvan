@@ -100,7 +100,6 @@ function createCommitDetail(sha: string, files: Array<{ path: string; previousPa
         isUnpushed: false,
         body: '',
         files: files.map((file) => ({ path: file.path, previousPath: file.previousPath, status: 'modified' })),
-        patch: '',
     };
 }
 
