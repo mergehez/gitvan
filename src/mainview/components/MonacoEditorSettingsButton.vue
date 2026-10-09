@@ -46,7 +46,7 @@ onUnmounted(() => {
 
 <template>
     <div ref="diffSettingsRef" class="relative flex items-center gap-1">
-        <IconButton icon="icon-[mdi--tune-variant]" smaller aria-haspopup="dialog" v-tooltip="'Diff settings'" @click.stop="toggleDiffSettings">
+        <IconButton data-testid="diff-settings-button" icon="icon-[mdi--tune-variant]" smaller aria-haspopup="dialog" v-tooltip="'Diff settings'" @click.stop="toggleDiffSettings">
             <span class="icon icon-[mdi--tune-variant]"></span>
         </IconButton>
         <div

@@ -1,191 +1,134 @@
-import { expect, test } from '@playwright/test';
-import { openSandboxRepo } from './support/sandbox';
+import type { Locator, Page } from '@playwright/test';
+import { expect, openSandboxRepo, test } from './support/sandbox';
 
 test.describe('cosmetics settings', () => {
-    function getFile(page: any, section: 'staged' | 'unstaged', fileName: string) {
+    function getFile(page: Page, section: 'staged' | 'unstaged', fileName: string) {
         return page.locator(`[data-testid="file-tree-item-${section}-${fileName}"]`).first();
     }
 
-    async function openSettingsDropdown(page: any) {
-        const tuneIcon = page.locator('.icon-\\[mdi--tune-variant\\]').first();
-        if (await tuneIcon.isVisible({ timeout: 1000 }).catch(() => false)) {
-            await tuneIcon.click();
-            await page.waitForTimeout(300);
-            return;
-        }
-        const iconBtn = page.locator('button:has(.icon-\\[mdi--tune-variant\\])').first();
-        if (await iconBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-            await iconBtn.click();
-            await page.waitForTimeout(300);
-        }
+    /** The badge the diff header shows when a change turns out to be cosmetic only. */
+    function noActualChangeBadge(page: Page): Locator {
+        return page.getByText('no actual change');
     }
 
-    async function noActualChangeBadgeVisibleInDiff(page: any): Promise<boolean> {
-        try {
-            const diffRoot = page.getByTestId('diffs-diff-editor-root');
-            // Look for the badge within the diff editor header area
-            const badge = diffRoot.locator('..').first().getByText('no actual change');
-            return await badge.isVisible();
-        } catch {
-            return false;
-        }
-    }
-
-    test('reset sandboxes button works', async ({ page }) => {
+    async function openLabFile(page: Page, section: 'staged' | 'unstaged', fileName: string) {
         await openSandboxRepo(page, 'cosmetics');
-    });
+
+        const file = getFile(page, section, fileName);
+        await expect(file).toBeVisible();
+        await file.click();
+        await expect(page.getByTestId('diffs-diff-editor-root')).toBeVisible();
+    }
+
+    async function openDiffSettings(page: Page): Promise<Locator> {
+        const dialog = page.getByRole('dialog', { name: 'Diff settings' });
+
+        if (!(await dialog.isVisible())) {
+            await page.getByTestId('diff-settings-button').first().click();
+        }
+
+        await expect(dialog).toBeVisible();
+
+        return dialog;
+    }
+
+    async function closeDiffSettings(page: Page) {
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog', { name: 'Diff settings' })).toBeHidden();
+    }
+
+    /**
+     * Changes the setting from the keyboard. Toggling re-renders the diff, and changing the view
+     * mode can replace the popover it lives in, so a pointer click is not reliably actionable.
+     */
+    async function toggleSetting(page: Page, checkbox: Locator) {
+        await checkbox.focus();
+        await page.keyboard.press('Space');
+    }
 
     test('"Hide whitespace changes" reveals no-actual-change on whitespace-only file', async ({ page }) => {
-        await openSandboxRepo(page, 'cosmetics');
-        const file = getFile(page, 'unstaged', 'whitespace-demo.txt');
-        await expect(file).toBeVisible({ timeout: 5000 });
-        await file.click();
-        await page.waitForTimeout(1000);
+        await openLabFile(page, 'unstaged', 'whitespace-demo.txt');
 
-        // By default whitespace changes are HIDDEN (showWhitespaceChanges: false),
-        // so the "no actual change" badge is already visible. First UN-hide whitespace.
-        await openSettingsDropdown(page);
-        const hideWsCheckbox = page.locator('label').filter({ hasText: 'Hide whitespace changes' }).locator('input[type="checkbox"]');
-        await expect(hideWsCheckbox).toBeVisible({ timeout: 2000 });
+        // Whitespace changes are hidden by default, so the change looks cosmetic.
+        await expect(noActualChangeBadge(page)).toBeVisible();
 
-        // Uncheck to SHOW whitespace changes
-        const wasHidden = await hideWsCheckbox.isChecked();
-        if (wasHidden) {
-            await hideWsCheckbox.click({ force: true });
-            await page.waitForTimeout(500);
-        }
+        const dialog = await openDiffSettings(page);
+        const hideWhitespace = dialog.getByLabel('Hide whitespace changes');
+        await expect(hideWhitespace).toBeChecked();
+        await toggleSetting(page, hideWhitespace);
 
-        // Now whitespace is visible, badge should disappear
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-        const badgeWhileShowing = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badgeWhileShowing).toBe(false);
+        await closeDiffSettings(page);
 
-        // Re-open settings and re-hide whitespace
-        await openSettingsDropdown(page);
-        const isNowHidden = await hideWsCheckbox.isChecked();
-        if (!isNowHidden) {
-            await hideWsCheckbox.click({ force: true });
-            await page.waitForTimeout(500);
-        }
+        // Showing whitespace means the change is real, so the badge goes away.
+        await expect(noActualChangeBadge(page)).toBeHidden();
 
-        // Close and verify badge reappears
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-        const badgeAfter = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badgeAfter).toBe(true);
+        const reopened = await openDiffSettings(page);
+        await expect(reopened.getByLabel('Hide whitespace changes')).not.toBeChecked();
+        await toggleSetting(page, reopened.getByLabel('Hide whitespace changes'));
+        await closeDiffSettings(page);
+
+        await expect(noActualChangeBadge(page)).toBeVisible();
     });
 
     test('"Chars To Ignore" with quotes reveals no-actual-change on cosmetic-chars file', async ({ page }) => {
-        await openSandboxRepo(page, 'cosmetics');
-        // Open the file with quote-only changes
-        const file = getFile(page, 'unstaged', 'cosmetic-chars.txt');
-        await expect(file).toBeVisible({ timeout: 5000 });
-        await file.click();
-        await page.waitForTimeout(1000);
+        await openLabFile(page, 'unstaged', 'cosmetic-chars.txt');
 
-        // Initially quote changes are real diffs, no badge in diff
-        const badgeBefore = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badgeBefore).toBe(false);
+        // Quote changes are real diffs until the quotes are ignored.
+        await expect(noActualChangeBadge(page)).toBeHidden();
 
-        // Open settings and set ignored chars to include quotes
-        await openSettingsDropdown(page);
-        const charsInput = page.locator('input[placeholder*=";\'"]');
-        await expect(charsInput).toBeVisible({ timeout: 2000 });
-        await charsInput.fill('"\'');
-        await page.waitForTimeout(500);
+        const dialog = await openDiffSettings(page);
+        await dialog.locator('input[type="text"]').fill('"\'');
 
-        // Close settings and check for the badge in the diff
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
+        await closeDiffSettings(page);
 
-        const badgeAfter = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badgeAfter).toBe(true);
+        await expect(noActualChangeBadge(page)).toBeVisible();
     });
 
     test('combined: "Chars To Ignore" + "Hide whitespace changes" on mixed file', async ({ page }) => {
-        await openSandboxRepo(page, 'cosmetics');
-        // Open the mixed file — has both real and cosmetic changes
-        const file = getFile(page, 'unstaged', 'mixed.txt');
-        await expect(file).toBeVisible({ timeout: 5000 });
-        await file.click();
-        await page.waitForTimeout(1000);
+        await openLabFile(page, 'unstaged', 'mixed.txt');
 
-        // Open settings
-        await openSettingsDropdown(page);
+        // Setting the ignored characters reloads the diff, which closes the popover, so the
+        // whitespace toggle needs a fresh one.
+        const dialog = await openDiffSettings(page);
+        await dialog.locator('input[type="text"]').fill('<>/');
+        await closeDiffSettings(page);
 
-        // Set ignored chars
-        const charsInput = page.locator('input[placeholder*=";\'"]');
-        await expect(charsInput).toBeVisible({ timeout: 2000 });
-        await charsInput.fill('<>/');
-        await page.waitForTimeout(500);
+        const reopened = await openDiffSettings(page);
+        await expect(reopened.locator('input[type="text"]')).toHaveValue('<>/');
+        await toggleSetting(page, reopened.getByLabel('Hide whitespace changes'));
 
-        // Also hide whitespace
-        const hideWsCheckbox = page.locator('label').filter({ hasText: 'Hide whitespace changes' }).locator('input[type="checkbox"]');
-        const wasHidden = await hideWsCheckbox.isChecked();
-        if (!wasHidden) {
-            await hideWsCheckbox.click({ force: true });
-            await page.waitForTimeout(500);
-        }
+        await closeDiffSettings(page);
 
-        // Close and check whether the badge appears
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-
-        // mixed.txt still has real changes (debug toggle) so badge should NOT appear
-        const badge = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badge).toBe(false);
+        // mixed.txt still has a real change, so the badge must not appear.
+        await expect(noActualChangeBadge(page)).toBeHidden();
     });
 
     test('"Show changes only" toggle changes diff rendering', async ({ page }) => {
-        await openSandboxRepo(page, 'cosmetics');
-        // Open a file with multiple hunks
-        const file = getFile(page, 'unstaged', 'whitespace-demo.txt');
-        await expect(file).toBeVisible({ timeout: 5000 });
-        await file.click();
-        await page.waitForTimeout(1000);
+        await openLabFile(page, 'unstaged', 'whitespace-demo.txt');
 
-        // Get initial diff content as baseline
         const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 3000 });
-
-        // Open settings and toggle "Show changes only"
-        await openSettingsDropdown(page);
-        const showChangesCheckbox = page.locator('label').filter({ hasText: 'Show changes only' }).locator('input[type="checkbox"]');
-        await expect(showChangesCheckbox).toBeVisible({ timeout: 2000 });
-
-        const wasChecked = await showChangesCheckbox.isChecked();
-        if (!wasChecked) {
-            await showChangesCheckbox.click({ force: true });
-            await page.waitForTimeout(500);
-        }
-
-        // Close settings
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-
-        // The diff root should still be visible
         await expect(diffRoot).toBeVisible();
 
-        // Toggle back
-        await openSettingsDropdown(page);
-        await showChangesCheckbox.click({ force: true });
-        await page.waitForTimeout(500);
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
+        const dialog = await openDiffSettings(page);
+        await expect(dialog.getByLabel('Show changes only')).not.toBeChecked();
+        await toggleSetting(page, dialog.getByLabel('Show changes only'));
+
+        await expect(page.locator('#app-error-banner p')).toBeHidden();
+        await expect(diffRoot).toBeVisible();
+
+        // The mode stuck, and turning it back off leaves the diff on screen.
+        const reopened = await openDiffSettings(page);
+        await expect(reopened.getByLabel('Show changes only')).toBeChecked();
+        await toggleSetting(page, reopened.getByLabel('Show changes only'));
+
+        await closeDiffSettings(page);
         await expect(diffRoot).toBeVisible();
     });
 
     test('real staged changes do not show no-actual-change badge', async ({ page }) => {
-        await openSandboxRepo(page, 'cosmetics');
-        // The staged cosmetics-only file actually has a real content change (comment added),
-        // so the "no actual change" badge should NOT appear
-        const file = getFile(page, 'staged', 'cosmetics-only.txt');
-        await expect(file).toBeVisible({ timeout: 5000 });
-        await file.click();
-        await page.waitForTimeout(1000);
+        // The staged cosmetics-only file holds a real content change (an added comment).
+        await openLabFile(page, 'staged', 'cosmetics-only.txt');
 
-        const badge = await noActualChangeBadgeVisibleInDiff(page);
-        expect(badge).toBe(false);
+        await expect(noActualChangeBadge(page)).toBeHidden();
     });
 });

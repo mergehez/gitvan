@@ -1,21 +1,18 @@
-import { expect, test } from '@playwright/test';
-import { openSandboxRepo } from './support/sandbox';
+import { expect, openSandboxRepo, test } from './support/sandbox';
 
 test('keeps hunk action buttons aligned with their hunks while the diff scrolls', async ({ page }) => {
     await openSandboxRepo(page, 'partial-changes');
 
     const changedFileButton = page.locator('[data-testid="file-tree-item-unstaged-second.txt"]').first();
-    await expect(changedFileButton).toBeVisible({ timeout: 5000 });
+    await expect(changedFileButton).toBeVisible();
     await changedFileButton.click();
-    await page.waitForTimeout(1000);
 
     const diffRoot = page.getByTestId('diffs-diff-editor-root');
-    await expect(diffRoot).toBeVisible({ timeout: 5000 });
+    await expect(diffRoot).toBeVisible();
 
-    const hunkButtons = diffRoot.locator('.gitvan-hunk-button');
-    await expect(hunkButtons.first()).toBeVisible({ timeout: 8000 });
+    const firstHunkButton = diffRoot.locator('.gitvan-hunk-button').first();
+    await expect(firstHunkButton).toBeVisible();
 
-    const firstHunkButton = hunkButtons.first();
     const boxBeforeScroll = await firstHunkButton.boundingBox();
     const scrollBefore = await diffRoot.evaluate((element) => element.scrollTop);
     expect(boxBeforeScroll).not.toBeNull();
@@ -23,15 +20,14 @@ test('keeps hunk action buttons aligned with their hunks while the diff scrolls'
     await diffRoot.evaluate((element) => {
         element.scrollTop += 800;
     });
-    await page.waitForTimeout(500);
-
-    const scrollAfter = await diffRoot.evaluate((element) => element.scrollTop);
-    const boxAfterScroll = await firstHunkButton.boundingBox();
-    expect(boxAfterScroll).not.toBeNull();
 
     // The diff really moved...
-    expect(scrollAfter - scrollBefore).toBeGreaterThan(400);
-    // ...and the hunk overlay moved with it instead of staying pinned to the viewport.
-    expect(boxBeforeScroll!.y - boxAfterScroll!.y).toBeGreaterThan(300);
-    await expect(hunkButtons.first()).toBeAttached();
+    await expect.poll(async () => (await diffRoot.evaluate((element) => element.scrollTop)) - scrollBefore).toBeGreaterThan(400);
+
+    // ...and the overlay followed it instead of staying pinned to the viewport. Waiting on the
+    // moved position is what the old fixed sleep was standing in for.
+    const movedBy = async () => boxBeforeScroll!.y - ((await firstHunkButton.boundingBox())?.y ?? boxBeforeScroll!.y);
+    await expect.poll(movedBy).toBeGreaterThan(300);
+
+    await expect(firstHunkButton).toBeAttached();
 });

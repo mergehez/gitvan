@@ -1,29 +1,55 @@
-import { expect, test } from '@playwright/test';
-import { openSandboxRepo, reopenSandboxRepo } from './support/sandbox';
+import type { Locator, Page } from '@playwright/test';
+import { expect, openSandboxRepo, test } from './support/sandbox';
 
 test.describe('partial hunk actions', () => {
-    // test.setTimeout(10_000);
-
-    async function getError(page: any) {
-        const errorBanner = page.locator('#app-error-banner p');
-        return (await errorBanner.isVisible()) ? await errorBanner.textContent() : '';
+    async function expectNoErrorBanner(page: Page) {
+        await expect(page.locator('#app-error-banner p')).toBeHidden();
     }
 
-    async function getHunkButtons(diffRoot: any) {
+    async function waitForStableCount(locator: Locator): Promise<number> {
+        let previous = -1;
+
+        // Hunk buttons are appended as the diff renders, so a single count is a moving target.
+        await expect
+            .poll(async () => {
+                const current = await locator.count();
+                const settled = current > 0 && current === previous;
+                previous = current;
+                return settled;
+            })
+            .toBe(true);
+
+        return await locator.count();
+    }
+
+    async function getHunkButtons(diffRoot: Locator) {
         const hunkButtons = diffRoot.locator('.gitvan-hunk-button');
-        const initialCount = await hunkButtons.count();
+        await expect(hunkButtons.first()).toBeVisible();
+
         return {
+            locator: hunkButtons,
             get: (index: number) => hunkButtons.nth(index),
             async getDataHunkPatch(index: number) {
-                return (await hunkButtons.nth(index).getAttribute('data-hunk-patch')).split('\n').slice(5).join('\n');
+                const patch = await hunkButtons.nth(index).getAttribute('data-hunk-patch');
+                return (patch ?? '').split('\n').slice(5).join('\n');
             },
-            initialCount,
-            getCount: async () => await hunkButtons.count(),
+            count: await waitForStableCount(hunkButtons),
         };
     }
 
-    function getFile(page: any, section: 'staged' | 'unstaged', fileName: string) {
+    function getFile(page: Page, section: 'staged' | 'unstaged', fileName: string) {
         return page.locator(`[data-testid="file-tree-item-${section}-${fileName}"]`).first();
+    }
+
+    async function openFile(page: Page, section: 'staged' | 'unstaged', fileName: string): Promise<Locator> {
+        const file = getFile(page, section, fileName);
+        await expect(file).toBeVisible();
+        await file.click();
+
+        const diffRoot = page.getByTestId('diffs-diff-editor-root');
+        await expect(diffRoot).toBeVisible();
+
+        return diffRoot;
     }
 
     test('reset sandboxes button works', async ({ page }) => {
@@ -31,252 +57,123 @@ test.describe('partial hunk actions', () => {
     });
 
     test('shows hunk action buttons for unstaged file', async ({ page }) => {
-        await reopenSandboxRepo(page, 'partial-changes');
+        await openSandboxRepo(page, 'partial-changes');
 
-        // Click on the unstaged file
-        const unstagedFile = getFile(page, 'unstaged', 'second.txt');
-        await expect(unstagedFile).toBeVisible({ timeout: 5000 });
-        await unstagedFile.click();
-        await page.waitForTimeout(500);
+        const diffRoot = await openFile(page, 'unstaged', 'second.txt');
 
-        // The diff editor should be visible
-        const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
-        // Wait for hunk buttons to appear inside the shadow DOM
-        const hunkButtons = diffRoot.locator('.gitvan-hunk-button');
-        await expect(hunkButtons.first()).toBeVisible({ timeout: 8000 });
-
-        // Count hunk buttons — should be at least 3 (modify, delete, add)
-        const btnCount = await hunkButtons.count();
-        expect(btnCount).toBeGreaterThanOrEqual(3);
+        // Modify, delete and add hunks are all present in this lab's file.
+        expect((await getHunkButtons(diffRoot)).count).toBeGreaterThanOrEqual(3);
     });
 
     test('hovering a hunk button shows the action popover', async ({ page }) => {
-        await reopenSandboxRepo(page, 'partial-changes');
+        await openSandboxRepo(page, 'partial-changes');
 
-        // Open unstaged file
-        const unstagedFile = getFile(page, 'unstaged', 'second.txt');
-        await expect(unstagedFile).toBeVisible({ timeout: 5000 });
-        await unstagedFile.click();
-        await page.waitForTimeout(1000);
+        const diffRoot = await openFile(page, 'unstaged', 'second.txt');
+        const hunkButton = (await getHunkButtons(diffRoot)).get(0);
 
-        const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
-        // Hover the first hunk button
-        const hunkButton = diffRoot.locator('.gitvan-hunk-button').first();
-        await expect(hunkButton).toBeVisible({ timeout: 8000 });
         await hunkButton.hover();
-        await page.waitForTimeout(500);
 
-        // The actions popover should appear inside the shadow DOM
-        const actionsPopover = diffRoot.locator('.gitvan-hunk-actions');
-        await expect(actionsPopover).toBeVisible({ timeout: 3000 });
+        await expect(diffRoot.locator('.gitvan-hunk-actions')).toBeVisible();
     });
 
     test('stages a single hunk from the unstaged file', async ({ page }) => {
-        await reopenSandboxRepo(page, 'partial-changes');
+        await openSandboxRepo(page, 'partial-changes');
 
-        const unstagedFile = getFile(page, 'unstaged', 'second.txt');
-        await expect(unstagedFile).toBeVisible({ timeout: 5000 });
-        await unstagedFile.click();
-        await page.waitForTimeout(1000);
-
-        const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
+        const diffRoot = await openFile(page, 'unstaged', 'second.txt');
         const hunkButtons = await getHunkButtons(diffRoot);
 
-        // Hover first hunk button to reveal actions
-        const hunkButton = hunkButtons.get(0);
-        await expect(hunkButton).toBeVisible({ timeout: 8000 });
-        await hunkButton.hover();
-        await page.waitForTimeout(500);
-
-        // Click "Stage Change" in the popover
+        await hunkButtons.get(0).hover();
         const stageBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /stage change/i });
-        await expect(stageBtn).toBeVisible({ timeout: 3000 });
+        await expect(stageBtn).toBeVisible();
         await stageBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-
-        // After staging one hunk, the unstaged diff should have fewer hunks
-        expect(await hunkButtons.getCount()).toBe(hunkButtons.initialCount - 1);
+        await expectNoErrorBanner(page);
+        await expect(hunkButtons.locator).toHaveCount(hunkButtons.count - 1);
     });
 
     test('discards a single hunk from the unstaged file', async ({ page }) => {
-        await reopenSandboxRepo(page, 'partial-changes');
+        await openSandboxRepo(page, 'partial-changes');
 
-        const unstagedFile = getFile(page, 'unstaged', 'second.txt');
-        await expect(unstagedFile).toBeVisible({ timeout: 5000 });
-        await unstagedFile.click();
-        await page.waitForTimeout(1000);
-
-        const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
+        const diffRoot = await openFile(page, 'unstaged', 'second.txt');
         const hunkButtons = await getHunkButtons(diffRoot);
 
-        // Hover second hunk button to reveal actions
-        const hunkButton = hunkButtons.get(1);
-        await expect(hunkButton).toBeVisible({ timeout: 8000 });
-        await hunkButton.hover();
-        await page.waitForTimeout(500);
-
-        // Click "Discard Change"
+        await hunkButtons.get(1).hover();
         const discardBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /discard change/i });
-        await expect(discardBtn).toBeVisible({ timeout: 3000 });
+        await expect(discardBtn).toBeVisible();
         await discardBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-
-        // After discarding one hunk, the remaining count should decrease
-        expect(await hunkButtons.getCount()).toBe(hunkButtons.initialCount - 1);
+        await expectNoErrorBanner(page);
+        await expect(hunkButtons.locator).toHaveCount(hunkButtons.count - 1);
     });
 
     test('unstages a single hunk from the staged file', async ({ page }) => {
-        await reopenSandboxRepo(page, 'partial-changes');
+        await openSandboxRepo(page, 'partial-changes');
 
-        // Open the staged file
-        const stagedFile = getFile(page, 'staged', 'first.txt');
-        await expect(stagedFile).toBeVisible({ timeout: 5000 });
-        await stagedFile.click();
-        await page.waitForTimeout(1000);
-
-        const diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
+        const diffRoot = await openFile(page, 'staged', 'first.txt');
         const hunkButtons = await getHunkButtons(diffRoot);
-        const initialCount = hunkButtons.initialCount;
-        const getCount = hunkButtons.getCount;
 
-        // Hover first hunk button to reveal actions
-        const hunkButton = hunkButtons.get(0);
-        await expect(hunkButton).toBeVisible({ timeout: 8000 });
-        await hunkButton.hover();
-        await page.waitForTimeout(500);
-
-        // Click "Unstage Change"
+        await hunkButtons.get(0).hover();
         const unstageBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /unstage change/i });
-        await expect(unstageBtn).toBeVisible({ timeout: 3000 });
+        await expect(unstageBtn).toBeVisible();
         await unstageBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-
-        // After unstaging one hunk, the staged diff should have fewer hunks
-        expect(await getCount()).toBe(initialCount - 1);
+        await expectNoErrorBanner(page);
+        await expect(hunkButtons.locator).toHaveCount(hunkButtons.count - 1);
     });
 
     test('stages the second and fourth hunks, then unstages the last hunk from the staged file', async ({ page }) => {
         await openSandboxRepo(page, 'partial-changes');
 
-        // ── Step 1: Stage the second and fourth hunks from unstaged.txt ──
-        const unstagedFile = getFile(page, 'unstaged', 'stub.txt');
-        await expect(unstagedFile).toBeVisible({ timeout: 5000 });
-        await unstagedFile.click();
-        await page.waitForTimeout(1000);
-
-        let diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
-        // --- Stage the 2nd hunk (index 1) ---
+        // ── Step 1: stage the second and fourth hunks of stub.txt ──
+        let diffRoot = await openFile(page, 'unstaged', 'stub.txt');
         let unstagedHunks = await getHunkButtons(diffRoot);
-        let unstagedCount = unstagedHunks.initialCount;
-
         const fourthHunkPatch = await unstagedHunks.getDataHunkPatch(3);
         expect(fourthHunkPatch).toBeTruthy();
 
-        const secondHunk = unstagedHunks.get(1);
-        await expect(secondHunk).toBeVisible({ timeout: 8000 });
-        await secondHunk.hover();
-        await page.waitForTimeout(500);
-
+        await unstagedHunks.get(1).hover();
         let stageBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /stage change/i });
-        await expect(stageBtn).toBeVisible({ timeout: 3000 });
+        await expect(stageBtn).toBeVisible();
         await stageBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-        expect(await unstagedHunks.getCount()).toBe(unstagedCount - 1);
+        await expectNoErrorBanner(page);
+        await expect(unstagedHunks.locator).toHaveCount(unstagedHunks.count - 1);
 
-        // --- Stage the 4th hunk (now at index 2, since 2nd was removed) ---
+        // ── The fourth hunk is now at index 2, because the second one was staged away ──
         unstagedHunks = await getHunkButtons(diffRoot);
-        unstagedCount = unstagedHunks.initialCount;
-
-        const fourthHunk = unstagedHunks.get(2);
-        await expect(fourthHunk).toBeVisible({ timeout: 8000 });
         const fourthHunkPatchAfter = await unstagedHunks.getDataHunkPatch(2);
-        expect(fourthHunkPatchAfter).toBeTruthy();
         expect(fourthHunkPatchAfter).toBe(fourthHunkPatch);
-        await fourthHunk.hover();
-        await page.waitForTimeout(500);
 
+        await unstagedHunks.get(2).hover();
         stageBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /stage change/i });
-        await expect(stageBtn).toBeVisible({ timeout: 3000 });
+        await expect(stageBtn).toBeVisible();
         await stageBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-        expect(await unstagedHunks.getCount()).toBe(unstagedCount - 1);
+        await expectNoErrorBanner(page);
+        await expect(unstagedHunks.locator).toHaveCount(unstagedHunks.count - 1);
 
-        // ── Step 2: Now open the staged file and unstage the last hunk ──
-        const stagedFile = getFile(page, 'staged', 'stub.txt');
-        await expect(stagedFile).toBeVisible({ timeout: 5000 });
-        await stagedFile.click();
-        await page.waitForTimeout(1000);
-
-        diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
+        // ── Step 2: unstage the last hunk of the staged file ──
+        diffRoot = await openFile(page, 'staged', 'stub.txt');
         const stagedHunks = await getHunkButtons(diffRoot);
-        const stagedInitialCount = stagedHunks.initialCount;
-        expect(stagedInitialCount).toBe(2);
+        expect(stagedHunks.count).toBe(2);
 
-        // Hover the last hunk button and click "Unstage Change"
-        const lastHunk = stagedHunks.get(stagedInitialCount - 1);
-        await expect(lastHunk).toBeVisible({ timeout: 8000 });
-        await lastHunk.hover();
-        await page.waitForTimeout(500);
-
+        await stagedHunks.get(stagedHunks.count - 1).hover();
         const unstageBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /unstage change/i });
-        await expect(unstageBtn).toBeVisible({ timeout: 3000 });
+        await expect(unstageBtn).toBeVisible();
         await unstageBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
+        await expectNoErrorBanner(page);
+        await expect(stagedHunks.locator).toHaveCount(1);
 
-        // After unstaging the last hunk, the staged file should remain with 1 hunk
-        // Verify by checking the staged file still has one hunk
-        expect(await stagedHunks.getCount()).toBe(stagedInitialCount - 1);
-
-        // let's also discard a hunk from the unstaged file to ensure it works after staging/unstaging
-        const unstagedFile2 = getFile(page, 'unstaged', 'stub.txt');
-        await expect(unstagedFile2).toBeVisible({ timeout: 5000 });
-        await unstagedFile2.click();
-        await page.waitForTimeout(1000);
-
-        diffRoot = page.getByTestId('diffs-diff-editor-root');
-        await expect(diffRoot).toBeVisible({ timeout: 5000 });
-
+        // ── Step 3: discarding still works after the staging round-trip ──
+        diffRoot = await openFile(page, 'unstaged', 'stub.txt');
         const unstagedHunks2 = await getHunkButtons(diffRoot);
-        const unstagedCount2 = unstagedHunks2.initialCount;
 
-        // Hover the first hunk button and click "Discard Change"
-        const toDiscard = unstagedHunks2.get(5);
-        await expect(toDiscard).toBeVisible({ timeout: 8000 });
-        await toDiscard.hover();
-        await page.waitForTimeout(500);
-
+        await unstagedHunks2.get(5).hover();
         const discardBtn = diffRoot.locator('.gitvan-hunk-actions button').filter({ hasText: /discard change/i });
-        await expect(discardBtn).toBeVisible({ timeout: 3000 });
+        await expect(discardBtn).toBeVisible();
         await discardBtn.click();
-        await page.waitForTimeout(2000);
 
-        expect(await getError(page)).toBeFalsy();
-        expect(await unstagedHunks2.getCount()).toBe(unstagedCount2 - 1);
+        await expectNoErrorBanner(page);
+        await expect(unstagedHunks2.locator).toHaveCount(unstagedHunks2.count - 1);
     });
 });
