@@ -70,6 +70,9 @@ async function createBranch() {
     } else {
         await repo.value.createRemoteBranch(newBranchName.value);
     }
+
+    isAddBranchOpen.value = false;
+    newBranchName.value = '';
 }
 </script>
 
