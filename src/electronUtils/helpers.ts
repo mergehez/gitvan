@@ -11,11 +11,22 @@ type Config = {
     dbFileName: string;
 };
 
+/** Ignores empty or invalid overrides so a typo'd env var cannot silently move the app to a random port. */
+function resolvePort(override: string | undefined, fallback: number): number {
+    const parsed = Number.parseInt(override ?? '', 10);
+    return Number.isInteger(parsed) && parsed > 0 && parsed < 65_536 ? parsed : fallback;
+}
+
+const vuePort = resolvePort(process.env.GITVAN_VUE_PORT, pkg.config.vuePort);
+const apiPort = resolvePort(process.env.GITVAN_API_PORT, pkg.config.apiPort);
+
 export const appConfig = {
     ...(pkg.config as Config),
+    vuePort,
+    apiPort,
     projectName: pkg.name,
-    vueBaseUrl: `http://127.0.0.1:${pkg.config.vuePort}`,
-    apiBaseUrl: `http://127.0.0.1:${pkg.config.apiPort}`,
+    vueBaseUrl: `http://127.0.0.1:${vuePort}`,
+    apiBaseUrl: `http://127.0.0.1:${apiPort}`,
 };
 
 /** Backstop above the longest git timeout, so a lost backend answer never blocks the main process forever. */

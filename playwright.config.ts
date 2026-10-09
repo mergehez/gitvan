@@ -1,12 +1,23 @@
+import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { defineConfig } from '@playwright/test';
-import { appConfig } from './src/electronUtils/helpers.ts';
 
-// A dedicated database per browser-spec run. The specs reset the sandbox labs, which deletes
-// and re-adds repositories, so pointing them at the real app database would mutate the
-// developer's own repositories and inherit whatever settings they last used.
-const e2eDataDir = process.env.PLAYWRIGHT_APP_DATA_DIR || join(tmpdir(), 'gitvan-playwright-data');
+// Browser specs never share the ports a developer's `bun run dev` uses, so a server started by
+// hand can never be adopted — which matters, because that server holds the real app database.
+const vuePort = Number.parseInt(process.env.PLAYWRIGHT_VUE_PORT ?? '', 10) || 5277;
+const apiPort = Number.parseInt(process.env.PLAYWRIGHT_API_PORT ?? '', 10) || 5276;
+const vueBaseUrl = `http://127.0.0.1:${vuePort}`;
+const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
+
+// A fresh database for every run. Reusing one path let settings a spec changed — ignored
+// characters, whitespace handling, the active view — survive into the next run and fail it.
+const e2eDataDir = process.env.PLAYWRIGHT_APP_DATA_DIR || mkdtempSync(join(tmpdir(), 'gitvan-playwright-'));
+
+// globalTeardown runs in this same process, so it reads the directory we created here.
+process.env.GITVAN_E2E_DATA_DIR = e2eDataDir;
+// Support files run in the worker, so they read the backend they must talk to from here too.
+process.env.PLAYWRIGHT_API_BASE = apiBaseUrl;
 
 export default defineConfig({
     testDir: './playwright',
@@ -17,8 +28,9 @@ export default defineConfig({
     // so running files in parallel makes them fight over that shared state.
     fullyParallel: false,
     workers: 1,
+    globalTeardown: './playwright/support/teardown.ts',
     use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || appConfig.vueBaseUrl,
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || vueBaseUrl,
         headless: true,
     },
     webServer: {
@@ -27,9 +39,13 @@ export default defineConfig({
         command: 'bun run dev',
         // The UI port answers before the backend is mounted, and the app cannot bootstrap
         // without it, so wait on the backend health endpoint instead.
-        url: `${appConfig.apiBaseUrl}/health`,
+        url: `${apiBaseUrl}/health`,
         reuseExistingServer: true,
         timeout: 120_000,
-        env: { APP_DATA_DIR: e2eDataDir },
+        env: {
+            APP_DATA_DIR: e2eDataDir,
+            GITVAN_VUE_PORT: String(vuePort),
+            GITVAN_API_PORT: String(apiPort),
+        },
     },
 });
