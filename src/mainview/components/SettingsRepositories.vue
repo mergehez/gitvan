@@ -237,7 +237,7 @@ function isSelected(repositoryId: number) {
         <aside class="flex flex-col py-4">
             <div class="flex items-center gap-3 pb-3">
                 <h1 class="text-xl font-semibold text-white">Groups</h1>
-                <IconButton severity="secondary" @click="openCreateGroup" icon="icon-[mdi--plus]" />
+                <IconButton severity="secondary" data-testid="settings-add-group" @click="openCreateGroup" icon="icon-[mdi--plus]" />
             </div>
 
             <div v-if="groups.length === 0" class="rounded-lg border border-dashed border-white/10 px-4 py-4 text-sm text-x7">No groups created yet.</div>
