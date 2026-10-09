@@ -846,6 +846,7 @@ onUnmounted(() => {
                     <div class="flex items-center gap-1">
                         <input
                             v-model="repo.commitForm.summary"
+                            data-testid="commit-summary-input"
                             :disabled="!repo.changes?.staged.length && !repo.commitForm.amend"
                             :placeholder="repo.commitForm.amend ? 'Amend message' : repo.suggestedCommitSummary() || 'Message (⌘Enter to commit on main)'"
                             @keydown.enter.meta="onInputEnter"
@@ -871,6 +872,7 @@ onUnmounted(() => {
                         severity="primary"
                         class="mt-1 w-full"
                         small
+                        data-testid="commit-submit"
                         :disabled="!repo.canCommit()"
                         v-loading="tasks.isOperationRunning('commitRepo')"
                         @click="repo.commitRepository()"
@@ -936,6 +938,7 @@ onUnmounted(() => {
                                 <IconButton
                                     v-if="item.isStaged"
                                     severity="raised"
+                                    data-testid="changes-amend-latest"
                                     v-tooltip="'Amend latest commit'"
                                     :disabled="repo.commitForm.amend"
                                     @click="repo.beginAmendSelectedCommit()"
@@ -944,6 +947,7 @@ onUnmounted(() => {
                                 <IconButton
                                     v-else
                                     severity="raised"
+                                    data-testid="changes-discard-all"
                                     v-show="item.children.length > 0"
                                     v-tooltip="'Discard all changes'"
                                     v-loading="tasks.isOperationRunning('discardAllChanges')"
