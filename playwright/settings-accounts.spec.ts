@@ -75,6 +75,24 @@ test.describe('settings accounts', () => {
         await expect(create).toBeEnabled();
     });
 
+    test('saves the OAuth provider settings the device sign-in needs', async ({ page }) => {
+        const modal = await openSettingsAccounts(page);
+        await modal.getByTestId('settings-create-account').click();
+        await modal.locator('select').nth(1).selectOption('oauth');
+
+        // GitHub sign-in cannot start without a registered client id.
+        const signIn = modal.getByRole('button', { name: 'Start sign-in' });
+        await expect(signIn).toBeDisabled();
+
+        await modal.getByPlaceholder('GitHub OAuth client ID').fill('spec-client-id');
+        await expect(signIn).toBeEnabled();
+
+        await modal.getByRole('button', { name: 'Save OAuth settings' }).click();
+
+        await expect(page.getByText('OAuth settings saved.')).toBeVisible();
+        await expect(modal.getByPlaceholder('GitHub OAuth client ID')).toHaveValue('spec-client-id');
+    });
+
     test('deletes an account behind a confirmation', async ({ page }) => {
         const modal = await openSettingsAccounts(page);
         await createSystemGitAccount(page, modal, 'Spec Doomed');

@@ -125,6 +125,24 @@ async function resetSpecAccounts() {
     }
 }
 
+type OAuthProviderSettings = {
+    githubClientId: string;
+    gitlabClientId: string;
+    gitlabHost: string;
+};
+
+/** Puts the OAuth client ids a spec saved back to the empty defaults. */
+async function resetOAuthProviderSettings() {
+    const current = await callApi<OAuthProviderSettings>('getOAuthProviderSettings');
+    const isDefault = current.githubClientId === '' && current.gitlabClientId === '' && current.gitlabHost === 'gitlab.com';
+
+    if (isDefault) {
+        return;
+    }
+
+    await callApi('updateOAuthProviderSettings', { settings: { githubClientId: '', gitlabClientId: '', gitlabHost: 'gitlab.com' } });
+}
+
 type BootstrapState = {
     repos: Array<{ id: number; groupId?: number | null }>;
     groups: Array<{ id: number; name: string }>;
@@ -180,6 +198,7 @@ export type OpenSandboxRepoOptions = {
 export async function openSandboxRepo(page: Page, name: string, options: OpenSandboxRepoOptions = {}) {
     await resetEditorSettings();
     await resetSpecAccounts();
+    await resetOAuthProviderSettings();
     await resetRepoGroups();
     await page.goto('/');
 
