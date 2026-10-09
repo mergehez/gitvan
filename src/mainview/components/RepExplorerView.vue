@@ -118,6 +118,7 @@ async function onCommitSelection(event: Event) {
             <label class="flex items-center gap-2 text-xs text-white/65">
                 <span class="shrink-0 uppercase opacity-70">Snapshot</span>
                 <select
+                    data-testid="explorer-commit-select"
                     class="max-w-90 rounded border border-white/20 bg-x1 px-1.5 py-0.5 text-xs text-white outline-none"
                     :value="repo.explorerCommitSha"
                     @change="onCommitSelection"
@@ -168,7 +169,7 @@ async function onCommitSelection(event: Event) {
 
                 <div v-else class="flex h-full min-h-0 flex-col">
                     <div class="flex items-center border-b border-x5 px-2 py-1.5 text-xs font-medium gap-1">
-                        <div class="line-clamp-1 flex-1 text-white">{{ repo.currCommittedFile.path }}</div>
+                        <div class="line-clamp-1 flex-1 text-white" data-testid="explorer-file-title">{{ repo.currCommittedFile.path }}</div>
                         <span class="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/70">{{ formatBytes(repo.currCommittedFile.sizeBytes) }}</span>
                         <MonacoEditorSettingsButton v-if="!repo.currCommittedFile.previewMessage && !repo.currCommittedFile.preview?.kind" hide-diff-options />
                     </div>
