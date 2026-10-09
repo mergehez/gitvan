@@ -971,8 +971,14 @@ export const app = {
             throw new Error('The selected account could not be found.');
         }
 
+        try {
+            await deleteAccountSecret(ps.accountId);
+        } catch {
+            // A keychain entry left behind by another app identity cannot be deleted here, and an
+            // orphaned secret is no reason to keep an account the user asked to remove.
+        }
+
         db.removeAccount(ps.accountId);
-        await deleteAccountSecret(ps.accountId);
         return buildBootstrap();
     },
     reorderAccount: async (ps: { accountId: number; toIndex: number }) => {
