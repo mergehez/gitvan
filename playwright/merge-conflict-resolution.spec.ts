@@ -109,8 +109,14 @@ test.describe('merge conflict resolution', () => {
         const commit = page.getByTestId('merge-conflict-commit');
         await expect(commit).toBeDisabled();
 
+        // Each resolution rebuilds the list, so the next click waits for its file to move over
+        // rather than landing on a card the re-render has already replaced.
         await page.getByTestId('merge-conflict-mark-resolved-notes.md').click();
+        await expect(page.getByTestId('merge-conflict-merged-notes.md')).toBeVisible();
+
         await page.getByTestId('merge-conflict-mark-resolved-config.json').click();
+        await expect(page.getByTestId('merge-conflict-merged-config.json')).toBeVisible();
+
         await resolveStoryInline(page);
 
         await expect(resolver(page)).toContainText('All conflicts are resolved');
