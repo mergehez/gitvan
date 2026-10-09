@@ -116,7 +116,8 @@ export const historyGit = {
         const needsWholeUnpushedSet = Boolean(search || path);
 
         const [output, unpushedCommits] = await Promise.all([
-            runGit(logArgs, repoPath),
+            // A repository that has no commits yet has no history to walk, not a failure.
+            runGit(logArgs, repoPath, [0, 128]),
             needsWholeUnpushedSet ? getUnpushedCommitSet(repoPath) : getUnpushedCommitSet(repoPath, skip + limit + 1),
         ]);
 

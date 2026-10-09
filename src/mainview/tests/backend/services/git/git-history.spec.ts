@@ -283,3 +283,12 @@ describe('historyGit commit detail and file diffs', () => {
         expect(diff.entry.modified).toBe('');
     });
 });
+
+describe('historyGit.getRepoHistory without any commits', () => {
+    it('reports an empty history instead of failing the walk', async () => {
+        // A repository created but not committed to yet is a normal starting point.
+        const repoPath = createRepoWithCommits(0);
+
+        await expect(historyGit.getRepoHistory(repoPath, { limit: 10 })).resolves.toMatchObject({ commits: [], hasMore: false });
+    });
+});

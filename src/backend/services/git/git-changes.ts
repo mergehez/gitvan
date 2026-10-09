@@ -94,8 +94,11 @@ export const changesGit = {
                 }
             }
 
+            // A branch with no commits yet publishes nothing, and git reports that with exit 128.
             const publishableCommits =
-                !hasUpstream && branch && branch !== 'Detached HEAD' ? Number.parseInt(await runGit(['rev-list', '--count', 'HEAD', '--not', '--remotes'], repoPath), 10) || 0 : 0;
+                !hasUpstream && branch && branch !== 'Detached HEAD'
+                    ? Number.parseInt(await runGit(['rev-list', '--count', 'HEAD', '--not', '--remotes'], repoPath, [0, 128]), 10) || 0
+                    : 0;
 
             return {
                 branch,

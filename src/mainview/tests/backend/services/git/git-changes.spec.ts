@@ -164,6 +164,21 @@ describe('changesGit conflicted index', () => {
         expect(changes.staged[0]?.hasConflictMarkers).toBeUndefined();
     });
 
+    it('reports a repository without commits as a clean status, not an error', async () => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'gitvan-unborn-'));
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        runGit(repoPath, ['init', '-b', 'main']);
+        writeFileSync(join(repoPath, 'story.txt'), 'base\n', 'utf8');
+
+        const status = await changesGit.getRepoSidebarStatus(repoPath);
+
+        expect(status.error).toBeUndefined();
+        expect(status.branch).toBe('main');
+        expect(status.publishableCommits).toBe(0);
+        expect(status.changedFiles).toBe(1);
+    });
+
     it('parses leftover conflict markers out of git check output', () => {
         const output = [
             'Data/Core/EezyToolSession.cs:340: trailing whitespace.',
