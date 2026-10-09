@@ -63,17 +63,34 @@ Examples:
 - Introduce shared helpers only when they reduce repeated logic in active use.
 - Keep public data shapes stable unless there is a strong reason to change them.
 
-## Testing And Validation
+## Tests
 
-For non-trivial changes:
+- Never set timeouts for tests greater than 10 seconds. If something takes longer, that means it is a bug:
+  instead of increasing the timeout, investigate and fix the issue causing the test to take longer than expected.
+  Setting huge timeouts makes your work slower and the whole test suite less reliable.
+    - Try to use the least possible timeout necessary for the test to pass.
+    - When something times out, first check if you added a visibility check for the element you are interacting with.
+    - If a really large test really requires a longer timeout, do not blindly set a huge value. Just increase it to the minimum necessary.
+- Never blindly add inline timeouts (e.g. `toBeVisible({timeout: 10_000})`). This almost never fixes the real issue.
+- Never create temporary tests if a test can be used later. We need to integrate it properly into the test suite
+  rather than leaving it as a throwaway or provisional test.
+- Every user-facing feature gets a browser spec under `./playwright/` or `./src/mainview/tests/e2e/`, however small it is — a new control, a dialog, a field, a public page's behaviour. A server test says the endpoint answers; only the browser says the screen actually draws the control, wires it to that endpoint and shows what came back.
 
-- Run focused Vitest coverage for the touched composables/components.
-- Run `vp build` and `vp check --fix` after boundary or UI refactors.
+## Git
 
-When changing orchestration:
+- After finishing a task, commit the changes with clear and descriptive messages.
+    - No batch commits; each commit should represent a single logical change unless it requires too much hunting
+      for related changes.
+    - No huge commit messages; max 72 characters. If you need to provide more details, include them in the body
+      of the commit message.
+    - Use imperative mood in commit messages (e.g. "fix bug" instead of "fixed bug" or "fixes bug").
+    - Avoid vague commit messages like "update" or "changes"; be specific about what was changed and why.
+- You are allowed to commit changes on behalf of the user if they are not in-progress and have been reviewed.
 
-- Verify stale-default, cancel, fallback, and error-path behavior stays the same.
-- Verify context-menu actions and modal flows still expose the same user-facing options.
+## Comments
+
+- Do not write huge comments; keep them concise and relevant to the code they describe. My experience shows that
+  AI agents tend to write overly verbose comments if not guided properly.
 
 ## Change Priorities
 
