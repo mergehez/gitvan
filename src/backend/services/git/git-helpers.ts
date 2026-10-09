@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import type { ChangeStatus, CommitFileEntry } from '../../../shared/types.js';
-import { runGit, runGitBuffer, runGitWithInput } from './git-common.js';
+import { runGit, runGitBuffer, runGitBufferWithInput, runGitWithInput } from './git-common.js';
 
 const previewByteLimit = 1024 * 1024;
 export const fileTooBigPreviewMessage = 'File too big to preview';
@@ -61,6 +61,71 @@ export async function readGitRevisionFileSize(repoPath: string, revisionPath: st
     const rawSize = await runGit(['cat-file', '-s', revisionPath], repoPath, [0, 128]);
     const parsedSize = Number.parseInt(rawSize, 10);
     return Number.isFinite(parsedSize) ? parsedSize : undefined;
+}
+
+/**
+ * Sizes for many blobs through one `cat-file --batch-check` process, so a per-file
+ * cosmetic check costs no more processes than a single-file one.
+ */
+export async function readGitObjectSizes(repoPath: string, shas: string[]): Promise<Map<string, number | undefined>> {
+    const sizes = new Map<string, number | undefined>();
+    if (!shas.length) {
+        return sizes;
+    }
+
+    const output = await runGitWithInput(['cat-file', '--batch-check'], repoPath, `${shas.join('\n')}\n`, [0, 128]);
+    const lines = output.split('\n');
+
+    shas.forEach((sha, index) => {
+        const line = lines[index]?.trim() ?? '';
+        if (!line || line.endsWith(' missing') || line.endsWith(' ambiguous')) {
+            sizes.set(sha, undefined);
+            return;
+        }
+
+        const size = Number.parseInt(line.split(' ').pop() ?? '', 10);
+        sizes.set(sha, Number.isFinite(size) ? size : undefined);
+    });
+
+    return sizes;
+}
+
+/** Contents for many blobs through one `cat-file --batch` process. */
+export async function readGitObjectContents(repoPath: string, shas: string[]): Promise<Map<string, string>> {
+    const contents = new Map<string, string>();
+    if (!shas.length) {
+        return contents;
+    }
+
+    // The batch header carries a byte size, so the records have to be sliced on bytes
+    // rather than on a decoded string, which miscounts every multibyte character.
+    const output = await runGitBufferWithInput(['cat-file', '--batch'], repoPath, `${shas.join('\n')}\n`, [0, 128]);
+    let cursor = 0;
+
+    for (const sha of shas) {
+        const headerEnd = output.indexOf(0x0a, cursor);
+        if (headerEnd === -1) {
+            contents.set(sha, '');
+            continue;
+        }
+
+        const header = output.subarray(cursor, headerEnd).toString('utf8');
+        cursor = headerEnd + 1;
+        const fields = header.split(' ');
+
+        // Missing and ambiguous objects are reported in place of the object header.
+        if (fields.length < 3 || header.endsWith(' missing') || header.endsWith(' ambiguous')) {
+            contents.set(sha, '');
+            continue;
+        }
+
+        const size = Number.parseInt(fields[2] ?? '', 10) || 0;
+        contents.set(sha, output.subarray(cursor, cursor + size).toString('utf8'));
+        // `--batch` appends a newline after the object contents.
+        cursor += size + 1;
+    }
+
+    return contents;
 }
 
 export function readWorkingTreeFile(absolutePath: string) {
@@ -309,39 +374,53 @@ export function parsePorcelainTrackedEntries(output: string) {
     return entries;
 }
 
-export function parseNameStatusOutput(output: string) {
+export type RawDiffEntry = {
+    path: string;
+    previousPath: string | undefined;
+    status: ChangeStatus;
+    /** Blob on the left side of the diff (`HEAD` for staged, the index for unstaged). */
+    oldSha: string | undefined;
+    /** Blob on the right side; absent when the right side is the working tree. */
+    newSha: string | undefined;
+};
+
+/**
+ * Parses `git diff --raw -z` records, which carry the blob shas the cosmetic
+ * comparison needs in the same pass that lists the paths.
+ */
+export function parseRawDiffOutput(output: string) {
     const parts = output.split('\0');
-    const entries: Array<{ path: string; previousPath: string | undefined; status: ChangeStatus }> = [];
+    const entries: RawDiffEntry[] = [];
     let index = 0;
 
     while (index < parts.length) {
-        const token = parts[index++];
-        if (!token) {
+        const header = parts[index++];
+        if (!header) {
             continue;
         }
 
-        const code = token[0] ?? '';
-        if (code === 'R' || code === 'C') {
-            const previousPath = parts[index++] ?? '';
-            const path = parts[index++] ?? '';
-            if (path) {
-                entries.push({
-                    path,
-                    previousPath: previousPath || undefined,
-                    status: mapNameStatusCode(token),
-                });
-            }
+        // :<old_mode> <new_mode> <old_sha> <new_sha> <status>
+        const fields = header.split(' ');
+        if (fields.length < 5) {
             continue;
         }
 
-        const path = parts[index++] ?? '';
-        if (path) {
-            entries.push({
-                path,
-                previousPath: undefined,
-                status: mapNameStatusCode(token),
-            });
+        const status = mapNameStatusCode(fields[4]);
+        const renamesOrCopies = status === 'renamed' || status === 'copied';
+        const firstPath = parts[index++] ?? '';
+        const path = renamesOrCopies ? (parts[index++] ?? '') : firstPath;
+
+        if (!path) {
+            continue;
         }
+
+        entries.push({
+            path,
+            previousPath: renamesOrCopies ? firstPath || undefined : undefined,
+            status,
+            oldSha: normalizeRawSha(fields[2]),
+            newSha: normalizeRawSha(fields[3]),
+        });
     }
 
     return entries;
@@ -537,6 +616,14 @@ function mapNameStatusCode(code: string | undefined): ChangeStatus {
 
 function hasVisiblePorcelainChange(xy: string) {
     return (xy[0] && xy[0] !== '.') || (xy[1] && xy[1] !== '.');
+}
+
+function normalizeRawSha(sha: string | undefined) {
+    if (!sha || /^0+$/.test(sha)) {
+        return undefined;
+    }
+
+    return sha;
 }
 
 function mapPorcelainStatus(code: string | undefined): ChangeStatus {

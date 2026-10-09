@@ -63,6 +63,22 @@ export type GitRemoteAuth = {
     host: string | undefined;
 };
 
+/** Runs the tasks with at most `limit` in flight, keeping the result order. */
+export async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+    const results: T[] = Array.from({ length: tasks.length }, () => undefined as T);
+    let nextIndex = 0;
+
+    const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+        while (nextIndex < tasks.length) {
+            const index = nextIndex++;
+            results[index] = await tasks[index]!();
+        }
+    });
+
+    await Promise.all(workers);
+    return results;
+}
+
 const askPassLauncherPath = join(tmpdir(), 'gitvan-git-askpass-v2.sh');
 const defaultMacPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
 
@@ -141,6 +157,33 @@ export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes
             cwd,
             env: createGitProcessEnv(env),
             timeoutMs: gitTimeoutMsFor(args),
+            bufferOnly: true,
+            allowedExitCodes,
+            getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
+        });
+
+        return stdout;
+    } catch (error) {
+        if (error instanceof GitCommandError) {
+            throw error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+    }
+}
+
+export async function runGitBufferWithInput(args: string[], cwd: string, input: string, allowedExitCodes: number[] = [0], env: NodeJS.ProcessEnv = {}) {
+    try {
+        const gitExecutable = resolveGitExecutable();
+        invalidateStatusForMutatingCommand(args, cwd);
+        const [stdout] = await executeCommand({
+            command: gitExecutable,
+            args,
+            cwd,
+            env: createGitProcessEnv(env),
+            timeoutMs: gitTimeoutMsFor(args),
+            input,
             bufferOnly: true,
             allowedExitCodes,
             getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),

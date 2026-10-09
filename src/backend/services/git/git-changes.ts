@@ -1,8 +1,8 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../../shared/diffIgnoredChars.js';
-import type { FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/types.js';
-import { GitCommandError, runGit, runGitWithInput } from './git-common.js';
+import type { ChangeStatus, FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/types.js';
+import { GitCommandError, runGit, runGitWithInput, runWithConcurrency } from './git-common.js';
 import {
     appendGitIgnoreEntry,
     applyPartialFilePatch,
@@ -15,8 +15,10 @@ import {
     labelForStatus,
     normalizeGitIgnoreEntry,
     parseConflictMarkerPaths,
-    parseNameStatusOutput,
     parsePorcelainTrackedEntries,
+    parseRawDiffOutput,
+    readGitObjectContents,
+    readGitObjectSizes,
     readGitRevisionFile,
     readGitRevisionFileBuffer,
     readGitRevisionFileSize,
@@ -135,8 +137,8 @@ export const changesGit = {
         } = {}
     ): Promise<RepoChangesData> {
         const [stagedRaw, unstagedRaw, untrackedRaw, trackedStatusRaw, conflictCheckRaw] = await Promise.all([
-            runGit(['diff', '--staged', '--name-status', '-z', '--find-renames', '--'], repoPath),
-            runGit(['diff', '--name-status', '-z', '--find-renames', '--'], repoPath),
+            runGit(['diff', '--staged', '--raw', '-z', '--find-renames', '--'], repoPath),
+            runGit(['diff', '--raw', '-z', '--find-renames', '--'], repoPath),
             runGit(['ls-files', '--others', '--exclude-standard', '-z'], repoPath),
             runGit(['status', '--porcelain=v2'], repoPath),
             runGit(['diff', 'HEAD', '--check', '--'], repoPath, [0, 1, 2, 128]).catch(() => ''),
@@ -145,15 +147,15 @@ export const changesGit = {
         // A file can keep conflict markers after its unmerged stages are gone, so the index alone is not enough.
         const conflictMarkerPaths = parseConflictMarkerPaths(conflictCheckRaw);
 
-        const stagedMap = new Map(parseNameStatusOutput(stagedRaw).map((entry) => [entry.path, entry]));
-        const unstagedEntries = parseNameStatusOutput(unstagedRaw);
-        const untrackedEntries = untrackedRaw
+        const stagedMap = new Map<string, ChangeMapEntry>(parseRawDiffOutput(stagedRaw).map((entry) => [entry.path, entry]));
+        const unstagedEntries = parseRawDiffOutput(unstagedRaw);
+        const untrackedEntries: ChangeMapEntry[] = untrackedRaw
             .split('\0')
             .map((value) => value.trim())
             .filter(Boolean)
-            .map((path) => ({ path, previousPath: undefined, status: 'untracked' as const }));
+            .map((path) => ({ path, previousPath: undefined, status: 'untracked' as const, oldSha: undefined, newSha: undefined }));
 
-        const unstagedMap = new Map([...unstagedEntries, ...untrackedEntries].map((entry) => [entry.path, entry]));
+        const unstagedMap = new Map<string, ChangeMapEntry>([...unstagedEntries, ...untrackedEntries].map((entry) => [entry.path, entry]));
 
         for (const entry of parsePorcelainTrackedEntries(trackedStatusRaw)) {
             const existing = stagedMap.get(entry.path) || unstagedMap.get(entry.path);
@@ -163,6 +165,8 @@ export const changesGit = {
                     path: entry.path,
                     previousPath: existing?.previousPath,
                     status: entry.stagedStatus,
+                    oldSha: undefined,
+                    newSha: undefined,
                 });
             }
 
@@ -171,11 +175,14 @@ export const changesGit = {
                     path: entry.path,
                     previousPath: existing?.previousPath,
                     status: entry.unstagedStatus,
+                    oldSha: undefined,
+                    newSha: undefined,
                 });
             }
         }
 
         const allPaths = new Set([...stagedMap.keys(), ...unstagedMap.keys()]);
+        const cosmeticCandidates: CosmeticCandidate[] = [];
         const entries: FileChangeEntry[] = [...allPaths]
             .sort((left, right) => left.localeCompare(right))
             .map((path) => {
@@ -185,7 +192,7 @@ export const changesGit = {
                 const unstagedStatus = unstagedEntry?.status ?? 'clean';
                 const primaryStatus = stagedStatus !== 'clean' ? stagedStatus : unstagedStatus;
 
-                return {
+                const entry = {
                     path,
                     previousPath: stagedEntry?.previousPath ?? unstagedEntry?.previousPath ?? undefined,
                     stagedStatus,
@@ -193,24 +200,32 @@ export const changesGit = {
                     hasConflictMarkers: conflictMarkerPaths.has(path) ? true : undefined,
                     displayStatus: labelForStatus(primaryStatus),
                 } satisfies FileChangeEntry;
+
+                if (entry.stagedStatus === 'modified') {
+                    cosmeticCandidates.push({
+                        entry,
+                        kind: 'staged',
+                        originalSha: stagedEntry?.oldSha,
+                        modifiedSha: stagedEntry?.newSha,
+                        workingTreePath: undefined,
+                    });
+                }
+
+                if (entry.unstagedStatus === 'modified') {
+                    cosmeticCandidates.push({
+                        entry,
+                        kind: 'unstaged',
+                        originalSha: unstagedEntry?.oldSha,
+                        modifiedSha: undefined,
+                        workingTreePath: join(repoPath, path),
+                    });
+                }
+
+                return entry;
             });
 
-        if (entries.length < cosmeticCheckFileCountLimit) {
-            await Promise.all(
-                entries.map(async (entry) => {
-                    if (entry.stagedStatus === 'modified') {
-                        const result = await hasNoActualChangeForKind(repoPath, entry.path, 'staged', options.ignoredChars, options.showWhitespaceChanges);
-                        entry.stagedNoActualChange = result.noActualChange;
-                        entry.stagedTooLargeForCosmeticCheck = result.tooLarge;
-                    }
-
-                    if (entry.unstagedStatus === 'modified') {
-                        const result = await hasNoActualChangeForKind(repoPath, entry.path, 'unstaged', options.ignoredChars, options.showWhitespaceChanges);
-                        entry.unstagedNoActualChange = result.noActualChange;
-                        entry.unstagedTooLargeForCosmeticCheck = result.tooLarge;
-                    }
-                })
-            );
+        if (entries.length < cosmeticCheckFileCountLimit && cosmeticCandidates.length > 0) {
+            await applyCosmeticChangeChecks(repoPath, cosmeticCandidates, options);
         }
 
         const stagedNumstat = await runGit(['diff', '--staged', '--numstat', '--'], repoPath).catch(() => '');
@@ -539,6 +554,128 @@ export const changesGit = {
 
 const cosmeticCheckSizeLimit = 50 * 1024;
 const cosmeticCheckFileCountLimit = 100;
+/** Bounded fan-out for the rare entries the batched pass cannot classify. */
+const cosmeticCheckConcurrency = 6;
+
+type ChangeMapEntry = {
+    path: string;
+    previousPath: string | undefined;
+    status: ChangeStatus;
+    oldSha: string | undefined;
+    newSha: string | undefined;
+};
+
+type CosmeticCandidate = {
+    entry: FileChangeEntry;
+    kind: 'staged' | 'unstaged';
+    /** `HEAD` blob for staged changes, the index blob for unstaged ones. */
+    originalSha: string | undefined;
+    /** The index blob for staged changes; the working tree supplies the other side. */
+    modifiedSha: string | undefined;
+    workingTreePath: string | undefined;
+};
+
+function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
+    return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
+}
+
+function cosmeticIgnoreOptions(filePath: string) {
+    return { sortModuleImports: isJavaScriptTypeScriptPath(filePath) };
+}
+
+function assignCosmeticResult(candidate: CosmeticCandidate, noActualChange: boolean, tooLarge: boolean) {
+    if (candidate.kind === 'staged') {
+        candidate.entry.stagedNoActualChange = noActualChange;
+        candidate.entry.stagedTooLargeForCosmeticCheck = tooLarge;
+        return;
+    }
+
+    candidate.entry.unstagedNoActualChange = noActualChange;
+    candidate.entry.unstagedTooLargeForCosmeticCheck = tooLarge;
+}
+
+/**
+ * Classifies every modified entry through one `cat-file --batch-check` for the sizes and
+ * one `cat-file --batch` for the contents, instead of four git processes per file. The
+ * working-tree side is read from disk, and entries whose blobs are not in the raw diff
+ * (rare porcelain-only rows) fall back to a bounded per-file pool.
+ */
+async function applyCosmeticChangeChecks(repoPath: string, candidates: CosmeticCandidate[], options: { ignoredChars?: string; showWhitespaceChanges?: boolean }) {
+    const batched: CosmeticCandidate[] = [];
+    const fallback: CosmeticCandidate[] = [];
+
+    for (const candidate of candidates) {
+        if (isImagePath(candidate.entry.path)) {
+            assignCosmeticResult(candidate, false, false);
+            continue;
+        }
+
+        const hasBlobs = candidate.kind === 'staged' ? Boolean(candidate.originalSha && candidate.modifiedSha) : Boolean(candidate.originalSha);
+
+        (hasBlobs ? batched : fallback).push(candidate);
+    }
+
+    if (batched.length > 0) {
+        const allShas = new Set<string>();
+        for (const candidate of batched) {
+            if (candidate.originalSha) allShas.add(candidate.originalSha);
+            if (candidate.modifiedSha) allShas.add(candidate.modifiedSha);
+        }
+
+        const sizes = await readGitObjectSizes(repoPath, [...allShas]);
+        const sized = batched.map((candidate) => {
+            const workingTreeSize = candidate.workingTreePath ? readWorkingTreeFileSize(candidate.workingTreePath) : undefined;
+            const originalSize = candidate.originalSha ? sizes.get(candidate.originalSha) : undefined;
+            const modifiedSize = candidate.modifiedSha ? sizes.get(candidate.modifiedSha) : workingTreeSize;
+
+            return { candidate, tooLarge: isTooLargeForCosmeticCheck(originalSize, modifiedSize) };
+        });
+
+        const contentShas = new Set<string>();
+        for (const { candidate, tooLarge } of sized) {
+            if (tooLarge) {
+                assignCosmeticResult(candidate, false, true);
+                continue;
+            }
+
+            if (candidate.originalSha) contentShas.add(candidate.originalSha);
+            if (candidate.modifiedSha) contentShas.add(candidate.modifiedSha);
+        }
+
+        const contents = await readGitObjectContents(repoPath, [...contentShas]);
+
+        for (const { candidate, tooLarge } of sized) {
+            if (tooLarge) {
+                continue;
+            }
+
+            const original = candidate.originalSha ? (contents.get(candidate.originalSha) ?? '') : '';
+            const modified = candidate.modifiedSha ? (contents.get(candidate.modifiedSha) ?? '') : readWorkingTreeFile(candidate.workingTreePath!);
+
+            assignCosmeticResult(
+                candidate,
+                areEquivalentIgnoringDiffChars(
+                    original,
+                    modified,
+                    options.ignoredChars ?? '',
+                    !(options.showWhitespaceChanges ?? false),
+                    cosmeticIgnoreOptions(candidate.entry.path)
+                ),
+                false
+            );
+        }
+    }
+
+    if (fallback.length > 0) {
+        await runWithConcurrency(
+            fallback.map((candidate) => async () => {
+                const result = await hasNoActualChangeForKind(repoPath, candidate.entry.path, candidate.kind, options.ignoredChars, options.showWhitespaceChanges);
+                assignCosmeticResult(candidate, result.noActualChange, result.tooLarge);
+            }),
+            cosmeticCheckConcurrency
+        );
+    }
+}
 
 async function hasNoActualChangeForKind(
     repoPath: string,
@@ -552,11 +689,7 @@ async function hasNoActualChangeForKind(
     }
 
     const absolutePath = join(repoPath, filePath);
-    const diffIgnoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(filePath) };
-
-    function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
-        return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
-    }
+    const diffIgnoreOptions = cosmeticIgnoreOptions(filePath);
 
     if (kind === 'staged') {
         const [originalSize, modifiedSize] = await Promise.all([readGitRevisionFileSize(repoPath, `HEAD:${filePath}`), readGitRevisionFileSize(repoPath, `:${filePath}`)]);

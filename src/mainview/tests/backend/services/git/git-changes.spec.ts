@@ -4,7 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { changesGit } from '../../../../../backend/services/git/git-changes.js';
-import { parseConflictMarkerPaths, parsePorcelainTrackedEntries } from '../../../../../backend/services/git/git-helpers.js';
+import { parseConflictMarkerPaths, parsePorcelainTrackedEntries, parseRawDiffOutput } from '../../../../../backend/services/git/git-helpers.js';
 
 function runGit(cwd: string, args: string[]) {
     return execFileSync('git', args, {
@@ -168,6 +168,52 @@ describe('changesGit conflicted index', () => {
 
         expect([...parseConflictMarkerPaths(output)]).toEqual(['Data/Core/EezyToolSessionModels.cs', 'Portal/Client App/src/pages/a b.tsx']);
     });
+
+    it('parses raw diff records with their blob shas and statuses', () => {
+        const output = [
+            ':100644 100644 94954abda49de8615a048f8d2e64b5de848e27a1 8b14c4f055267310b71fb4a50e5a8736644bfc28 M',
+            'a file.txt',
+            ':100644 100644 0000000000000000000000000000000000000000 45b983be36b73c0788dc9cbcb76cbb80fc7bbf3a A',
+            'new.txt',
+            ':100644 100644 c1b0730000000000000000000000000000000000 0000000000000000000000000000000000000000 D',
+            'gone.txt',
+            ':100644 100644 1111111111111111111111111111111111111111 2222222222222222222222222222222222222222 R100',
+            'old.txt',
+            'new-name.txt',
+            '',
+        ].join('\0');
+
+        expect(parseRawDiffOutput(output)).toEqual([
+            {
+                path: 'a file.txt',
+                previousPath: undefined,
+                status: 'modified',
+                oldSha: '94954abda49de8615a048f8d2e64b5de848e27a1',
+                newSha: '8b14c4f055267310b71fb4a50e5a8736644bfc28',
+            },
+            {
+                path: 'new.txt',
+                previousPath: undefined,
+                status: 'added',
+                oldSha: undefined,
+                newSha: '45b983be36b73c0788dc9cbcb76cbb80fc7bbf3a',
+            },
+            {
+                path: 'gone.txt',
+                previousPath: undefined,
+                status: 'deleted',
+                oldSha: 'c1b0730000000000000000000000000000000000',
+                newSha: undefined,
+            },
+            {
+                path: 'new-name.txt',
+                previousPath: 'old.txt',
+                status: 'renamed',
+                oldSha: '1111111111111111111111111111111111111111',
+                newSha: '2222222222222222222222222222222222222222',
+            },
+        ]);
+    });
 });
 
 describe('changesGit partial file operations', () => {
@@ -237,6 +283,63 @@ describe('changesGit partial file operations', () => {
         expect(changes.unstaged[0]?.path).toBe('big.txt');
         expect(changes.unstaged[0]?.unstagedNoActualChange).toBe(false);
         expect(changes.unstaged[0]?.unstagedTooLargeForCosmeticCheck).toBe(true);
+    });
+
+    it('classifies a staged ignored-character-only change as no actual change', async () => {
+        const repo = createRepoWithFile('story.txt', 'role: "admin";\n', "role:'admin',\n");
+        cleanups.push(() => repo.cleanup());
+        runGit(repo.repoPath, ['add', 'story.txt']);
+
+        const changes = await changesGit.getRepoChanges(repo.repoPath, {
+            ignoredChars: ',;"\'',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.staged).toHaveLength(1);
+        expect(changes.staged[0]?.stagedNoActualChange).toBe(true);
+        expect(changes.staged[0]?.stagedTooLargeForCosmeticCheck).toBe(false);
+    });
+
+    it('classifies the staged and unstaged sides of one file independently', async () => {
+        const repo = createRepoWithFile('story.txt', 'role: "admin";\n', "role:'admin',\n");
+        cleanups.push(() => repo.cleanup());
+        runGit(repo.repoPath, ['add', 'story.txt']);
+        writeFileSync(repo.filePath, "role:'admin';\nconsole.log(1);\n", 'utf8');
+
+        const changes = await changesGit.getRepoChanges(repo.repoPath, {
+            ignoredChars: ',;"\'',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.staged.find((entry) => entry.path === 'story.txt')?.stagedNoActualChange).toBe(true);
+        expect(changes.unstaged.find((entry) => entry.path === 'story.txt')?.unstagedNoActualChange).toBe(false);
+    });
+
+    it('classifies several multibyte files in one batched pass', async () => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'gitvan-multibyte-'));
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        runGit(repoPath, ['init']);
+        runGit(repoPath, ['config', 'user.name', 'Gitvan Test']);
+        runGit(repoPath, ['config', 'user.email', 'gitvan@example.com']);
+
+        writeFileSync(join(repoPath, 'accents.txt'), 'const café = "admin";\nconst naïve = "user";\n', 'utf8');
+        writeFileSync(join(repoPath, 'cjk.txt'), 'const 名前 = "admin";\nconst 都市 = "user";\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Initial commit']);
+
+        writeFileSync(join(repoPath, 'accents.txt'), "const café = 'admin';\nconst naïve = 'user';\n", 'utf8');
+        writeFileSync(join(repoPath, 'cjk.txt'), "const 名前 = 'admin';\nconst 都市 = 'user';\n", 'utf8');
+
+        const changes = await changesGit.getRepoChanges(repoPath, {
+            ignoredChars: ',;"\'',
+            showWhitespaceChanges: false,
+        });
+
+        expect(changes.unstaged.map((entry) => [entry.path, entry.unstagedNoActualChange])).toEqual([
+            ['accents.txt', true],
+            ['cjk.txt', true],
+        ]);
     });
 });
 
