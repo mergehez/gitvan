@@ -22,14 +22,15 @@ export function _useRepositories() {
     const contextMenu = useContextMenu();
 
     watch(
-        [() => _coreState.stateCounter],
+        () => _coreState.stateCounter,
         () => {
+            const reposById = new Map(_coreState.repos.map((repo) => [repo.id, repo]));
+
             state.repos = _coreState.repos.map((repo) => useRepo(repo));
             state.repos.forEach((repo) => {
-                repo.update(_coreState.repos.find((r) => r.id === repo.id) ?? repo);
+                repo.update(reposById.get(repo.id) ?? repo);
             });
-        },
-        { deep: true }
+        }
     );
     const state = reactive({
         repos: _coreState.repos.map((repo) => useRepo(repo)),
