@@ -2,15 +2,9 @@
 
 ## General
 
-This section is the file's landing area, not a checklist that runs for every todo. None
-of it is a per-implementation ritual. It holds three things:
-
-1. The conventions below, which describe how **Next** is written.
-2. An ideas inbox — drop new ideas here in any shape, then move them into **Next** once
-   they have a concrete shape and a marker.
-3. Cross-cutting todos — one-off work that spans several **Next** items and would
-   otherwise be duplicated across them. These behave like **Next** items, they just do
-   not belong to a single finding.
+General notes and new ideas go here. Drop ideas in any shape, then move them into
+**Next** once they have a concrete shape and a marker. Nothing in this file is a
+per-implementation checklist.
 
 Conventions for **Next**:
 
@@ -26,33 +20,16 @@ them to the top of the section.
 Each **Next** item is one sentence plus two lines: what it is, and how it will be
 implemented. Do not store benchmark numbers or implementation detail in **Done**.
 
-Ideas inbox:
-
-- (empty — add new ideas here in any shape, then triage them into **Next**.)
-
-Cross-cutting todos:
-
-- [ ] Set up a repeatable performance baseline that covers cold start, repo switch,
-      changes refresh, discard-all and history scroll, so the items below can be measured
-      before and after. Implementation: a script under `src/electronUtils/` or a
-      `playwright/` spec that seeds a repo with N changed files and a large history, then
-      records timings with `performance.now()`. Keep the numbers in the PR description,
-      not in this file.
-- [ ] Settle on a single owner for per-repo git status caching, because the top items
-      below all touch `buildBootstrap`, the polling refresh and the changes view.
-      Implementation: one module-level cache in `src/backend/services/app.ts` keyed by
-      repo path, with the renderer patching a single repo instead of replacing the whole
-      bootstrap.
-
 ## Done
 
-- Nothing completed yet. Add a one-sentence entry here as each item lands.
+- Added a repeatable backend performance baseline that any item can be measured against with `bun do.ts perf`.
+- Made the per-repository sidebar status a single cached owner that mutating git commands invalidate.
 
 ## Next
 
-- [ ] **[URGENT]** Every backend mutation returns a full bootstrap, so staging one file re-runs `git status` for every tracked repository.
-    - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) calls `git.getRepoSidebarStatus` for every repo row, and about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …) end with `return buildBootstrap()`. Each status call spawns two or three git processes, so a one-file stage in a thirty-repo workspace runs sixty-plus processes and the response waits for all of them.
-    - How it will be implemented: add a `getRepoStatus(repoId)` backend method and a short TTL cache (one to two seconds) inside `buildBootstrap` so concurrent callers share one sweep; then let mutations return a per-repo delta that the renderer applies to the single changed repo instead of replacing the whole repo list.
+- [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
+    - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
+    - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
 
 - [ ] **[URGENT]** The changes view spawns up to four git processes per modified file with no concurrency cap.
     - What it is: `getRepoChanges` (`src/backend/services/git/git-changes.ts:198`) fans out over every entry and calls `hasNoActualChangeForKind` in an unbounded `Promise.all`; that helper (`git-changes.ts:529`) runs `git cat-file -s` and `git show` for both the index and the working tree per file. A working tree with a hundred modified files issues roughly four hundred concurrent git processes and reads every file's full content into JS, on every sidebar refresh.
