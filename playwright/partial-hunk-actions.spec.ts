@@ -1,32 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { openSandboxRepo, reopenSandboxRepo } from './support/sandbox';
 
 test.describe('partial hunk actions', () => {
     // test.setTimeout(10_000);
-
-    async function resetSandboxAndOpenRepo(page: any) {
-        await page.goto('/');
-        await page.waitForTimeout(500);
-
-        // Reset sandbox repos via the hidden button (fires async reset)
-        await page.evaluate(() => {
-            const btn = document.querySelector('#hidden-reset-sandboxes') as HTMLButtonElement;
-            if (btn) btn.click();
-        });
-
-        // Wait for sandbox repos to be registered
-        await page.waitForTimeout(3000);
-        await ensureRepoOpen(page);
-    }
-    async function ensureRepoOpen(page: any) {
-        await page.goto('/');
-        await page.waitForTimeout(500);
-
-        // Open the partial-changes repo (the folder property in app.ts)
-        const repoBtn = page.getByRole('button', { name: /^partial-changes$/i }).first();
-        await expect(repoBtn).toBeVisible({ timeout: 5000 });
-        await repoBtn.click({ force: true });
-        await page.waitForTimeout(1000);
-    }
 
     async function getError(page: any) {
         const errorBanner = page.locator('#app-error-banner p');
@@ -51,11 +27,11 @@ test.describe('partial hunk actions', () => {
     }
 
     test('reset sandboxes button works', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'partial-changes');
     });
 
     test('shows hunk action buttons for unstaged file', async ({ page }) => {
-        await ensureRepoOpen(page);
+        await reopenSandboxRepo(page, 'partial-changes');
 
         // Click on the unstaged file
         const unstagedFile = getFile(page, 'unstaged', 'second.txt');
@@ -77,7 +53,7 @@ test.describe('partial hunk actions', () => {
     });
 
     test('hovering a hunk button shows the action popover', async ({ page }) => {
-        await ensureRepoOpen(page);
+        await reopenSandboxRepo(page, 'partial-changes');
 
         // Open unstaged file
         const unstagedFile = getFile(page, 'unstaged', 'second.txt');
@@ -100,7 +76,7 @@ test.describe('partial hunk actions', () => {
     });
 
     test('stages a single hunk from the unstaged file', async ({ page }) => {
-        await ensureRepoOpen(page);
+        await reopenSandboxRepo(page, 'partial-changes');
 
         const unstagedFile = getFile(page, 'unstaged', 'second.txt');
         await expect(unstagedFile).toBeVisible({ timeout: 5000 });
@@ -131,7 +107,7 @@ test.describe('partial hunk actions', () => {
     });
 
     test('discards a single hunk from the unstaged file', async ({ page }) => {
-        await ensureRepoOpen(page);
+        await reopenSandboxRepo(page, 'partial-changes');
 
         const unstagedFile = getFile(page, 'unstaged', 'second.txt');
         await expect(unstagedFile).toBeVisible({ timeout: 5000 });
@@ -162,7 +138,7 @@ test.describe('partial hunk actions', () => {
     });
 
     test('unstages a single hunk from the staged file', async ({ page }) => {
-        await ensureRepoOpen(page);
+        await reopenSandboxRepo(page, 'partial-changes');
 
         // Open the staged file
         const stagedFile = getFile(page, 'staged', 'first.txt');
@@ -196,7 +172,7 @@ test.describe('partial hunk actions', () => {
     });
 
     test('stages the second and fourth hunks, then unstages the last hunk from the staged file', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'partial-changes');
 
         // ── Step 1: Stage the second and fourth hunks from unstaged.txt ──
         const unstagedFile = getFile(page, 'unstaged', 'stub.txt');

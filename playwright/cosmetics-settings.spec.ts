@@ -1,29 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { openSandboxRepo } from './support/sandbox';
 
 test.describe('cosmetics settings', () => {
-    async function resetSandboxAndOpenRepo(page: any) {
-        await page.goto('/');
-        await page.waitForTimeout(500);
-
-        await page.evaluate(() => {
-            const btn = document.querySelector('#hidden-reset-sandboxes') as HTMLButtonElement | null;
-            if (btn) btn.click();
-        });
-
-        await page.waitForTimeout(3000);
-        await ensureRepoOpen(page);
-    }
-
-    async function ensureRepoOpen(page: any) {
-        await page.goto('/');
-        await page.waitForTimeout(500);
-
-        const repoBtn = page.getByRole('button', { name: /^cosmetics$/i }).first();
-        await expect(repoBtn).toBeVisible({ timeout: 5000 });
-        await repoBtn.click({ force: true });
-        await page.waitForTimeout(1000);
-    }
-
     function getFile(page: any, section: 'staged' | 'unstaged', fileName: string) {
         return page.locator(`[data-testid="file-tree-item-${section}-${fileName}"]`).first();
     }
@@ -54,11 +32,11 @@ test.describe('cosmetics settings', () => {
     }
 
     test('reset sandboxes button works', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
     });
 
     test('"Hide whitespace changes" reveals no-actual-change on whitespace-only file', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
         const file = getFile(page, 'unstaged', 'whitespace-demo.txt');
         await expect(file).toBeVisible({ timeout: 5000 });
         await file.click();
@@ -99,7 +77,7 @@ test.describe('cosmetics settings', () => {
     });
 
     test('"Chars To Ignore" with quotes reveals no-actual-change on cosmetic-chars file', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
         // Open the file with quote-only changes
         const file = getFile(page, 'unstaged', 'cosmetic-chars.txt');
         await expect(file).toBeVisible({ timeout: 5000 });
@@ -126,7 +104,7 @@ test.describe('cosmetics settings', () => {
     });
 
     test('combined: "Chars To Ignore" + "Hide whitespace changes" on mixed file', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
         // Open the mixed file — has both real and cosmetic changes
         const file = getFile(page, 'unstaged', 'mixed.txt');
         await expect(file).toBeVisible({ timeout: 5000 });
@@ -160,7 +138,7 @@ test.describe('cosmetics settings', () => {
     });
 
     test('"Show changes only" toggle changes diff rendering', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
         // Open a file with multiple hunks
         const file = getFile(page, 'unstaged', 'whitespace-demo.txt');
         await expect(file).toBeVisible({ timeout: 5000 });
@@ -199,7 +177,7 @@ test.describe('cosmetics settings', () => {
     });
 
     test('real staged changes do not show no-actual-change badge', async ({ page }) => {
-        await resetSandboxAndOpenRepo(page);
+        await openSandboxRepo(page, 'cosmetics');
         // The staged cosmetics-only file actually has a real content change (comment added),
         // so the "no actual change" badge should NOT appear
         const file = getFile(page, 'staged', 'cosmetics-only.txt');
