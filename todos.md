@@ -24,28 +24,26 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 - Added a repeatable backend performance baseline that any item can be measured against with `bun do.ts perf`.
 - Made the per-repository sidebar status a single cached owner that mutating git commands invalidate.
+- Added finite timeouts and request-scoped cancellation to spawned git commands.
+- Stopped fetching a commit's whole patch when only its file list is displayed.
+- Made bulk discard partition a batch and mutate tracked and untracked paths in two commands.
+- Classified cosmetic changes from batched git reads instead of per-file commands.
+- Read each blob once for the cosmetic-change check.
+- Made the periodic refresh status-only, paused it while hidden, and reused an unchanged file diff.
 
 ## Next
 
-- [ ] **[URGENT]** The changes view spawns up to four git processes per modified file with no concurrency cap.
-    - What it is: `getRepoChanges` (`src/backend/services/git/git-changes.ts:198`) fans out over every entry and calls `hasNoActualChangeForKind` in an unbounded `Promise.all`; that helper (`git-changes.ts:529`) runs `git cat-file -s` and `git show` for both the index and the working tree per file. A working tree with a hundred modified files issues roughly four hundred concurrent git processes and reads every file's full content into JS, on every sidebar refresh.
-    - How it will be implemented: derive the cosmetic classification from a single `git diff --numstat -z` (or `--raw`) pass instead of per-file commands, and route any remaining per-file git work through a small bounded pool of four to eight workers.
+- [ ] **[URGENT]** Unbounded `git rev-list` walks are repeated on every history, tags and sidebar request.
+    - What it is: `getUnpushedCommitSet` (`src/backend/services/git/git-helpers.ts:552`) runs `git rev-list HEAD --not --remotes` with no cap and is called by every history page (`git-history.ts:120`), every commit detail (`git-history.ts:175`) and the tag list (`git-tags.ts`). `getRepoSidebarStatus` (`git-changes.ts:98`) runs a separate full `rev-list --count` whenever a branch has no upstream, and the UI only needs to know whether the count is greater than zero.
+    - How it will be implemented: cache the unpushed SHA set per repo path keyed by the current `HEAD` sha plus the mtimes of `.git/refs/remotes` and `.git/packed-refs`, invalidating on mismatch; pass `--max-count` for the callers that only test membership of the displayed commits and for the "anything publishable?" check in the sidebar status.
 
-- [ ] **[URGENT]** The 20 s poll and window-focus refresh re-run the whole active view and re-fetch the selected file diff.
-    - What it is: `initializeStates.ts:179` polls `refreshRepos` every 20 s and `initializeStates.ts:126` does the same on focus (throttled to 1.5 s). Each call runs `applyMutation`, which reloads the active view, the merge-conflict state and the stash list, and `loadChanges`/`loadHistory` re-select the current file, so `getFileDiff` runs again for the file the user is already reading.
-    - How it will be implemented: split the refresh into a cheap status-only path for polling (bootstrap without the active-view reload) and a full path for explicit user actions; skip the selected-file re-fetch when path, kind and diff inputs are unchanged; pause the interval while `document.visibilityState === 'hidden'`.
+- [ ] **[URGENT]** The file and history trees render every row with no virtualization.
+    - What it is: `FileTree.vue:111` flattens the whole tree and the `v-for` at `FileTree.vue:148` mounts a full row (plus icon buttons, tooltips and menu directives) per entry; `RepChangesView`, `RepHistoryView` and `SidebarRepositories` all use it. A repo with thousands of changed files or a long history builds all rows at once, and `loadMoreHistory` keeps appending.
+    - How it will be implemented: window the flattened list by scroll offset with a fixed row height, keeping the existing flatten and selection logic untouched; falls back to pagination if the row height cannot be made uniform. Note that the browser specs assert on row testids, so the existing selectors have to keep working.
 
-- [ ] **[URGENT]** Bulk file operations spawn one or two git processes per file, strictly serially.
-    - What it is: `discardRepoFiles` (`src/backend/services/git/git-changes.ts:405`) loops the paths and awaits `discardRepoFile` for each, which itself runs `git ls-files --error-unmatch` and then `git restore` or `git clean`. Discarding five hundred files is up to a thousand sequential git processes with the UI waiting.
-    - How it will be implemented: one `git ls-files --error-unmatch -- <paths…>` call to partition tracked from untracked, then a single `git restore --worktree -- <tracked…>` and a single `git clean -fd -- <untracked…>`. Apply the same partitioning to the other bulk helpers in that file.
-
-- [ ] **[URGENT]** Selecting a commit downloads the entire commit patch even though nothing reads it.
-    - What it is: `getCommitDetail` (`src/backend/services/git/git-history.ts:168`) runs `git show -m --first-parent --stat --patch --format=medium` and returns the patch as `CommitDetail.patch`. No frontend code reads that field — `CommitInspectPane` and `useRepo` only use `files`, `summary`, `body`, `refs` and `tags` — so a large commit is stringified over HTTP, cloned over IPC and thrown away, right before the per-file diff is requested anyway.
-    - How it will be implemented: replace the `--patch --stat` call with `--name-status` only (the file list is what the pane needs), drop `patch` from `CommitDetail`, and keep the lazy `getCommitFileDiff` request as the single source of patch content. Add a byte cap with an explicit "diff too large" marker while touching this path.
-
-- [ ] **[URGENT]** Spawned git processes have no timeout and no cancellation.
-    - What it is: `executeCommand` (`src/electronUtils/executeCommand.ts:15`) spawns without a timeout or an `AbortSignal`, and `callApiPost` (`src/electronUtils/helpers.ts:21`) has no request timeout either. A `fetch`, `pull`, `push` or `clone` against an unreachable remote never resolves, which blocks the Electron main process on the invoke; the dev server's `runWithTimeout` only rejects the HTTP promise and orphans the child process.
-    - How it will be implemented: add a per-call timeout plus an `AbortSignal` to `executeCommand` that kills the child on expiry, pass generous but finite values for network operations, and propagate the abort when the request closes.
+- [ ] **[URGENT]** The changes sidebar rebuilds each section in O(n²).
+    - What it is: `buildChangeSection` (`src/mainview/components/RepChangesView.vue:89`) calls `hasBackendNoActualChange` and `hasBackendCosmeticCheckTooLarge` for every entry, and each runs a linear `findChangeEntry` (`RepChangesView.vue:61`) over the same array. With thousands of changed files that is millions of comparisons on every changes reload.
+    - How it will be implemented: read `stagedNoActualChange`, `stagedTooLargeForCosmeticCheck` and the unstaged pair straight off the entry being mapped, since the entry that `find` searches for is already in hand; or build one `Map<path, entry>` per kind before the `.map()`.
 
 - [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
     - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
@@ -55,21 +53,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - What it is: `toggleLoading` (`src/mainview/directives/VLoading.ts:65`) discards the return value of `overlayState.toggleZIndex(true, …)`, so every `updated` while a loader is visible pushes a new value onto the module-level `zIndStack` (`directives/useOverlaysState.ts:3`) that is never removed; `increaseZIndex` then computes `Math.max(...zIndStack)` over an ever-growing array.
     - How it will be implemented: reuse the already-allocated `el.__loaderZIndex` — reassign it from the `claimZIndex()` result on show and skip claiming when the element already holds one, so the stack stays bounded and `claimZIndex` stays cheap.
 
-- [ ] **[NOT_URGENT]** The file and history trees render every row with no virtualization.
-    - What it is: `FileTree.vue:111` flattens the whole tree and the `v-for` at `FileTree.vue:148` mounts a full row (plus icon buttons, tooltips and menu directives) per entry; `RepChangesView`, `RepHistoryView` and `SidebarRepositories` all use it. A repo with thousands of changed files or a long history builds all rows at once, and `loadMoreHistory` keeps appending.
-    - How it will be implemented: window the flattened list by scroll offset with a fixed row height, keeping the existing flatten and selection logic untouched; falls back to pagination if the row height cannot be made uniform. Note that the browser specs assert on row testids, so the existing selectors have to keep working.
-
-- [ ] **[NOT_URGENT]** Unbounded `git rev-list` walks are repeated on every history, tags and sidebar request.
-    - What it is: `getUnpushedCommitSet` (`src/backend/services/git/git-helpers.ts:462`) runs `git rev-list HEAD --not --remotes` with no cap and is called by every history page (`git-history.ts:117`), every commit detail (`git-history.ts:173`) and the tag list (`git-tags.ts`). `getRepoSidebarStatus` (`git-changes.ts:95`) runs a separate full `rev-list --count` whenever a branch has no upstream, and the UI only needs to know whether the count is greater than zero.
-    - How it will be implemented: cache the unpushed SHA set per repo path keyed by the current `HEAD` sha plus the mtimes of `.git/refs/remotes` and `.git/packed-refs`, invalidating on mismatch; pass `--max-count` for the callers that only test membership of the displayed commits and for the "anything publishable?" check in the sidebar status.
-
 - [ ] **[NOT_URGENT]** An untracked file is read twice before its size check rejects it.
-    - What it is: the untracked branch of `getFileDiff` (`src/backend/services/git/git-changes.ts:327`) runs `git diff --no-index` and then reads the working-tree file, and only afterwards applies the 1 MB `previewByteLimit`. A huge generated file is fully buffered and diffed before being rejected.
+    - What it is: the untracked branch of `getFileDiff` (`src/backend/services/git/git-changes.ts:344`) runs `git diff --no-index` and then reads the working-tree file, and only afterwards applies the 1 MB `previewByteLimit`. A huge generated file is fully buffered and diffed before being rejected.
     - How it will be implemented: call `readWorkingTreeFileSize` first and return the existing "file too big to preview" entry immediately when it exceeds the limit; only run `diff --no-index` and read content when the file is small enough to preview.
-
-- [ ] **[NOT_URGENT]** Each modified file is fetched from git twice for the cosmetic-change check.
-    - What it is: `hasNoActualChangeForKind` (`src/backend/services/git/git-changes.ts:548,562`) calls `readGitRevisionFileSize` (`git cat-file -s`) and then `readGitRevisionFile` (`git show`) for the same revision, for both `HEAD:`/`:` and the working tree.
-    - How it will be implemented: read each blob once and use its byte length instead of a separate `cat-file -s`, or serve both size and content from one `git cat-file --batch` session so a single process answers both questions.
 
 - [ ] **[NOT_URGENT]** The conflict editor re-parses the file quadratically and rebuilds every view zone on each keystroke.
     - What it is: `ConflictMonacoEditor.onDidChangeContent` calls `syncEditorChrome` per keystroke, which reads the full model, calls `parseMergeConflictBlocks` twice, then clears and recreates a DOM node with buttons per conflict block plus `changeViewZones` and `deltaDecorations`. Inside the parse, `countLines(content.slice(0, startOffset))` (`src/mainview/lib/mergeConflicts.ts:53`) re-scans the file from offset zero for every block.
@@ -90,10 +76,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - [ ] **[NOT_URGENT]** Task bookkeeping in `useTasks` grows for the session and is re-scanned on every render.
     - What it is: `runningOperations[finalKey] = undefined` (`src/mainview/composables/useTasks.ts:37`) never deletes the key, so one entry per file path and commit sha accumulates; `isBusy`, `isAnyOperationRunning` and `getRunningOperation` walk that whole record and are read from templates. `setTimeout(updateLongRunningOperations, 500)` is also scheduled on every run and never cleared when the operation finishes first.
     - How it will be implemented: `delete runningOperations[finalKey]` in the `finally` block, keep a separate `Set` of in-flight keys so `isBusy` is O(1), and clear the pending timer when the operation completes before it fires.
-
-- [ ] **[NOT_URGENT]** The changes sidebar rebuilds each section in O(n²).
-    - What it is: `buildChangeSection` (`src/mainview/components/RepChangesView.vue:89`) calls `hasBackendNoActualChange` and `hasBackendCosmeticCheckTooLarge` for every entry, and each runs a linear `findChangeEntry` (`RepChangesView.vue:61`) over the same array. With thousands of changed files that is millions of comparisons on every changes reload.
-    - How it will be implemented: read `stagedNoActualChange`, `stagedTooLargeForCosmeticCheck` and the unstaged pair straight off the entry being mapped, since the entry that `find` searches for is already in hand; or build one `Map<path, entry>` per kind before the `.map()`.
 
 - [ ] **[NOT_URGENT]** `fileIconAndLanguageByPath` allocates a fifty-entry table for every row on every render.
     - What it is: the `map` array literal is constructed inside the function (`src/mainview/lib/utils.ts:12`), then scanned with `.some()` and `endsWith` per call. It runs per row from `ChangesFileTree.vue:44` and from `getMonacoLanguage` (`lib/monaco.ts:81`), so each re-render of a large list allocates hundreds of thousands of objects and runs tens of thousands of string checks.
@@ -140,12 +122,12 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - How it will be implemented: resolve the repository path once through a helper that throws a clear "This repository is no longer tracked." error, and have the renderer drop requests for repositories that left the bootstrap instead of surfacing the failure.
 
 - [ ] **[NOT_PLANNED]** Keep the localhost Express backend and the IPC-to-HTTP transport as the single request path.
-    - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:21`, `src/electronUtils/browserOnlyHelpers.ts:68`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
-    - Why it is deliberate: the same transport is what makes the browser `dev2` mode and the standalone server work, and collapsing the Electron path into direct handler calls would fork the request path. Keep the extra serialization as the price of one transport; optimise payload size instead (see the `[URGENT]` commit-detail item).
+    - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:24`, `src/electronUtils/browserOnlyHelpers.ts:79`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
+    - Why it is deliberate: the same transport is what makes the browser `dev2` mode and the standalone server work, and collapsing the Electron path into direct handler calls would fork the request path. Keep the extra serialization as the price of one transport; the payloads themselves are the thing to shrink.
 
 - [ ] **[NOT_PLANNED]** Keep interval and focus polling as the change-detection mechanism; do not add a filesystem watcher.
-    - What it is: the app re-reads repository state on a 20 s interval and on window focus (`src/mainview/composables/initializeStates.ts:179,126`) rather than watching the working tree, so out-of-band edits are picked up with a delay and the sweep cost is paid continuously.
-    - Why it is deliberate: a recursive watcher over user repositories brings platform-specific limits, event storms on large trees and a new class of bugs, for a desktop Git client where a short delay is acceptable. The plan is to make polling cheap (see the `[URGENT]` bootstrap and refresh items) rather than to replace it.
+    - What it is: the app re-reads repository state on a 20 s interval and on window focus (`src/mainview/composables/initializeStates.ts:194,141`) rather than watching the working tree, so out-of-band edits are picked up with a delay and the sweep cost is paid continuously.
+    - Why it is deliberate: a recursive watcher over user repositories brings platform-specific limits, event storms on large trees and a new class of bugs, for a desktop Git client where a short delay is acceptable. Polling is a status-only refresh now, and the plan is to keep it cheap rather than replace it.
 
 - [ ] **[NOT_PLANNED]** Keep full-file diff loading with the 1 MB preview cap; no streaming or paginated diffs.
     - What it is: diffs carry both full file sides in one payload and are capped by `previewByteLimit` (`src/backend/services/git/git-helpers.ts:6`) with a "file too big to preview" message, rather than being streamed or paged.
@@ -153,7 +135,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 - [ ] **[NOT_PLANNED]** Keep git execution in the native host; no renderer-side git and no browser-side diff computation.
     - What it is: `runGit`/`executeCommand` live in the main process and the renderer only ever receives results, so a slow git command occupies the host rather than a renderer worker.
-    - Why it is deliberate: this matches the boundary in `AGENTS.md` — the native layer owns PTY, git execution and filesystem mutation, and Vue owns orchestration. Offloading git to a renderer worker or a browser reimplementation would break that split; the plan is to reduce how many git commands are issued (see the `[URGENT]` items), not to move where they run.
+    - Why it is deliberate: this matches the boundary in `AGENTS.md` — the native layer owns PTY, git execution and filesystem mutation, and Vue owns orchestration. Offloading git to a renderer worker or a browser reimplementation would break that split; the plan is to keep reducing how many git commands are issued, not to move where they run.
 
 - [ ] **[NOT_PLANNED]** Each changed-file row mounts a body-level tooltip, a document click listener and a forced layout read.
     - What it is: `v-tooltip` (`src/mainview/directives/VTooltip.ts:165`) appends a tooltip element to `document.body` and registers a `document` click listener per bound element, and `v-loading` (`src/mainview/directives/VLoading.ts:21,34`) calls `getComputedStyle(el).position` and reads `el.clientWidth/clientHeight` per element at mount. `RepChangesView` puts one or two of each on every unlocked row (`RepChangesView.vue:974-991`), so a large changes list creates thousands of body nodes, thousands of document listeners and thousands of forced synchronous layouts.
