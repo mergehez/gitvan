@@ -27,6 +27,7 @@ import type {
     RepoChangesData,
     TagsData,
 } from '../../shared/types.js';
+import { repositoryNotFoundMessage } from '../../shared/repositoryErrors.js';
 import { deleteAccountSecret, readAccountSecret, storeAccountSecret } from './auth.js';
 import type { RepoRow } from './database.js';
 import { useDb } from './database.js';
@@ -414,7 +415,7 @@ async function resolveAccountRemoteAuth(accountId: number): Promise<RepoRemoteAu
 }
 
 async function resolveRepoRemoteAuth(repoId: number): Promise<RepoRemoteAuth | undefined> {
-    const r = db.getRepo(repoId)!;
+    const r = requireRepo(repoId);
 
     return r.account_id ? await resolveAccountRemoteAuth(r.account_id) : undefined;
 }
@@ -476,6 +477,21 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
 
     return bootstrap;
 }
+
+/**
+ * Repo-scoped handlers resolve their path through here. A missing id means the repository was
+ * removed while a request was still in flight, so it gets a domain error instead of a TypeError.
+ */
+function requireRepo(repoId: number) {
+    const repo = db.getRepo(repoId);
+
+    if (!repo) {
+        throw new Error(repositoryNotFoundMessage);
+    }
+
+    return repo;
+}
+
 export const app = {
     getBootstrap: async () => {
         return buildBootstrap();
@@ -999,7 +1015,7 @@ export const app = {
         };
     },
     assignRepoAccount: async (ps: { repoId: number; accountId: number | undefined }) => {
-        db.getRepo(ps.repoId)!;
+        requireRepo(ps.repoId);
 
         if (ps.accountId !== undefined && !db.accountExists(ps.accountId)) {
             throw new Error('The selected account could not be found.');
@@ -1009,7 +1025,7 @@ export const app = {
         return buildBootstrap();
     },
     assignRepoTerminal: async (ps: { repoId: number; terminalPath: string | undefined }) => {
-        db.getRepo(ps.repoId)!;
+        requireRepo(ps.repoId);
 
         const settings = app.getEditorSettings();
         if (ps.terminalPath !== undefined && !settings.terminals.some((terminal) => terminal.path === ps.terminalPath)) {
@@ -1022,144 +1038,144 @@ export const app = {
     getChanges: async (ps: { repoId: number; ignoredChars?: string; showWhitespaceChanges?: boolean }): Promise<RepoChangesData> => {
         const settings = app.getEditorSettings();
 
-        return git.getRepoChanges(db.getRepo(ps.repoId)!.path, {
+        return git.getRepoChanges(requireRepo(ps.repoId).path, {
             ignoredChars: ps.ignoredChars ?? settings.diffIgnoredChars,
             showWhitespaceChanges: ps.showWhitespaceChanges ?? settings.showWhitespaceChanges,
         });
     },
     getStashes: async (ps: { repoId: number }) => {
-        return git.getRepoStashes(db.getRepo(ps.repoId)!.path);
+        return git.getRepoStashes(requireRepo(ps.repoId).path);
     },
     getStashDetail: async (ps: { repoId: number; stashRef: string }) => {
-        return git.getRepoStashDetail(db.getRepo(ps.repoId)!.path, ps.stashRef);
+        return git.getRepoStashDetail(requireRepo(ps.repoId).path, ps.stashRef);
     },
     getStashFileDiff: async (ps: { repoId: number; stashRef: string; path: string; previousPath?: string }) => {
-        return git.getRepoStashFileDiff(db.getRepo(ps.repoId)!.path, ps.stashRef, ps.path, ps.previousPath);
+        return git.getRepoStashFileDiff(requireRepo(ps.repoId).path, ps.stashRef, ps.path, ps.previousPath);
     },
     getMergeConflictState: async (ps: { repoId: number }): Promise<MergeConflictState> => {
-        return git.getRepoMergeConflictState(db.getRepo(ps.repoId)!.path);
+        return git.getRepoMergeConflictState(requireRepo(ps.repoId).path);
     },
     getMergeConflictFileDetails: async (ps: { repoId: number; path: string }): Promise<MergeConflictFileDetails> => {
-        return git.getRepoMergeConflictFileDetails(db.getRepo(ps.repoId)!.path, ps.path);
+        return git.getRepoMergeConflictFileDetails(requireRepo(ps.repoId).path, ps.path);
     },
     getFileDiff: async (ps: { repoId: number; path: string; kind: FileDiffRequestKind }): Promise<FileDiffData> => {
-        return git.getFileDiff(db.getRepo(ps.repoId)!.path, ps.path, ps.kind);
+        return git.getFileDiff(requireRepo(ps.repoId).path, ps.path, ps.kind);
     },
     resolveRepoFilePath: (ps: { repoId: number; path: string }) => {
-        return join(db.getRepo(ps.repoId)!.path, ps.path);
+        return join(requireRepo(ps.repoId).path, ps.path);
     },
     stageFile: async (ps: { repoId: number; path: string }) => {
-        await git.stageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
+        await git.stageRepoFile(requireRepo(ps.repoId).path, ps.path);
         return buildBootstrap();
     },
     stageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
-        await git.stageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
+        await git.stageRepoFiles(requireRepo(ps.repoId).path, ps.paths);
         return buildBootstrap();
     },
     stageAllFiles: async (ps: { repoId: number }) => {
-        await git.stageAllRepoFiles(db.getRepo(ps.repoId)!.path);
+        await git.stageAllRepoFiles(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     unstageFile: async (ps: { repoId: number; path: string }) => {
-        await git.unstageRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
+        await git.unstageRepoFile(requireRepo(ps.repoId).path, ps.path);
         return buildBootstrap();
     },
     unstageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
-        await git.unstageRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
+        await git.unstageRepoFiles(requireRepo(ps.repoId).path, ps.paths);
         return buildBootstrap();
     },
     discardFile: async (ps: { repoId: number; path: string }) => {
-        await git.discardRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
+        await git.discardRepoFile(requireRepo(ps.repoId).path, ps.path);
         return buildBootstrap();
     },
     applyPatch: async (ps: { repoId: number; patch: string; mode: 'stage' | 'unstage' | 'discard' }) => {
-        await git.applyPatch(db.getRepo(ps.repoId)!.path, ps.patch, ps.mode);
+        await git.applyPatch(requireRepo(ps.repoId).path, ps.patch, ps.mode);
         return buildBootstrap();
     },
     discardRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
-        await git.discardRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
+        await git.discardRepoFiles(requireRepo(ps.repoId).path, ps.paths);
         return buildBootstrap();
     },
     unstageAllFiles: async (ps: { repoId: number }) => {
-        await git.unstageAllRepoFiles(db.getRepo(ps.repoId)!.path);
+        await git.unstageAllRepoFiles(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     discardAllChanges: async (ps: { repoId: number }) => {
-        await git.discardAllRepoChanges(db.getRepo(ps.repoId)!.path);
+        await git.discardAllRepoChanges(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     restoreRepoFile: async (ps: { repoId: number; path: string; kind: 'staged' | 'unstaged' }) => {
-        await git.restoreRepoFile(db.getRepo(ps.repoId)!.path, ps.path, ps.kind);
+        await git.restoreRepoFile(requireRepo(ps.repoId).path, ps.path, ps.kind);
         return buildBootstrap();
     },
     restoreRepoFiles: async (ps: { repoId: number; paths: string[]; kind: 'staged' | 'unstaged' }) => {
-        await git.restoreRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths, ps.kind);
+        await git.restoreRepoFiles(requireRepo(ps.repoId).path, ps.paths, ps.kind);
         return buildBootstrap();
     },
     deleteStagedRepoFile: async (ps: { repoId: number; path: string }) => {
-        await git.deleteStagedRepoFile(db.getRepo(ps.repoId)!.path, ps.path);
+        await git.deleteStagedRepoFile(requireRepo(ps.repoId).path, ps.path);
         return buildBootstrap();
     },
     deleteStagedRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
-        await git.deleteStagedRepoFiles(db.getRepo(ps.repoId)!.path, ps.paths);
+        await git.deleteStagedRepoFiles(requireRepo(ps.repoId).path, ps.paths);
         return buildBootstrap();
     },
     ignoreRepoPath: async (ps: { repoId: number; path: string; mode: 'file' | 'directory' | 'pattern' }) => {
-        await git.ignoreRepoPath(db.getRepo(ps.repoId)!.path, ps.path, ps.mode);
+        await git.ignoreRepoPath(requireRepo(ps.repoId).path, ps.path, ps.mode);
         return buildBootstrap();
     },
     resolveMergeConflictFile: async (ps: { repoId: number; path: string; resolution: 'ours' | 'theirs' }) => {
-        await git.resolveRepoMergeConflict(db.getRepo(ps.repoId)!.path, ps.path, ps.resolution);
+        await git.resolveRepoMergeConflict(requireRepo(ps.repoId).path, ps.path, ps.resolution);
         return buildBootstrap();
     },
     markMergeConflictResolved: async (ps: { repoId: number; path: string }) => {
-        await git.markRepoConflictResolved(db.getRepo(ps.repoId)!.path, ps.path);
+        await git.markRepoConflictResolved(requireRepo(ps.repoId).path, ps.path);
         return buildBootstrap();
     },
     saveMergeConflictResolution: async (ps: { repoId: number; path: string; resolvedContent: string }) => {
-        await git.saveRepoMergeConflictResolution(db.getRepo(ps.repoId)!.path, ps.path, ps.resolvedContent);
+        await git.saveRepoMergeConflictResolution(requireRepo(ps.repoId).path, ps.path, ps.resolvedContent);
         return buildBootstrap();
     },
     abortMerge: async (ps: { repoId: number }) => {
-        await git.abortRepoMerge(db.getRepo(ps.repoId)!.path);
+        await git.abortRepoMerge(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     commitMerge: async (ps: { repoId: number }) => {
-        await git.commitRepoMerge(db.getRepo(ps.repoId)!.path);
+        await git.commitRepoMerge(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     commitRepo: async (ps: { repoId: number; summary: string; description: string; amend: CommitFormState['amend'] }) => {
-        await git.commitRepoChanges(db.getRepo(ps.repoId)!.path, ps.summary, ps.description, ps.amend);
+        await git.commitRepoChanges(requireRepo(ps.repoId).path, ps.summary, ps.description, ps.amend);
         return buildBootstrap();
     },
     rewordCommit: async (ps: { repoId: number; commitSha: string; summary: string; description: string }) => {
-        await git.rewordRepoCommit(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.summary, ps.description);
+        await git.rewordRepoCommit(requireRepo(ps.repoId).path, ps.commitSha, ps.summary, ps.description);
         return buildBootstrap();
     },
     undoLastCommit: async (ps: { repoId: number }) => {
-        await git.undoLastRepoCommit(db.getRepo(ps.repoId)!.path);
+        await git.undoLastRepoCommit(requireRepo(ps.repoId).path);
         return buildBootstrap();
     },
     getTags: async (ps: { repoId: number }): Promise<TagsData> => {
-        return git.getRepoTags(db.getRepo(ps.repoId)!.path);
+        return git.getRepoTags(requireRepo(ps.repoId).path);
     },
     createTag: async (ps: { repoId: number; commitSha: string; tagName: string; message?: string }) => {
-        await git.createRepoTag(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.tagName, ps.message);
+        await git.createRepoTag(requireRepo(ps.repoId).path, ps.commitSha, ps.tagName, ps.message);
         return buildBootstrap();
     },
     renameTag: async (ps: { repoId: number; tagName: string; nextTagName: string }) => {
-        await git.renameRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, ps.nextTagName);
+        await git.renameRepoTag(requireRepo(ps.repoId).path, ps.tagName, ps.nextTagName);
         return buildBootstrap();
     },
     deleteTag: async (ps: { repoId: number; tagName: string }) => {
-        await git.deleteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName);
+        await git.deleteRepoTag(requireRepo(ps.repoId).path, ps.tagName);
         return buildBootstrap();
     },
     pushTag: async (ps: { repoId: number; tagName: string }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.pushRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, auth);
+            await git.pushRepoTag(requireRepo(ps.repoId).path, ps.tagName, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }
@@ -1170,7 +1186,7 @@ export const app = {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.pushRepoAllTags(db.getRepo(ps.repoId)!.path, auth);
+            await git.pushRepoAllTags(requireRepo(ps.repoId).path, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }
@@ -1181,7 +1197,7 @@ export const app = {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.deleteRemoteRepoTag(db.getRepo(ps.repoId)!.path, ps.tagName, auth);
+            await git.deleteRemoteRepoTag(requireRepo(ps.repoId).path, ps.tagName, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }
@@ -1189,7 +1205,7 @@ export const app = {
         return buildBootstrap();
     },
     getHistory: async (ps: { repoId: number; limit?: number; skip?: number; search?: string; path?: string; followRenames?: boolean }): Promise<HistoryData> => {
-        return git.getRepoHistory(db.getRepo(ps.repoId)!.path, {
+        return git.getRepoHistory(requireRepo(ps.repoId).path, {
             limit: ps.limit,
             skip: ps.skip,
             search: ps.search,
@@ -1198,36 +1214,36 @@ export const app = {
         });
     },
     getCommittedTree: async (ps: { repoId: number; commitSha?: string }): Promise<CommittedTreeData> => {
-        return git.getCommittedTree(db.getRepo(ps.repoId)!.path, ps.commitSha);
+        return git.getCommittedTree(requireRepo(ps.repoId).path, ps.commitSha);
     },
     getCommittedFile: async (ps: { repoId: number; path: string; commitSha?: string }): Promise<CommittedFileData> => {
-        return git.getCommittedFile(db.getRepo(ps.repoId)!.path, ps.path, ps.commitSha);
+        return git.getCommittedFile(requireRepo(ps.repoId).path, ps.path, ps.commitSha);
     },
     getCommitDetail: async (ps: { repoId: number; commitSha: string }): Promise<CommitDetail> => {
-        return git.getCommitDetail(db.getRepo(ps.repoId)!.path, ps.commitSha);
+        return git.getCommitDetail(requireRepo(ps.repoId).path, ps.commitSha);
     },
     getCommitMessage: async (ps: { repoId: number; commitSha: string }): Promise<CommitMessageData> => {
-        return git.getRepoCommitMessage(db.getRepo(ps.repoId)!.path, ps.commitSha);
+        return git.getRepoCommitMessage(requireRepo(ps.repoId).path, ps.commitSha);
     },
     getCommitFileDiff: async (ps: { repoId: number; commitSha: string; path: string; previousPath?: string }): Promise<FileDiffData> => {
-        return git.getCommitFileDiff(db.getRepo(ps.repoId)!.path, ps.commitSha, ps.path, ps.previousPath);
+        return git.getCommitFileDiff(requireRepo(ps.repoId).path, ps.commitSha, ps.path, ps.previousPath);
     },
     getBranches: async (ps: { repoId: number }): Promise<BranchesData> => {
-        return git.getRepoBranches(db.getRepo(ps.repoId)!.path);
+        return git.getRepoBranches(requireRepo(ps.repoId).path);
     },
     checkoutBranch: async (ps: { repoId: number; branchName: string }) => {
-        await git.checkoutRepoBranch(db.getRepo(ps.repoId)!.path, ps.branchName);
+        await git.checkoutRepoBranch(requireRepo(ps.repoId).path, ps.branchName);
         return buildBootstrap();
     },
     createBranch: async (ps: { repoId: number; branchName: string }) => {
-        await git.createRepoBranch(db.getRepo(ps.repoId)!.path, ps.branchName);
+        await git.createRepoBranch(requireRepo(ps.repoId).path, ps.branchName);
         return buildBootstrap();
     },
     createRemoteBranch: async (ps: { repoId: number; branchName: string }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.createRemoteRepoBranch(db.getRepo(ps.repoId)!.path, ps.branchName, auth);
+            await git.createRemoteRepoBranch(requireRepo(ps.repoId).path, ps.branchName, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }
@@ -1238,14 +1254,14 @@ export const app = {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, ps.operation, auth);
+            await git.runRepoRemoteOperation(requireRepo(ps.repoId).path, ps.operation, auth);
         } catch (error) {
             if (ps.operation === 'pull' && git.isPullMergeConflictError(error)) {
                 return {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted',
                     stashed: false,
-                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
+                    conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
                 };
             }
 
@@ -1271,7 +1287,7 @@ export const app = {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.stashRepoChanges(db.getRepo(ps.repoId)!.path, auth);
+            await git.stashRepoChanges(requireRepo(ps.repoId).path, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }
@@ -1284,14 +1300,14 @@ export const app = {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.runRepoRemoteOperation(db.getRepo(ps.repoId)!.path, 'pull', auth);
+            await git.runRepoRemoteOperation(requireRepo(ps.repoId).path, 'pull', auth);
         } catch (error) {
             if (git.isPullMergeConflictError(error)) {
                 return {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted',
                     stashed: true,
-                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
+                    conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
                 };
             }
 
@@ -1306,7 +1322,7 @@ export const app = {
     },
     restoreStash: async (ps: { repoId: number; stashRef: string }) => {
         try {
-            await git.restoreRepoStash(db.getRepo(ps.repoId)!.path, ps.stashRef);
+            await git.restoreRepoStash(requireRepo(ps.repoId).path, ps.stashRef);
             return {
                 bootstrap: await buildBootstrap(),
                 status: 'completed' as const,
@@ -1319,7 +1335,7 @@ export const app = {
                     bootstrap: await buildBootstrap(),
                     status: 'conflicted' as const,
                     kept: true,
-                    conflictingFiles: await git.listUnmergedRepoFiles(db.getRepo(ps.repoId)!.path),
+                    conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
                 };
             }
 
@@ -1327,14 +1343,14 @@ export const app = {
         }
     },
     discardStash: async (ps: { repoId: number; stashRef: string }) => {
-        await git.discardRepoStash(db.getRepo(ps.repoId)!.path, ps.stashRef);
+        await git.discardRepoStash(requireRepo(ps.repoId).path, ps.stashRef);
         return buildBootstrap();
     },
     publishBranch: async (ps: { repoId: number }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
 
         try {
-            await git.publishRepoBranch(db.getRepo(ps.repoId)!.path, auth);
+            await git.publishRepoBranch(requireRepo(ps.repoId).path, auth);
         } catch (error) {
             rethrowRemoteAuthError(error, auth);
         }

@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, watch } from 'vue';
 import type { AppBootstrapApi } from '../../shared/types.ts';
+import { ignoreRemovedRepository } from '../../shared/repositoryErrors.ts';
 import { appClientRpc } from '../appClient.ts';
 import { runWithButtonLoadingIndicatorSilenced } from '../lib/loadingIndicatorState.ts';
 import { _coreState } from './coreState.ts';
@@ -10,16 +11,30 @@ import { initTasks, tasks } from './useTasks.ts';
 
 export async function applyMutation(nextBootstrap: AppBootstrapApi) {
     _coreState.applyBootstrap(nextBootstrap);
+    await loadSelectedRepositoryData();
+}
+
+/**
+ * The repository a bootstrap selected can be gone by the time these loads run, because a delete
+ * or a sandbox reset can land in between. Each load tolerates that instead of failing the flow.
+ */
+async function loadSelectedRepositoryData() {
     const repos = useRepos();
     const repo = repos.getSelectedRepo();
-    if (repo) await repo.loadActiveViewData();
-    await useMergeHelper().loadMergeConflictState();
-    if (repo) await repo.loadRepositoryStashes();
+
+    if (repo) {
+        await ignoreRemovedRepository(() => repo.loadActiveViewData());
+    }
+
+    await ignoreRemovedRepository(() => useMergeHelper().loadMergeConflictState());
+
+    if (repo) {
+        await ignoreRemovedRepository(() => repo.loadRepositoryStashes());
+    }
 }
 
 function createGitClientAppState() {
     const settings = useSettings();
-    const mergeHelper = useMergeHelper();
     const repos = useRepos();
 
     watch(
@@ -38,19 +53,9 @@ function createGitClientAppState() {
             settings.oauthProviderSettings = await tasks.getOAuthProviderSettings.run(undefined);
             hasLoadedBootstrap = true;
 
-            const nextActiveView = settings.state.activeView;
-            const activeViewChanged = settings.state.activeView !== nextActiveView;
-            settings.state.activeView = nextActiveView;
             settings.state.showBranches = false;
 
-            if (!activeViewChanged) {
-                const repo = repos.getSelectedRepo();
-                if (repo) await repo.loadActiveViewData();
-            }
-
-            await mergeHelper.loadMergeConflictState();
-            const repo = repos.getSelectedRepo();
-            if (repo) await repo.loadRepositoryStashes();
+            await loadSelectedRepositoryData();
         },
 
         async refreshStatuses() {

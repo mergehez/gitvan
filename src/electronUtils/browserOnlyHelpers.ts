@@ -1,4 +1,5 @@
 import express from 'express';
+import { isRepositoryNotFoundError } from '../shared/repositoryErrors.ts';
 import { appConfig } from './helpers.ts';
 import type { RendererDiagnosticPayload } from './mainProloadHelpers.ts';
 export type DevServerRequestScope = <T>(signal: AbortSignal, task: () => Promise<T>) => Promise<T>;
@@ -29,6 +30,26 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
 
     const REQUEST_TIMEOUT_MS = 65_000;
     const serverApp = express();
+
+    // Handler failures are reported on /health so a browser spec can prove the app ran without
+    // erroring, instead of a green run hiding a backend that threw all the way through.
+    const handlerErrors: Array<{ seq: number; method: string; message: string; code: string }> = [];
+    const maxTrackedHandlerErrors = 25;
+    let handlerErrorCount = 0;
+
+    function recordHandlerError(method: string, message: string, code: string) {
+        handlerErrorCount++;
+        handlerErrors.push({ seq: handlerErrorCount, method, message, code });
+
+        if (handlerErrors.length > maxTrackedHandlerErrors) {
+            handlerErrors.splice(0, handlerErrors.length - maxTrackedHandlerErrors);
+        }
+    }
+
+    /** A cancelled request is the client walking away from work it no longer needs. */
+    function isCancellation(message: string) {
+        return /cancelled|canceled|aborted/i.test(message);
+    }
 
     // // CORS preflight (dev mode only — standalone serves from the same origin)
     // if (!IS_STANDALONE) {
@@ -73,7 +94,7 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
     }
 
     serverApp.get('/health', (_req, res) => {
-        res.json({ ok: true });
+        res.json({ ok: true, handlerErrorCount, handlerErrors });
     });
 
     serverApp.post('/api/:method', async (req, res) => {
@@ -108,7 +129,18 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
                 res.json(result);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                console.error(`[devServer] ${method}:`, message);
+
+                if (!isCancellation(message)) {
+                    // A repository removed mid-request is a race the client handles, not a fault.
+                    const code = isRepositoryNotFoundError(message) ? 'repository-not-found' : 'internal';
+
+                    recordHandlerError(method ?? 'unknown', message, code);
+
+                    if (code === 'internal') {
+                        console.error(`[devServer] ${method}:`, message);
+                    }
+                }
+
                 if (!res.writableEnded && !res.headersSent) {
                     res.status(500).json({ error: message });
                 }

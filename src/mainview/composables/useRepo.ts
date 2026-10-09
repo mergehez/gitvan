@@ -20,6 +20,7 @@ import type {
 import { isButtonBusyStateSilenced } from '../lib/loadingIndicatorState.ts';
 import { joinNativePath, writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
+import { isRepositoryNotFoundError } from '../../shared/repositoryErrors.ts';
 import { applyMutation } from './initializeStates.ts';
 import { useAuth } from './useAuth.ts';
 import { useSettings } from './useSettings.ts';
@@ -477,6 +478,16 @@ const _useRepository = (repo: Repo) => {
         },
 
         async loadChanges() {
+            try {
+                await this._loadChanges();
+            } catch (error) {
+                // See loadActiveViewData: the repository can be removed while this load is running.
+                if (!isRepositoryNotFoundError(error)) {
+                    throw error;
+                }
+            }
+        },
+        async _loadChanges() {
             const nextChanges = await tasks.getChanges.run({
                 repoId: this.id,
                 ignoredChars: settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '',
@@ -536,6 +547,17 @@ const _useRepository = (repo: Repo) => {
             await this.selectChange(nextSelection);
         },
         async loadActiveViewData() {
+            try {
+                await this._loadActiveViewData();
+            } catch (error) {
+                // A repository can be deleted, or replaced by a sandbox reset, while this load is
+                // in flight. Losing that race is a known outcome; the next bootstrap drops it.
+                if (!isRepositoryNotFoundError(error)) {
+                    throw error;
+                }
+            }
+        },
+        async _loadActiveViewData() {
             await this.loadBranches();
             if (settings.state.activeView === 'changes') {
                 await this.loadChanges();
