@@ -159,4 +159,29 @@ describe('repo sidebar status cache', () => {
 
         expect(second).toBe(first);
     });
+
+    it('does not let a scan that started before invalidateAll repopulate the cache', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+
+        const staleScan = readRepoSidebarStatus(repoPath, async () => {
+            await gate;
+            return await changesGit.getRepoSidebarStatus(repoPath);
+        });
+
+        // The refresh empties the cache while that scan is still reading the old state.
+        invalidateAllRepoSidebarStatuses();
+        release();
+
+        const staleStatus = await staleScan;
+        expect(staleStatus.error).toBeUndefined();
+
+        const compute = vi.fn(() => changesGit.getRepoSidebarStatus(repoPath));
+        const freshStatus = await readRepoSidebarStatus(repoPath, compute);
+
+        expect(compute).toHaveBeenCalledTimes(1);
+        expect(freshStatus).not.toBe(staleStatus);
+    });
 });

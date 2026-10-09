@@ -26,6 +26,11 @@ type CacheEntry = {
 
 const statusCache = new Map<string, CacheEntry>();
 const inFlightStatuses = new Map<string, Promise<RepoSidebarStatus>>();
+/**
+ * Bumped by `invalidateAllRepoSidebarStatuses`. A scan that started before the refresh finished
+ * reading the old state, so it must not repopulate the cache the refresh just emptied.
+ */
+let invalidationGeneration = 0;
 
 /**
  * Returns the cached status for a repository when it is still valid, otherwise computes it.
@@ -42,11 +47,12 @@ export async function readRepoSidebarStatus(repoPath: string, compute: () => Pro
         return await pending;
     }
 
+    const requestGeneration = invalidationGeneration;
     const request = (async () => {
         const status = await compute();
 
         // A failed scan is not cached so the next caller retries instead of serving an error.
-        if (!status.error) {
+        if (!status.error && requestGeneration === invalidationGeneration) {
             statusCache.set(repoPath, { status, expiresAt: Date.now() + ttlMs });
         }
 
@@ -68,5 +74,6 @@ export function invalidateRepoSidebarStatus(repoPath: string) {
 }
 
 export function invalidateAllRepoSidebarStatuses() {
+    invalidationGeneration += 1;
     statusCache.clear();
 }
