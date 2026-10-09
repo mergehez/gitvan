@@ -174,16 +174,16 @@ bun run test:ui
 ### Run Browser Tests
 
 ```bash
-# One terminal: serve the renderer and backend for a browser
-bun run dev
-
-# Another terminal
 bunx playwright install chromium   # once, and again after @playwright/test updates
 bun run test:e2e
 ```
 
-The browser specs drive the sandbox repositories under `sandbox/` and run one at a time, because they
-all share that single app instance.
+Nothing needs to be started first: the run boots the dev server itself and waits for the backend,
+and reuses one that is already running. The browser specs drive the sandbox repositories under
+`sandbox/` and run one at a time, because they all share that single app instance.
+
+They use their own database in a temp directory, so they never read or modify the repositories and
+settings of your local app. Set `PLAYWRIGHT_APP_DATA_DIR` to keep that database somewhere else.
 
 ### Build The App
 

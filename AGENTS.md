@@ -75,6 +75,20 @@ Examples:
 - Never create temporary tests if a test can be used later. We need to integrate it properly into the test suite
   rather than leaving it as a throwaway or provisional test.
 - Every user-facing feature gets a browser spec under `./playwright/` or `./src/mainview/tests/e2e/`, however small it is — a new control, a dialog, a field, a public page's behaviour. A server test says the endpoint answers; only the browser says the screen actually draws the control, wires it to that endpoint and shows what came back.
+- Run the browser specs after every UI change, before committing:
+
+  ```bash
+  bun run test:e2e     # 21 specs, about two minutes
+  ```
+
+  Nothing has to be started first: `playwright.config.ts` boots `bun run dev` itself and waits on the
+  backend health endpoint, and reuses an already running dev server when there is one. The specs share a
+  single app instance and run one at a time.
+    - `bunx playwright install chromium` once, and again after `@playwright/test` updates.
+    - The specs get their own database (`PLAYWRIGHT_APP_DATA_DIR`, defaulting to a temp directory) instead
+      of the real app database, so a run never depends on, or disturbs, local repositories and settings.
+    - Use `openSandboxRepo(page, name)` from `./playwright/support/sandbox.ts` to open a lab; do not
+      re-implement the reset and repository selection in a spec.
 
 ## Git
 
