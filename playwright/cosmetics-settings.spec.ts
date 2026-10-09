@@ -17,7 +17,11 @@ test.describe('cosmetics settings', () => {
         const file = getFile(page, section, fileName);
         await expect(file).toBeVisible();
         await file.click();
-        await expect(page.getByTestId('diffs-diff-editor-root')).toBeVisible();
+
+        // The view auto-selects a file, so its diff can still be on screen while the clicked one
+        // loads. Waiting for the clicked file's title means the pane is settled and a later
+        // response cannot replace the diff — and any popover opened on it — underneath the test.
+        await expect(page.getByTestId('diff-viewer-title')).toHaveText(fileName);
     }
 
     async function openDiffSettings(page: Page): Promise<Locator> {
@@ -56,6 +60,10 @@ test.describe('cosmetics settings', () => {
         const hideWhitespace = dialog.getByLabel('Hide whitespace changes');
         await expect(hideWhitespace).toBeChecked();
         await toggleSetting(page, hideWhitespace);
+
+        // The toggle re-renders the diff underneath it, so the popover has to stay open or
+        // every setting would need the settings button pressed again.
+        await expect(dialog).toBeVisible();
 
         await closeDiffSettings(page);
 

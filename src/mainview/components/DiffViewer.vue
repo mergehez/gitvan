@@ -65,7 +65,7 @@ function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
 <template>
     <div class="relative flex h-full flex-col">
         <div class="flex items-center gap-1 border-b border-x5 px-2 py-1.5 text-xs font-medium">
-            <div class="truncate flex-1 text-white">{{ state?.title }}</div>
+            <div class="truncate flex-1 text-white" data-testid="diff-viewer-title">{{ state?.title }}</div>
             <slot name="before-header-actions"></slot>
             <Alert v-if="showsWhitespaceOnlyIndicator" severity="secondary" class="rounded px-2 py-px tracking-tight text-white/75"> space-only-diff </Alert>
             <Alert v-if="showsNoActualChangeIndicator" severity="secondary" class="rounded px-2 py-px tracking-tight text-white/75"> no actual change </Alert>
