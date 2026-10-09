@@ -31,6 +31,7 @@ import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
+import { invalidateAllRepoSidebarStatuses, invalidateRepoSidebarStatus, readRepoSidebarStatus } from './repoStatusCache.js';
 
 const db = useDb();
 
@@ -430,7 +431,7 @@ async function buildBootstrap(): Promise<AppBootstrapApi> {
     const repoRows = db.listRepos();
     const repos: AppBootstrapApi['repos'] = await Promise.all(
         repoRows.map(async (row: ReturnType<typeof db.listRepos>[number]) => {
-            const status = await git.getRepoSidebarStatus(row.path);
+            const status = await readRepoSidebarStatus(row.path, () => git.getRepoSidebarStatus(row.path));
 
             const r: Repo = {
                 id: row.id,
@@ -679,6 +680,9 @@ export const app = {
         return buildBootstrap();
     },
     refreshRepos: async () => {
+        // Polling and the manual refresh are what notice working-tree edits made outside
+        // Gitvan, so they always re-read the real status instead of the cached one.
+        invalidateAllRepoSidebarStatuses();
         return buildBootstrap();
     },
     resetSandboxRepos: async () => {
@@ -686,6 +690,9 @@ export const app = {
         if (!labsPath) {
             throw new Error('The sandbox labs are only available when running from the Gitvan source checkout.');
         }
+
+        // The labs are recreated at paths that may already be cached.
+        invalidateAllRepoSidebarStatuses();
 
         let groupSandbox = db.getGroupByName('Sandbox');
         if (!groupSandbox) {
@@ -718,7 +725,12 @@ export const app = {
         return buildBootstrap();
     },
     removeRepo: async (ps: { repoId: number }) => {
+        const removedRepoPath = db.getRepo(ps.repoId)?.path;
         db.removeRepo(ps.repoId);
+
+        if (removedRepoPath) {
+            invalidateRepoSidebarStatus(removedRepoPath);
+        }
 
         if (db.getSelectedRepoId() === ps.repoId) {
             db.setSelectedRepoId(undefined);

@@ -2,6 +2,44 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { executeCommand } from '../../../electronUtils/executeCommand.js';
+import { invalidateRepoSidebarStatus } from '../repoStatusCache.js';
+
+/**
+ * `git` subcommands that can change working-tree, index or ref state. A cached sidebar
+ * status for the repository they ran in is no longer trustworthy afterwards, and missing one
+ * of them would only serve a stale status until the next poll.
+ */
+const statusInvalidatingSubcommands = new Set([
+    'add',
+    'am',
+    'apply',
+    'checkout',
+    'cherry-pick',
+    'clean',
+    'commit',
+    'fetch',
+    'merge',
+    'mv',
+    'pull',
+    'push',
+    'rebase',
+    'reset',
+    'restore',
+    'revert',
+    'rm',
+    'stash',
+    'switch',
+    'symbolic-ref',
+    'tag',
+    'update-ref',
+]);
+
+function invalidateStatusForMutatingCommand(args: string[], cwd: string) {
+    const subcommand = args.find((arg) => !arg.startsWith('-'));
+    if (subcommand && statusInvalidatingSubcommands.has(subcommand)) {
+        invalidateRepoSidebarStatus(cwd);
+    }
+}
 
 export type GitRemoteAuth = {
     kind: 'https-token';
@@ -30,6 +68,7 @@ export class GitCommandError extends Error {
 export async function runGit(args: string[], cwd: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
     try {
         const gitExecutable = resolveGitExecutable();
+        invalidateStatusForMutatingCommand(args, cwd);
         const [, stdout] = await executeCommand({
             command: gitExecutable,
             args,
@@ -53,6 +92,7 @@ export async function runGit(args: string[], cwd: string, allowedExitCodes: numb
 export async function runGitWithInput(args: string[], cwd: string, input: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
     try {
         const gitExecutable = resolveGitExecutable();
+        invalidateStatusForMutatingCommand(args, cwd);
         const [, stdout] = await executeCommand({
             command: gitExecutable,
             args,
@@ -77,6 +117,7 @@ export async function runGitWithInput(args: string[], cwd: string, input: string
 export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes: number[] = [0], env: NodeJS.ProcessEnv = {}) {
     try {
         const gitExecutable = resolveGitExecutable();
+        invalidateStatusForMutatingCommand(args, cwd);
         const [stdout] = await executeCommand({
             command: gitExecutable,
             args,
