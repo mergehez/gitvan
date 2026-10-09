@@ -133,6 +133,39 @@ test.describe('cosmetics settings', () => {
         await expect(diffRoot).toBeVisible();
     });
 
+    test('changing the diff font size resizes the rendered lines in place', async ({ page }) => {
+        await openLabFile(page, 'unstaged', 'mixed.txt');
+
+        const diffRoot = page.getByTestId('diffs-diff-editor-root');
+        const renderedLine = diffRoot.locator('[data-line]').first();
+        await expect(renderedLine).toBeAttached();
+
+        // Marking the node makes a full teardown and rebuild observable: the font size is a CSS
+        // custom property, so the diff must not be re-rendered for it.
+        await renderedLine.evaluate((element) => {
+            (element as HTMLElement & { __kept?: string }).__kept = 'yes';
+        });
+
+        const dialog = await openDiffSettings(page);
+        const fontSize = dialog.locator('input[type="number"]');
+        await fontSize.fill('20');
+        await fontSize.press('Tab');
+        await closeDiffSettings(page);
+
+        await expect.poll(async () => renderedLine.evaluate((element) => getComputedStyle(element).fontSize)).toBe('20px');
+        expect(await renderedLine.evaluate((element) => (element as HTMLElement & { __kept?: string }).__kept)).toBe('yes');
+        await expect(page.locator('#app-error-banner p')).toBeHidden();
+
+        // Restore the default so the shared app instance is left as the other specs expect it.
+        const reopened = await openDiffSettings(page);
+        const restored = reopened.locator('input[type="number"]');
+        await restored.fill('12');
+        await restored.press('Tab');
+        await closeDiffSettings(page);
+
+        await expect.poll(async () => renderedLine.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
+    });
+
     test('real staged changes do not show no-actual-change badge', async ({ page }) => {
         // The staged cosmetics-only file holds a real content change (an added comment).
         await openLabFile(page, 'staged', 'cosmetics-only.txt');

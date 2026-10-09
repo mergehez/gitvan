@@ -476,16 +476,19 @@ onUnmounted(() => {
     cleanUpInstance();
 });
 
+// An array of getters, not one getter returning an array: the latter produces a new array on
+// every re-evaluation, so it re-renders even when the replaced settings object holds the same
+// values. Everything listed here changes the diff itself or how it lays out. The font size is
+// deliberately absent because `hostStyle` applies it through the `--diffs-font-size` property.
 watch(
-    () => [
-        props.original,
-        props.modified,
-        props.pathForLanguage,
-        props.diffViewMode,
-        props.diffIgnoredChars,
-        props.showWhitespaceChanges,
-        settings.state.diffFontSize,
-        settings.state.diffViewWrap,
+    [
+        () => props.original,
+        () => props.modified,
+        () => props.pathForLanguage,
+        () => props.diffViewMode,
+        () => props.diffIgnoredChars,
+        () => props.showWhitespaceChanges,
+        () => settings.state.diffViewWrap,
     ],
     () => {
         renderDiff();
