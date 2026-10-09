@@ -70,12 +70,6 @@ function hasBackendNoActualChange(kind: 'staged' | 'unstaged', path: string) {
     return kind === 'staged' ? entry?.stagedNoActualChange === true : entry?.unstagedNoActualChange === true;
 }
 
-function hasBackendCosmeticCheckTooLarge(kind: 'staged' | 'unstaged', path: string) {
-    const entry = findChangeEntry(kind, path);
-
-    return kind === 'staged' ? entry?.stagedTooLargeForCosmeticCheck === true : entry?.unstagedTooLargeForCosmeticCheck === true;
-}
-
 const allTreeItems = computed<TreeItem[]>(() => {
     return [buildChangeSection(true), buildChangeSection(false)];
 });
@@ -102,8 +96,8 @@ function buildChangeSection(isStaged: boolean): TreeItem {
                 path: e.path,
                 status: isStaged ? e.stagedStatus : e.unstagedStatus,
                 hasConflictMarkers: e.hasConflictMarkers,
-                noActualChange: hasBackendNoActualChange(kind, e.path),
-                cosmeticCheckTooLarge: hasBackendCosmeticCheckTooLarge(kind, e.path),
+                noActualChange: isStaged ? e.stagedNoActualChange === true : e.unstagedNoActualChange === true,
+                cosmeticCheckTooLarge: isStaged ? e.stagedTooLargeForCosmeticCheck === true : e.unstagedTooLargeForCosmeticCheck === true,
                 isStaged,
             })),
             changesFileSort.mode.value
