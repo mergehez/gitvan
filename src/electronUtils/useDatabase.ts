@@ -35,14 +35,25 @@ function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?
         timeout: 5000,
     });
 
+    // Statements are recompiled on every prepare, and the same handful of queries run on every
+    // request, so the wrappers are reused. Running arbitrary SQL clears the cache because the
+    // schema may have changed underneath the compiled statements.
+    const statementCache = new Map<string, DatabaseStatement>();
+
     const client: DatabaseClient = {
         exec: (sql: string) => {
             db.exec(sql);
+            statementCache.clear();
         },
         prepare: (sql: string): DatabaseStatement => {
+            const cached = statementCache.get(sql);
+            if (cached) {
+                return cached;
+            }
+
             const statement = db.prepare(sql);
 
-            return {
+            const prepared: DatabaseStatement = {
                 run: (...params: SQLInputValue[]) => {
                     const result = statement.run(...params);
                     return {
@@ -52,8 +63,12 @@ function createRuntimeDatabaseClient(databasePath: string, options?: { readOnly?
                 get: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => (statement.get(...params) ?? undefined) as T | undefined,
                 all: <T = Record<string, SQLOutputValue>>(...params: SQLInputValue[]) => statement.all(...params) as T[],
             };
+
+            statementCache.set(sql, prepared);
+            return prepared;
         },
         close: () => {
+            statementCache.clear();
             db.close();
         },
     };
