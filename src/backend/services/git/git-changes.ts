@@ -345,23 +345,29 @@ export const changesGit = {
                     };
                 }
             } else if (existsSync(absolutePath)) {
-                const untrackedPatch = await runGit(['diff', '--no-index', '--', '/dev/null', absolutePath], repoPath, [0, 1]);
+                const modifiedSize = readWorkingTreeFileSize(absolutePath);
 
-                if (untrackedPatch) {
-                    const modifiedSize = readWorkingTreeFileSize(absolutePath);
-                    const stats = buildDiffStats(untrackedPatch, 0, modifiedSize);
+                if (isPreviewTooLarge(modifiedSize)) {
+                    // The patch of an untracked file is the file itself, so counting its lines
+                    // beats buffering (and diffing) a file the preview cap rejects anyway.
+                    entry = {
+                        label: 'Untracked',
+                        kind: 'untracked',
+                        patch: fileTooBigPreviewMessage,
+                        original: '',
+                        modified: '',
+                        stats: {
+                            oldSizeBytes: 0,
+                            newSizeBytes: modifiedSize ?? 0,
+                            addedLines: await countUntrackedLines(repoPath, absolutePath),
+                            removedLines: 0,
+                        },
+                        previewMessage: fileTooBigPreviewMessage,
+                    };
+                } else {
+                    const untrackedPatch = await runGit(['diff', '--no-index', '--', '/dev/null', absolutePath], repoPath, [0, 1]);
 
-                    if (isPreviewTooLarge(modifiedSize)) {
-                        entry = {
-                            label: 'Untracked',
-                            kind: 'untracked',
-                            patch: untrackedPatch,
-                            original: '',
-                            modified: '',
-                            stats,
-                            previewMessage: fileTooBigPreviewMessage,
-                        };
-                    } else {
+                    if (untrackedPatch) {
                         const modifiedBuffer = isImagePath(filePath) ? readWorkingTreeFileBuffer(absolutePath) : undefined;
                         const modifiedText = modifiedBuffer ? '' : readWorkingTreeFile(absolutePath);
                         entry = {
@@ -582,6 +588,14 @@ type CosmeticCandidate = {
 
 function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
     return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
+}
+
+/** Added line count for an untracked file, read from numstat so the patch is never buffered. */
+async function countUntrackedLines(repoPath: string, absolutePath: string) {
+    const numstat = await runGit(['diff', '--no-index', '--numstat', '--', '/dev/null', absolutePath], repoPath, [0, 1]).catch(() => '');
+    const added = Number(numstat.trim().split('\t')[0]);
+
+    return Number.isFinite(added) ? added : 0;
 }
 
 /**

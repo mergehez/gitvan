@@ -587,3 +587,100 @@ describe('changesGit reword', () => {
         await expect(changesGit.rewordRepoCommit(repoPath, headSha, '   ', '')).rejects.toThrow(/Commit summary is required/);
     });
 });
+
+describe('changesGit file diff', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function createRepo(name = 'tracked.txt', content = 'base\n') {
+        const repoPath = mkdtempSync(join(tmpdir(), 'gitvan-file-diff-'));
+
+        runGit(repoPath, ['init']);
+        runGit(repoPath, ['config', 'user.name', 'Gitvan Test']);
+        runGit(repoPath, ['config', 'user.email', 'gitvan@example.com']);
+        writeFileSync(join(repoPath, name), content, 'utf8');
+        runGit(repoPath, ['add', name]);
+        runGit(repoPath, ['commit', '-m', 'Initial commit']);
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    it('reads both sides of an unstaged tracked file', async () => {
+        const repoPath = createRepo();
+        writeFileSync(join(repoPath, 'tracked.txt'), 'base\nchanged\n', 'utf8');
+
+        const diff = await changesGit.getFileDiff(repoPath, 'tracked.txt', 'unstaged');
+
+        expect(diff.entry.label).toBe('Unstaged');
+        expect(diff.entry.original).toBe('base\n');
+        expect(diff.entry.modified).toBe('base\nchanged\n');
+        expect(diff.entry.patch).toContain('+changed');
+        expect(diff.entry.stats.addedLines).toBe(1);
+        expect(diff.entry.previewMessage).toBeUndefined();
+    });
+
+    it('reads both sides of a staged file', async () => {
+        const repoPath = createRepo();
+        writeFileSync(join(repoPath, 'tracked.txt'), 'base\nstaged\n', 'utf8');
+        runGit(repoPath, ['add', 'tracked.txt']);
+
+        const diff = await changesGit.getFileDiff(repoPath, 'tracked.txt', 'staged');
+
+        expect(diff.entry.label).toBe('Staged');
+        expect(diff.entry.original).toBe('base\n');
+        expect(diff.entry.modified).toBe('base\nstaged\n');
+    });
+
+    it('reads an untracked file as an all-additions diff', async () => {
+        const repoPath = createRepo();
+        writeFileSync(join(repoPath, 'brand-new.txt'), 'one\ntwo\n', 'utf8');
+
+        const diff = await changesGit.getFileDiff(repoPath, 'brand-new.txt', 'unstaged');
+
+        expect(diff.entry.label).toBe('Untracked');
+        expect(diff.entry.original).toBe('');
+        expect(diff.entry.modified).toBe('one\ntwo\n');
+        expect(diff.entry.stats.addedLines).toBe(2);
+    });
+
+    it('rejects a huge untracked file without buffering its patch', async () => {
+        const repoPath = createRepo();
+        const lineCount = 600_000; // ~1.2 MB, over the 1 MB preview cap
+        writeFileSync(join(repoPath, 'generated.txt'), 'x\n'.repeat(lineCount), 'utf8');
+
+        const diff = await changesGit.getFileDiff(repoPath, 'generated.txt', 'unstaged');
+
+        expect(diff.entry.label).toBe('Untracked');
+        expect(diff.entry.previewMessage).toBe('File too big to preview');
+        // The giant patch is never carried; only the line count survives.
+        expect(diff.entry.patch).toBe('File too big to preview');
+        expect(diff.entry.modified).toBe('');
+        expect(diff.entry.stats).toEqual({ oldSizeBytes: 0, newSizeBytes: lineCount * 2, addedLines: lineCount, removedLines: 0 });
+    });
+
+    it('keeps the image preview for a small untracked image', async () => {
+        const repoPath = createRepo();
+        writeFileSync(join(repoPath, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+        const diff = await changesGit.getFileDiff(repoPath, 'logo.png', 'unstaged');
+
+        expect(diff.entry.modified).toBe('');
+        expect(diff.entry.nonCodePreview).toMatchObject({ kind: 'image' });
+        expect(diff.entry.nonCodePreview?.modifiedSrc).toMatch(/^data:image\/png;base64,/);
+    });
+
+    it('falls back to a no-diff entry for a path that has no diff and no file', async () => {
+        const repoPath = createRepo();
+
+        const diff = await changesGit.getFileDiff(repoPath, 'ghost.txt', 'unstaged');
+
+        expect(diff.entry.patch).toBe('No diff content was returned for this file.');
+        expect(diff.entry.modified).toBe('No diff content was returned for this file.');
+    });
+});
