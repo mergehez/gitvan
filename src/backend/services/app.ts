@@ -69,6 +69,10 @@ const sandboxResetScripts = [
         script: 'reset-pull-conflict-repo.mjs',
     },
     {
+        folder: 'pull-stash',
+        script: 'reset-pull-stash-repo.mjs',
+    },
+    {
         folder: 'partial-changes',
         script: 'reset-partial-repo.mjs',
     },
