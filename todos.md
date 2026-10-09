@@ -48,12 +48,11 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Coalesced splitter drags into one frame and persisted the width on mouseup.
 - Stopped the monaco editor syncing the whole model on every keystroke.
 - Throttled the repositories add-menu reposition to one frame per scroll.
+- Shared the unpushed commit set across the views that ask for it and dropped it on a mutation.
+- Kept a status scan that started before a refresh from repopulating the emptied cache.
+- Rejected a repository path that resolves outside the repository root.
 
 ## Next
-
-- [ ] **[URGENT]** Unbounded `git rev-list` walks are repeated on every history, tags and sidebar request.
-    - What it is: `getUnpushedCommitSet` (`src/backend/services/git/git-helpers.ts:552`) runs `git rev-list HEAD --not --remotes` with no cap and is called by every history page (`git-history.ts:120`), every commit detail (`git-history.ts:175`) and the tag list (`git-tags.ts`). `getRepoSidebarStatus` (`git-changes.ts:98`) runs a separate full `rev-list --count` whenever a branch has no upstream, and the UI only needs to know whether the count is greater than zero.
-    - How it will be implemented: cache the unpushed SHA set per repo path keyed by the current `HEAD` sha plus the mtimes of `.git/refs/remotes` and `.git/packed-refs`, invalidating on mismatch; pass `--max-count` for the callers that only test membership of the displayed commits and for the "anything publishable?" check in the sidebar status.
 
 - [ ] **[URGENT]** The file and history trees render every row with no virtualization.
     - What it is: `FileTree.vue:111` flattens the whole tree and the `v-for` at `FileTree.vue:148` mounts a full row (plus icon buttons, tooltips and menu directives) per entry; `RepChangesView`, `RepHistoryView` and `SidebarRepositories` all use it. A repo with thousands of changed files or a long history builds all rows at once, and `loadMoreHistory` keeps appending.
@@ -136,8 +135,8 @@ database per run, so it never touches the developer's app data.
 - [ ] `git-history.ts`: `getCommittedTree` (including ordering, types and sizes),
       `getCommittedFile` (cap, image preview, binary detection, "no commits yet"),
       `normalizePageCount` for invalid input, and tag refs inside `%d`.
-- [ ] `git-helpers.ts`: `normalizeGitIgnoreEntry` and `appendGitIgnoreEntry`,
-      `buildImagePreview`, `textByteSize`, `readGitMetadataFile`, `readGitIndexStageFile`,
+- [ ] `git-helpers.ts`: `appendGitIgnoreEntry`,
+      `buildImagePreview`, `readGitMetadataFile`, `readGitIndexStageFile`,
       `parseIncomingBranchFromMergeMessage`, `countConflictMarkers`, `parseTrackCounts`,
       `labelForStatus`, `extractConflictPathsFromCommitBody`, `buildDiffStats`, and the
       rename/copy branch of `parseCommitFilesWithConflicts`.
@@ -147,12 +146,11 @@ database per run, so it never touches the developer's app data.
       `auth: undefined`, so the whole auth branch is dead in tests.
 - [ ] `app.ts`: the remaining handlers that only `app.spec.ts` now partially covers — bootstrap
       and selection, repository/group/account CRUD and ordering, clone and create, remote
-      operations, merge and stash recovery, and `resolveRepoFilePath`. Also assert that paths
-      escaping the repository (for example `../../etc/passwd`) are rejected.
+      operations, and merge and stash recovery. `resolveRepoFilePath` is covered, including the
+      paths that escape the repository.
 - [ ] `useDatabase.ts`: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the
       legacy-database migration path. The statement cache and transactions in
       `createRuntimeDatabaseClient` are covered.
-- [ ] `repoStatusCache.ts`: `invalidateAllRepoSidebarStatuses` while a computation is in flight.
 
 ### Frontend unit and component tests
 
