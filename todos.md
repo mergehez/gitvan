@@ -2,8 +2,15 @@
 
 ## General
 
-General, file-wide todos and new ideas. Add new ideas here first; once an idea has a
-concrete shape, move it into **Next** with a marker.
+This section is the file's landing area, not a checklist that runs for every todo. None
+of it is a per-implementation ritual. It holds three things:
+
+1. The conventions below, which describe how **Next** is written.
+2. An ideas inbox — drop new ideas here in any shape, then move them into **Next** once
+   they have a concrete shape and a marker.
+3. Cross-cutting todos — one-off work that spans several **Next** items and would
+   otherwise be duplicated across them. These behave like **Next** items, they just do
+   not belong to a single finding.
 
 Conventions for **Next**:
 
@@ -19,7 +26,11 @@ them to the top of the section.
 Each **Next** item is one sentence plus two lines: what it is, and how it will be
 implemented. Do not store benchmark numbers or implementation detail in **Done**.
 
-General todos:
+Ideas inbox:
+
+- (empty — add new ideas here in any shape, then triage them into **Next**.)
+
+Cross-cutting todos:
 
 - [ ] Set up a repeatable performance baseline that covers cold start, repo switch,
       changes refresh, discard-all and history scroll, so the items below can be measured
@@ -50,10 +61,6 @@ General todos:
 - [ ] **[URGENT]** The 20 s poll and window-focus refresh re-run the whole active view and re-fetch the selected file diff.
     - What it is: `initializeStates.ts:179` polls `refreshRepos` every 20 s and `initializeStates.ts:126` does the same on focus (throttled to 1.5 s). Each call runs `applyMutation`, which reloads the active view, the merge-conflict state and the stash list, and `loadChanges`/`loadHistory` re-select the current file, so `getFileDiff` runs again for the file the user is already reading.
     - How it will be implemented: split the refresh into a cheap status-only path for polling (bootstrap without the active-view reload) and a full path for explicit user actions; skip the selected-file re-fetch when path, kind and diff inputs are unchanged; pause the interval while `document.visibilityState === 'hidden'`.
-
-- [ ] **[URGENT]** Each changed-file row mounts a body-level tooltip, a document click listener and a forced layout read.
-    - What it is: `v-tooltip` (`src/mainview/directives/VTooltip.ts:165`) appends a tooltip element to `document.body` and registers a `document` click listener per bound element, and `v-loading` (`src/mainview/directives/VLoading.ts:21,34`) calls `getComputedStyle(el).position` and reads `el.clientWidth/clientHeight` per element at mount. `RepChangesView` puts one or two of each on every unlocked row (`RepChangesView.vue:974-991`), so a large changes list creates thousands of body nodes, thousands of document listeners and thousands of forced synchronous layouts.
-    - How it will be implemented: move to one shared singleton tooltip driven by delegated `mouseover`/`mouseout` on the list container (skipping the `updated` rewrite when the value string is unchanged), and make `v-loading` set the position and icon size through CSS classes instead of reading computed style and element size at mount.
 
 - [ ] **[URGENT]** Bulk file operations spawn one or two git processes per file, strictly serially.
     - What it is: `discardRepoFiles` (`src/backend/services/git/git-changes.ts:405`) loops the paths and awaits `discardRepoFile` for each, which itself runs `git ls-files --error-unmatch` and then `git restore` or `git clean`. Discarding five hundred files is up to a thousand sequential git processes with the UI waiting.
@@ -166,3 +173,7 @@ General todos:
 - [ ] **[NOT_PLANNED]** Keep git execution in the native host; no renderer-side git and no browser-side diff computation.
     - What it is: `runGit`/`executeCommand` live in the main process and the renderer only ever receives results, so a slow git command occupies the host rather than a renderer worker.
     - Why it is deliberate: this matches the boundary in `AGENTS.md` — the native layer owns PTY, git execution and filesystem mutation, and Vue owns orchestration. Offloading git to a renderer worker or a browser reimplementation would break that split; the plan is to reduce how many git commands are issued (see the `[URGENT]` items), not to move where they run.
+
+- [ ] **[NOT_PLANNED]** Each changed-file row mounts a body-level tooltip, a document click listener and a forced layout read.
+    - What it is: `v-tooltip` (`src/mainview/directives/VTooltip.ts:165`) appends a tooltip element to `document.body` and registers a `document` click listener per bound element, and `v-loading` (`src/mainview/directives/VLoading.ts:21,34`) calls `getComputedStyle(el).position` and reads `el.clientWidth/clientHeight` per element at mount. `RepChangesView` puts one or two of each on every unlocked row (`RepChangesView.vue:974-991`), so a large changes list creates thousands of body nodes, thousands of document listeners and thousands of forced synchronous layouts.
+    - How it will be implemented: move to one shared singleton tooltip driven by delegated `mouseover`/`mouseout` on the list container (skipping the `updated` rewrite when the value string is unchanged), and make `v-loading` set the position and icon size through CSS classes instead of reading computed style and element size at mount.
