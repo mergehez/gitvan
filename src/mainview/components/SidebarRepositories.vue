@@ -624,6 +624,7 @@ function fetchGroupRepos(groupId: number) {
                                 v-if="canPublishBranch(item)"
                                 severity="raised"
                                 smaller
+                                data-testid="repo-publish-branch"
                                 :disabled="isButtonBusyBlocked || !canPublishNow(item)"
                                 v-tooltip.right="publishLabel(item)"
                                 @click.stop="repos.publishRepoBranch(item.id)"

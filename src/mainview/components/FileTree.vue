@@ -124,6 +124,7 @@ function onEntryClick(event: MouseEvent, entry: Item) {
     <section class="min-h-0 overflow-auto scrollbar-thin">
         <div
             v-if="item.title"
+            :data-testid="item.id !== undefined ? `file-tree-header-${item.id}` : undefined"
             class="flex items-center justify-between px-1 py-1 text-xs font-semibold tracking-[0.02em] text-default"
             :class="props.headerOutlined ? 'outline-1 -outline-offset-1 outline-white/35 bg-white/6' : undefined"
             @mousedown.capture="onMouseDown"

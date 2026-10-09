@@ -73,7 +73,7 @@ const navItems = computed<Array<{ label: string; value: NavigationView; subtitle
 
 <template>
     <header class="flex items-center gap-1 border-b border-white/10 bg-x1/75 px-4 py-2">
-        <Button severity="secondary" @click="settings.state.showBranches = !settings.state.showBranches">
+        <Button severity="secondary" data-testid="toggle-branches-sidebar" @click="settings.state.showBranches = !settings.state.showBranches">
             {{ repositoryHeadline }}<span class="text-sm opacity-70 pl-1">{{ repositoryStats.branch }}</span>
         </Button>
         <Button
