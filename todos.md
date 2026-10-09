@@ -32,6 +32,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Made the periodic refresh status-only, paused it while hidden, and reused an unchanged file diff.
 - Reported a repository that was removed mid-request as a handled outcome instead of a raw type error.
 - Removed an account even when its keychain entry cannot be deleted, instead of failing after the row was gone.
+- Made a repository with no commits yet report an empty history, an empty snapshot and a clean status.
 
 ## Next
 
@@ -155,18 +156,16 @@ database per run, so it never touches the developer's app data.
 
 ### Browser specs (highest user risk first)
 
-- [ ] Settings leftovers: the provider token-validation error path needs the provider's API, or a
-      stub that can fail on demand. Group editing and reorder, editors and terminals
-      (remove/make-default), and account create/update/delete/reorder now have specs.
-- [ ] Explorer leftovers: "No commits found." needs a repository with no commits at all, and
-      "Select a file to inspect the committed contents." is unreachable because loading a
-      snapshot always selects its first file. The snapshot selector, tree selection, text
-      preview and the empty-snapshot state now have specs.
-- [ ] A boundary guard for the twelve RPCs that exist only in `src/electron/main.ts`
-      (`pickDirectory`, `pickEditorApplication`, `openFileInEditor`, `openExternalUrl`, the four
-      terminal session methods, ...). They 404 in browser dev mode, so assert the UI shows a
-      recoverable error instead of hanging, or add dev-server stubs — which would also make
-      creating a local repository testable.
+- [ ] Settings leftovers: verifying a provider token and starting the OAuth device sign-in both need
+      the provider's API, so they need a stub that can fail on demand. The panels, the account
+      lifecycle and the OAuth provider settings now have specs.
+- [ ] Explorer leftover: "Select a file to inspect the committed contents." is unreachable because
+      loading a snapshot always selects its first file, so nothing covers it. The empty states
+      ("No commits found.", "No committed files found") have specs through the empty lab.
+- [ ] Dev-server stubs for the native pickers: `native-boundary.spec.ts` pins that every
+      `src/electron/main.ts` RPC reports itself unavailable in browser dev mode, so a stub has to
+      update that guard. With one, creating a local repository and picking an editor or terminal
+      from disk become testable.
 
 ### Backend unit tests
 
