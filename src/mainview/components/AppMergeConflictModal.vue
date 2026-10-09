@@ -102,6 +102,7 @@ watch(
     >
         <div
             v-if="isConflictModalVisible"
+            data-testid="merge-conflict-modal"
             class="fixed inset-0 flex items-start justify-center bg-black/50 px-6 py-10 backdrop-blur-sm overflow-y-auto"
             :style="{ zIndex: claimedZIndex?.toString() }"
         >
@@ -143,7 +144,12 @@ watch(
                             </div>
 
                             <div v-else class="space-y-1">
-                                <div v-for="file in conflictedFiles" :key="file.path" class="rounded-xl border border-white/10 bg-x0 px-4 py-2">
+                                <div
+                                    v-for="file in conflictedFiles"
+                                    :key="file.path"
+                                    class="rounded-xl border border-white/10 bg-x0 px-4 py-2"
+                                    :data-testid="`merge-conflict-file-${file.path}`"
+                                >
                                     <div class="flex flex-col">
                                         <div class="flex space-x-2 items-center flex-wrap">
                                             <p class="text-sm font-medium text-white">{{ file.path }}</p>
@@ -158,12 +164,19 @@ watch(
 
                                         <div class="flex justify-end gap-2 items-center mt-1">
                                             <Button severity="secondary" class="text-white/70" smaller @click="repo.openFileInEditor(file.path)"> Open in Editor </Button>
-                                            <Button severity="secondary" class="text-white/70" smaller @click="mergeState.openInlineMergeEditor(file.path)">
+                                            <Button
+                                                severity="secondary"
+                                                class="text-white/70"
+                                                smaller
+                                                :data-testid="`merge-conflict-resolve-inline-${file.path}`"
+                                                @click="mergeState.openInlineMergeEditor(file.path)"
+                                            >
                                                 Resolve Inline
                                             </Button>
                                             <Button
                                                 severity="warning"
                                                 smaller
+                                                :data-testid="`merge-conflict-mark-resolved-${file.path}`"
                                                 v-loading="tasks.markMergeConflictResolved.isRunning(file.path)"
                                                 @click="mergeState.markMergeConflictResolved(file.path)"
                                                 v-tooltip="
@@ -182,7 +195,12 @@ watch(
                                     <p class="text-sm font-semibold uppercase opacity-50">Resolved and staged</p>
                                 </div>
 
-                                <div v-for="file in mergedFiles" :key="`merged:${file.path}`" class="rounded-sm border border-emerald-400/20 bg-emerald-500/10 px-3 py-1">
+                                <div
+                                    v-for="file in mergedFiles"
+                                    :key="`merged:${file.path}`"
+                                    class="rounded-sm border border-emerald-400/20 bg-emerald-500/10 px-3 py-1"
+                                    :data-testid="`merge-conflict-merged-${file.path}`"
+                                >
                                     <p class="text-sm font-medium">{{ file.path }}</p>
                                 </div>
                             </div>
@@ -206,6 +224,7 @@ watch(
                                         <Button
                                             severity="primary"
                                             class="py-0.5 px-2"
+                                            data-testid="merge-conflict-save"
                                             :disabled="activeEditorConflictCount > 0"
                                             v-loading="tasks.isOperationRunning(`saveMergeConflictResolution:${mergeState.activeMergeConflictEditor.path}`)"
                                             @click="mergeState.saveMergeConflictResolution(mergeState.activeMergeConflictEditor.path, mergeResolutionContent)"
@@ -241,6 +260,7 @@ watch(
                             v-if="!isStandaloneConflictEditor"
                             class="whitespace-nowrap"
                             severity="secondary"
+                            data-testid="merge-conflict-abort"
                             v-loading="tasks.isOperationRunning('abortMerge')"
                             @click="mergeState.abortMerge()"
                         >
@@ -250,6 +270,7 @@ watch(
                             v-if="!isStandaloneConflictEditor"
                             severity="primary"
                             class="whitespace-nowrap"
+                            data-testid="merge-conflict-commit"
                             :disabled="!mergeState.mergeConflictState?.canCommit"
                             v-loading="tasks.isOperationRunning('commitMerge')"
                             @click="mergeState.commitMerge()"

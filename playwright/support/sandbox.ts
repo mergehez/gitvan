@@ -73,22 +73,32 @@ async function resetEditorSettings() {
     await callApi('updateEditorSettings', { settings: { ...current, ...defaults } });
 }
 
-async function selectRepo(page: Page, name: string) {
+async function selectRepo(page: Page, name: string, openChangesView: boolean) {
     const repoButton = page.getByRole('button', { name: new RegExp(`^${name}$`, 'i') }).first();
     await expect(repoButton).toBeVisible();
     // The repository the app auto-selects after a reset can be a merge lab, whose conflict modal
     // covers the sidebar, so the click is dispatched on the button instead of hit-tested.
     await repoButton.dispatchEvent('click');
 
-    await page.getByRole('button', { name: 'Changes', exact: true }).click();
+    if (openChangesView) {
+        await page.getByRole('button', { name: 'Changes', exact: true }).click();
+    }
 }
+
+export type OpenSandboxRepoOptions = {
+    /**
+     * A merge lab's resolver opens over the app as soon as the repository is selected, and its
+     * overlay covers the nav buttons — so its spec keeps the changes view already underneath.
+     */
+    openChangesView?: boolean;
+};
 
 /**
  * Gives the test a known starting point: the sandbox labs recreated from their reset scripts and
  * the persisted settings back at their defaults. Every test opens the lab it needs, so no test
  * depends on what an earlier one left behind and each one can run on its own.
  */
-export async function openSandboxRepo(page: Page, name: string) {
+export async function openSandboxRepo(page: Page, name: string, options: OpenSandboxRepoOptions = {}) {
     await resetEditorSettings();
     await page.goto('/');
 
@@ -101,7 +111,7 @@ export async function openSandboxRepo(page: Page, name: string) {
     await resetButton.dispatchEvent('click');
     await resetFinished;
 
-    await selectRepo(page, name);
+    await selectRepo(page, name, options.openChangesView ?? true);
 }
 
 /**
