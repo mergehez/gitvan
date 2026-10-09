@@ -195,7 +195,7 @@ const iconButtonStub = defineComponent({
             }
 
             if (this.icon?.includes('mdi--plus')) {
-                return 'add-repository-button';
+                return 'repos-add';
             }
 
             if (this.icon?.includes('folder-plus-outline')) {
@@ -370,7 +370,7 @@ describe('RepositorySidebar', () => {
     it('routes add menu actions to create and clone handlers', async () => {
         const wrapper = mountSidebar();
 
-        await wrapper.get('[data-testid="add-repository-button"]').trigger('click');
+        await wrapper.get('[data-testid="repos-add"]').trigger('click');
 
         const menuButtons = getTeleportedMenuButtons();
 
@@ -378,14 +378,14 @@ describe('RepositorySidebar', () => {
         expect(mockRepos.isCloneRepoModalOpen).toBe(true);
 
         mockRepos.isCloneRepoModalOpen = false;
-        await wrapper.get('[data-testid="add-repository-button"]').trigger('click');
+        await wrapper.get('[data-testid="repos-add"]').trigger('click');
         const reopenedMenuButtons = getTeleportedMenuButtons();
 
         reopenedMenuButtons[1]!.click();
         expect(mockRepos.isCreateRepoModalOpen).toBe(true);
 
         mockRepos.isCreateRepoModalOpen = false;
-        await wrapper.get('[data-testid="add-repository-button"]').trigger('click');
+        await wrapper.get('[data-testid="repos-add"]').trigger('click');
         const finalMenuButtons = getTeleportedMenuButtons();
 
         finalMenuButtons[2]!.click();

@@ -5,6 +5,18 @@ import type { RendererDiagnosticPayload } from './mainProloadHelpers.ts';
 export type DevServerRequestScope = <T>(signal: AbortSignal, task: () => Promise<T>) => Promise<T>;
 
 /**
+ * The native host owns these methods, so browser dev mode has nothing to run them in. The distinct
+ * code keeps the boundary a handled outcome for the specs instead of an internal fault.
+ */
+class BrowserUnavailableError extends Error {
+    readonly code = 'not-available-in-browser';
+
+    constructor(methodName: string) {
+        super(`Method ${methodName} is not implemented in browser dev mode.`);
+    }
+}
+
+/**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
  * Run with: tsx src/backend/devServer.ts
  */
@@ -22,7 +34,7 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
             acc[methodName] = app[methodName as keyof typeof app] as any;
         } else {
             acc[methodName] = async () => {
-                throw new Error(`Method ${methodName} is not implemented in browser dev mode.`);
+                throw new BrowserUnavailableError(methodName);
             };
         }
         return acc;
@@ -131,8 +143,9 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
                 const message = error instanceof Error ? error.message : String(error);
 
                 if (!isCancellation(message)) {
-                    // A repository removed mid-request is a race the client handles, not a fault.
-                    const code = isRepositoryNotFoundError(message) ? 'repository-not-found' : 'internal';
+                    // A repository removed mid-request is a race the client handles, and a method
+                    // only the native host can run is a boundary the specs assert on purpose.
+                    const code = isRepositoryNotFoundError(message) ? 'repository-not-found' : error instanceof BrowserUnavailableError ? error.code : 'internal';
 
                     recordHandlerError(method ?? 'unknown', message, code);
 

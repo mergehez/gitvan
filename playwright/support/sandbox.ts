@@ -15,8 +15,11 @@ type HealthResponse = {
     handlerErrors: HandlerError[];
 };
 
-/** A repository removed mid-request is a race the app classifies and handles, not a fault. */
-const expectedErrorCodes = new Set(['repository-not-found']);
+/**
+ * A repository removed mid-request is a race the app classifies and handles, and a method only the
+ * native host can run is a boundary the app reports instead of hanging, not a fault.
+ */
+const expectedErrorCodes = new Set(['repository-not-found', 'not-available-in-browser']);
 
 async function readHealth(): Promise<HealthResponse> {
     const response = await fetch(`${apiBase}/health`);
@@ -99,6 +102,17 @@ export async function seedEditorApps(seed: { editors?: EditorApp[]; terminals?: 
     const current = await callApi<EditorSettings>('getEditorSettings');
 
     await callApi('updateEditorSettings', { settings: { ...current, ...seed } });
+}
+
+/** Calls the dev server directly, for asserting what the browser transport can and cannot reach. */
+export async function probeApi(method: string, params?: unknown): Promise<{ status: number; body: string }> {
+    const response = await fetch(`${apiBase}/api/${method}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: params === undefined ? undefined : JSON.stringify(params),
+    });
+
+    return { status: response.status, body: await response.text() };
 }
 
 /** Removes the accounts a spec created; System Git is never touched. */

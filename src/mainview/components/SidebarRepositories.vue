@@ -552,7 +552,14 @@ function fetchGroupRepos(groupId: number) {
             <p class="text-sm font-medium text-white mr-1">Repos</p>
 
             <div ref="addMenuAnchor" class="relative">
-                <IconButton severity="secondary" :disabled="isButtonBusyBlocked" v-tooltip.bottom="'Add Repository'" @click="toggleAddMenu" icon="icon-[mdi--plus]" />
+                <IconButton
+                    severity="secondary"
+                    data-testid="repos-add"
+                    :disabled="isButtonBusyBlocked"
+                    v-tooltip.bottom="'Add Repository'"
+                    @click="toggleAddMenu"
+                    icon="icon-[mdi--plus]"
+                />
             </div>
 
             <IconButton

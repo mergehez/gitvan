@@ -71,7 +71,9 @@ export function _useRepositories() {
             return await appClientRpc.request.getCloneRepoDefaults(undefined);
         },
         async pickDirectory(options?: { title?: string; buttonLabel?: string; defaultPath?: string }) {
-            return await appClientRpc.request.pickDirectory(options);
+            // Through the task wrapper so a picker that cannot open surfaces like every other call
+            // instead of rejecting into the click handler.
+            return await tasks.pickDirectory.run(options);
         },
         async pickCloneRepoDirectory(defaultPath?: string) {
             const selectedPath = await this.pickDirectory({
