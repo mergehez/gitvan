@@ -44,6 +44,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Swept expired OAuth device sessions and answered a too-early poll without forwarding it.
 - Added the missing foreign-key indexes and ran the sequence rewrites in one transaction.
 - Size-checked an untracked file before diffing it, counting its lines from numstat instead.
+- Resized the diff font through the CSS custom property instead of rebuilding the diff.
+- Coalesced splitter drags into one frame and persisted the width on mouseup.
+- Stopped the monaco editor syncing the whole model on every keystroke.
+- Throttled the repositories add-menu reposition to one frame per scroll.
 
 ## Next
 
@@ -70,22 +74,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - [ ] **[NOT_URGENT]** Hunk anchors re-split the whole patch and re-query the shadow DOM per hunk.
     - What it is: `setHunkAnchors` (`src/mainview/components/DiffsDiffEditor.vue:360`) runs from `onPostRender` on every render and, per hunk, does `gutter.querySelector` plus `addLine.querySelectorAll('.gitvan-hunk-button')`, while `buildChangeBlockPatch` (`DiffsDiffEditor.vue:191`) re-splits the entire patch with `fullPatch.split(/^@@ /m)`. A diff with hundreds of hunks costs O(hunks × patch size) string scanning on each render.
     - How it will be implemented: split the patch once per diff and cache the per-hunk patches in a `Map`, and build the anchors once per rendered node instead of from the post-render callback.
-
-- [ ] **[NOT_URGENT]** `MonacoEditor` forces a layout and copies the whole model on every keystroke.
-    - What it is: the watcher on `modelValue` (`src/mainview/components/MonacoEditor.vue:81`) runs `syncEditor`, which calls `modelRef.getValue()` (a full string copy), `updateOptions` and `editorRef.value.layout()` even when only the content changed; `onDidChangeContent` writes `modelValue` back, so this runs per keystroke. `automaticLayout` is already enabled in `lib/monaco.ts:91`, making the explicit `layout()` redundant.
-    - How it will be implemented: distinguish an editor-originated change from an external one (the `applyingExternalValue` flag already exists) so only external changes hit the compare/`setValue` path; drop the `layout()` call and call `updateOptions` only when the options object actually changed.
-
-- [ ] **[NOT_URGENT]** Dragging a splitter re-renders the whole panel and writes to `localStorage` on every `mousemove`.
-    - What it is: `EtSplitter.onResize` (`src/mainview/components/EtSplitter.vue:41`) runs unthrottled on raw `mousemove`: it reads `getBoundingClientRect`, writes the reactive `currentWidth` — which re-invokes the slot content and re-patches the entire slotted panel, including a large file tree — and calls synchronous `localStorage.setItem`.
-    - How it will be implemented: coalesce the update into a `requestAnimationFrame` callback, cache the container rect on `mousedown`, and persist the width to `localStorage` once on `mouseup`.
-
-- [ ] **[NOT_URGENT]** Changing the diff font size rebuilds the entire diff DOM.
-    - What it is: the watcher in `DiffsDiffEditor.vue:486` includes `settings.state.diffFontSize` and `diffViewWrap` and calls `renderDiff`, which calls `instance.render({ forceRender: true })` — a full teardown and rebuild under the shadow root — even though font size is already applied through the `--diffs-font-size` CSS custom property in `hostStyle` (`DiffsDiffEditor.vue:509`).
-    - How it will be implemented: remove `diffFontSize` from the watcher (CSS already covers it), keep `diffViewWrap` only if it truly changes rendering options, and avoid `forceRender` when only display options changed.
-
-- [ ] **[NOT_URGENT]** The repositories sidebar writes reactive state on every scroll event while its dropdown is open.
-    - What it is: `updateAddMenuPosition` (`src/mainview/components/SidebarRepositories.vue:101`) reads `getBoundingClientRect` and writes the reactive `addMenuPosition` on each `scroll` (capture) and `resize` event (`SidebarRepositories.vue:176`), so every scroll frame of any pane forces a layout read and a re-render.
-    - How it will be implemented: throttle the handler with `requestAnimationFrame` and skip the reactive write when the computed position did not change; closing the menu on scroll is an acceptable alternative if it keeps the behaviour stable.
 
 - [ ] **[NOT_URGENT]** The Explorer can only select a snapshot from the first history page.
     - What it is: `RepExplorerView` fills the snapshot `<select>` from `repo.history?.commits`, which holds one page (60) until the history view asks for more, and the Explorer has no load-more of its own — so an older commit cannot be selected in a deep repository.
@@ -175,15 +163,14 @@ database per run, so it never touches the developer's app data.
       loaders.
 - [ ] Components with no dedicated spec, most valuable first: `DiffsDiffEditor.vue` (hunk
       anchoring), `ConflictMonacoEditor.vue`, `Popover.vue`, `FileTree.vue` and
-      `ChangesFileTree.vue`, `DraggableList.vue`, `EtSplitter.vue`, `RepExplorerView.vue`,
+      `ChangesFileTree.vue`, `DraggableList.vue`, `RepExplorerView.vue`,
       `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`,
       `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`,
-      `MonacoEditor.vue`, `MonacoEditorSettingsButton.vue`, and the small presentational ones
+      `MonacoEditorSettingsButton.vue`, and the small presentational ones
       (`Button`, `IconButton`, `Alert`, `AppErrorBanner`, `AppSuccessToast`).
 - [ ] Directives: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and
       `ContextMenuPanel.vue` still have none.
-- [ ] `lib` modules with no test: `monaco.ts`, `mergeConflicts.ts`, `nativePaths.ts`,
-      `buildOpenWithEntries.ts` and `loadingIndicatorState.ts`.
+- [ ] `lib` modules with no test: `monaco.ts` and `mergeConflicts.ts`.
 
 ### Harness
 
