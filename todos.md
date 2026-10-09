@@ -150,13 +150,6 @@ database per run, so it never touches the developer's app data.
 
 ### Browser specs (highest user risk first)
 
-- [ ] The Explorer view: the snapshot commit selector, tree selection, text preview, and the
-      empty states. The view has no test id and no coverage.
-- [ ] History depth: search, load-more, commit and file selection with the diff pane, File
-      History pin/back/"Include renames", undo the latest commit, amend the latest unpushed
-      commit, and Add Tag from the commit context menu.
-- [ ] Changes-view chrome: the file filter (`Cmd+F`), the sort menus, lock/unlock, copy path,
-      Ignore..., the "Open with..." submenu, and the "No files match the search" state.
 - [ ] Tags beyond CRUD: Push Tag, Push All Tags, Delete Tag on Remote, sort by newest/name and
       Copy Tag Name.
 - [ ] The four Settings panels: group editing and reorder, editors and terminals
@@ -165,6 +158,10 @@ database per run, so it never touches the developer's app data.
 - [ ] Repository lifecycle leftovers: creating a local repository needs the native directory
       picker, which 404s in browser dev mode, and the drag-reorder in Settings > Repositories is
       uncovered. Remove, rename, group create/rename/delete/move and Refresh now have specs.
+- [ ] Explorer leftovers: "No commits found." needs a repository with no commits at all, and
+      "Select a file to inspect the committed contents." is unreachable because loading a
+      snapshot always selects its first file. The snapshot selector, tree selection, text
+      preview and the empty-snapshot state now have specs.
 - [ ] A boundary guard for the twelve RPCs that exist only in `src/electron/main.ts`
       (`pickDirectory`, `pickEditorApplication`, `openFileInEditor`, `openExternalUrl`, the four
       terminal session methods, ...). They 404 in browser dev mode, so assert the UI shows a
