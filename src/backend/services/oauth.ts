@@ -41,11 +41,24 @@ type OAuthDeviceSession = {
     deviceCode: string;
     intervalSeconds: number;
     expiresAt: number;
+    /** Earliest time the provider may be polled again; `0` allows the first poll. */
+    nextPollAt: number;
 };
 
 type JsonValue = Record<string, unknown>;
 
 const oauthSessions = new Map<string, OAuthDeviceSession>();
+
+/** Drops abandoned sign-ins so the session map cannot grow for the process lifetime. */
+function sweepExpiredOAuthSessions() {
+    const now = Date.now();
+
+    for (const [sessionId, session] of oauthSessions) {
+        if (session.expiresAt <= now) {
+            oauthSessions.delete(sessionId);
+        }
+    }
+}
 
 function ensureOk(response: Response, message: string) {
     if (response.ok) {
@@ -317,6 +330,8 @@ export async function startOAuthDeviceSession(
     settings: OAuthProviderSettings,
     params: { provider: OAuthProvider; label: string; setAsDefault: boolean }
 ): Promise<OAuthDeviceStartResult> {
+    sweepExpiredOAuthSessions();
+
     const provider = params.provider;
     const sessionId = crypto.randomUUID();
     const label = params.label.trim();
@@ -348,6 +363,7 @@ export async function startOAuthDeviceSession(
         deviceCode: flow.deviceCode,
         intervalSeconds: flow.intervalSeconds,
         expiresAt: Date.now() + flow.expiresInSeconds * 1000,
+        nextPollAt: 0,
     });
 
     return {
@@ -364,6 +380,7 @@ export async function startOAuthDeviceSession(
 export async function pollOAuthDeviceSession(sessionId: string): Promise<{ status: 'pending' } | OAuthCompletedDeviceResult> {
     const session = oauthSessions.get(sessionId);
     if (!session) {
+        sweepExpiredOAuthSessions();
         throw new Error('The OAuth sign-in session could not be found.');
     }
 
@@ -372,15 +389,26 @@ export async function pollOAuthDeviceSession(sessionId: string): Promise<{ statu
         throw new Error('The OAuth sign-in session expired. Start the sign-in flow again.');
     }
 
+    sweepExpiredOAuthSessions();
+
+    // A renderer polling faster than the provider's interval is answered locally instead of
+    // forwarding a request the provider would rate limit.
+    if (Date.now() < session.nextPollAt) {
+        return { status: 'pending' } as const;
+    }
+
     const response = session.provider === 'github' ? await pollGithubDeviceFlow(session) : await pollGitlabDeviceFlow(session);
 
     if ('error' in response) {
         if (response.error === 'authorization_pending') {
+            session.nextPollAt = Date.now() + session.intervalSeconds * 1000;
+            oauthSessions.set(sessionId, session);
             return { status: 'pending' } as const;
         }
 
         if (response.error === 'slow_down') {
             session.intervalSeconds += 5;
+            session.nextPollAt = Date.now() + session.intervalSeconds * 1000;
             oauthSessions.set(sessionId, session);
             return { status: 'pending' } as const;
         }
