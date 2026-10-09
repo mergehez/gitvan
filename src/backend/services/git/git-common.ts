@@ -4,6 +4,12 @@ import { join } from 'path';
 import { executeCommand } from '../../../electronUtils/executeCommand.js';
 import { invalidateRepoSidebarStatus } from '../repoStatusCache.js';
 
+/** Local git work is fast; a command still running after this is stuck rather than slow. */
+const localGitTimeoutMs = 2 * 60_000;
+/** Network operations may legitimately take minutes against a slow remote. */
+const networkGitTimeoutMs = 10 * 60_000;
+const networkGitSubcommands = new Set(['clone', 'fetch', 'ls-remote', 'pull', 'push']);
+
 /**
  * `git` subcommands that can change working-tree, index or ref state. A cached sidebar
  * status for the repository they ran in is no longer trustworthy afterwards, and missing one
@@ -34,8 +40,17 @@ const statusInvalidatingSubcommands = new Set([
     'update-ref',
 ]);
 
+function gitSubcommand(args: string[]) {
+    return args.find((arg) => !arg.startsWith('-'));
+}
+
+function gitTimeoutMsFor(args: string[]) {
+    const subcommand = gitSubcommand(args);
+    return subcommand && networkGitSubcommands.has(subcommand) ? networkGitTimeoutMs : localGitTimeoutMs;
+}
+
 function invalidateStatusForMutatingCommand(args: string[], cwd: string) {
-    const subcommand = args.find((arg) => !arg.startsWith('-'));
+    const subcommand = gitSubcommand(args);
     if (subcommand && statusInvalidatingSubcommands.has(subcommand)) {
         invalidateRepoSidebarStatus(cwd);
     }
@@ -74,6 +89,7 @@ export async function runGit(args: string[], cwd: string, allowedExitCodes: numb
             args,
             cwd,
             env: createGitProcessEnv(env),
+            timeoutMs: gitTimeoutMsFor(args),
             allowedExitCodes,
             getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
         });
@@ -98,6 +114,7 @@ export async function runGitWithInput(args: string[], cwd: string, input: string
             args,
             cwd,
             env: createGitProcessEnv(env),
+            timeoutMs: gitTimeoutMsFor(args),
             input,
             allowedExitCodes,
             getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
@@ -123,6 +140,7 @@ export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes
             args,
             cwd,
             env: createGitProcessEnv(env),
+            timeoutMs: gitTimeoutMsFor(args),
             bufferOnly: true,
             allowedExitCodes,
             getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),

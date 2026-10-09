@@ -18,11 +18,15 @@ export const appConfig = {
     apiBaseUrl: `http://127.0.0.1:${pkg.config.apiPort}`,
 };
 
+/** Backstop above the longest git timeout, so a lost backend answer never blocks the main process forever. */
+export const apiRequestTimeoutMs = 12 * 60_000;
+
 export async function callApiPost(method: string, params?: unknown): Promise<unknown> {
     const response = await fetch(`${appConfig.apiBaseUrl}/api/${method}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: params !== undefined ? JSON.stringify(params) : undefined,
+        signal: AbortSignal.timeout(apiRequestTimeoutMs),
     });
     if (!response.ok) {
         const text = await response.text();

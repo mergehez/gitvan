@@ -1,11 +1,18 @@
 import express from 'express';
 import { appConfig } from './helpers.ts';
 import type { RendererDiagnosticPayload } from './mainProloadHelpers.ts';
+export type DevServerRequestScope = <T>(signal: AbortSignal, task: () => Promise<T>) => Promise<T>;
+
 /**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
  * Run with: tsx src/backend/devServer.ts
  */
-export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(app: GitClientRequestApi, apiMethods: readonly string[], db: { configureDatabase: () => void }) {
+export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
+    app: GitClientRequestApi,
+    apiMethods: readonly string[],
+    db: { configureDatabase: () => void },
+    options: { runInRequestScope?: DevServerRequestScope } = {}
+) {
     // Initialize database (normally done by the Electrobun entrypoint)
     db.configureDatabase();
 
@@ -51,10 +58,14 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(a
         next();
     });
 
-    function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number, controller: AbortController): Promise<T> {
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
+            timeoutHandle = setTimeout(() => {
+                const error = new Error(`Request timed out after ${timeoutMs}ms`);
+                controller.abort(error);
+                reject(error);
+            }, timeoutMs);
         });
         return Promise.race([promise, timeoutPromise]).finally(() => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -74,21 +85,39 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(a
             return;
         }
 
-        try {
-            let params: any = undefined;
-            const contentType = req.header('content-type') || '';
-            const text = typeof req.body === 'string' ? req.body : '';
-            if (contentType.includes('application/json') && text.trim()) {
-                params = JSON.parse(text);
+        // Aborting when the response closes without finishing is what kills the git process
+        // the request started; otherwise the client gives up and the child keeps running.
+        const controller = new AbortController();
+        const onResponseClosed = () => {
+            if (!res.writableEnded) {
+                controller.abort(new Error('The request was cancelled.'));
             }
+        };
+        res.on('close', onResponseClosed);
 
-            const result = await runWithTimeout(Promise.resolve(handler(params)), REQUEST_TIMEOUT_MS);
-            res.json(result);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error(`[devServer] ${method}:`, message);
-            res.status(500).json({ error: message });
-        }
+        const runHandler = async () => {
+            try {
+                let params: any = undefined;
+                const contentType = req.header('content-type') || '';
+                const text = typeof req.body === 'string' ? req.body : '';
+                if (contentType.includes('application/json') && text.trim()) {
+                    params = JSON.parse(text);
+                }
+
+                const result = await runWithTimeout(Promise.resolve(handler(params)), REQUEST_TIMEOUT_MS, controller);
+                res.json(result);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[devServer] ${method}:`, message);
+                if (!res.writableEnded && !res.headersSent) {
+                    res.status(500).json({ error: message });
+                }
+            } finally {
+                res.off('close', onResponseClosed);
+            }
+        };
+
+        await (options.runInRequestScope ? options.runInRequestScope(controller.signal, runHandler) : runHandler());
     });
 
     serverApp.use((_req, res) => {
