@@ -110,9 +110,15 @@ describe('changesGit conflicted index', () => {
         await expect(changesGit.unstageAllRepoFiles(repo.repoPath)).resolves.toBeUndefined();
         await expect(changesGit.unstageRepoFile(repo.repoPath, 'story.txt')).resolves.toBeUndefined();
 
+        // Nothing is left in the index, and the conflicted content is still in the working tree.
+        expect(runGit(repo.repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+        expect(runGit(repo.repoPath, ['ls-files', '-u', '--', 'story.txt'])).toBe('');
+        expect(readFileSync(join(repo.repoPath, 'story.txt'), 'utf8')).toContain('<<<<<<<');
+
         const changes = await changesGit.getRepoChanges(repo.repoPath);
         expect(changes.staged).toHaveLength(0);
         expect(changes.unstaged.map((entry) => entry.path)).toContain('story.txt');
+        expect(changes.unstaged.find((entry) => entry.path === 'story.txt')?.unstagedStatus).toBe('modified');
     });
 
     it('lists the paths that still need conflict resolution', async () => {

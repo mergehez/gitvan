@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invalidateAllRepoSidebarStatuses, invalidateRepoSidebarStatus, readRepoSidebarStatus } from '../../../../backend/services/repoStatusCache.js';
 import { runGit } from '../../../../backend/services/git/git-common.js';
 import { changesGit } from '../../../../backend/services/git/git-changes.js';
@@ -103,11 +103,40 @@ describe('repo sidebar status cache', () => {
     });
 
     it('returns the cached status without touching git while it is valid', async () => {
-        const first = await readRepoSidebarStatus(repoPath, () => changesGit.getRepoSidebarStatus(repoPath));
-        const second = await readRepoSidebarStatus(repoPath, () => changesGit.getRepoSidebarStatus(repoPath));
+        const computeSpy = vi.spyOn(changesGit, 'getRepoSidebarStatus');
 
-        expect(first.error).toBeUndefined();
-        expect(second).toBe(first);
+        try {
+            const first = await readRepoSidebarStatus(repoPath, () => changesGit.getRepoSidebarStatus(repoPath));
+            const second = await readRepoSidebarStatus(repoPath, () => changesGit.getRepoSidebarStatus(repoPath));
+
+            expect(first.error).toBeUndefined();
+            expect(second).toBe(first);
+            expect(computeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            computeSpy.mockRestore();
+        }
+    });
+
+    it('recomputes once the cached status has outlived its ttl', async () => {
+        let computed = 0;
+        const compute = async () => {
+            computed += 1;
+            return await changesGit.getRepoSidebarStatus(repoPath);
+        };
+
+        const first = await readRepoSidebarStatus(repoPath, compute, 1);
+        const whileValid = await readRepoSidebarStatus(repoPath, compute, 30_000);
+
+        expect(whileValid).toBe(first);
+        expect(computed).toBe(1);
+
+        // The ttl is applied when the entry is written, so a 1ms entry is stale by the next read.
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        const afterExpiry = await readRepoSidebarStatus(repoPath, compute, 1);
+
+        expect(computed).toBe(2);
+        expect(afterExpiry).not.toBe(first);
     });
 
     it('drops the cached status when a mutating git command runs in the repository', async () => {

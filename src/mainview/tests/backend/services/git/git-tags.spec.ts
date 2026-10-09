@@ -90,6 +90,35 @@ describe('tagsGit.getRepoTags', () => {
         expect(tags[0]!.isTargetUnpushed).toBe(true);
     });
 
+    it('stops flagging a tag once its commit has been pushed', async () => {
+        const repoPath = createRepo();
+        const commitSha = commit(repoPath, 'a.txt', 'Pushed commit');
+        runGit(repoPath, ['tag', 'v1.0.0', commitSha]);
+        const remotePath = createBareRemote();
+        runGit(repoPath, ['remote', 'add', 'origin', remotePath]);
+        runGit(repoPath, ['push', '--set-upstream', 'origin', 'HEAD']);
+
+        const { tags } = await tagsGit.getRepoTags(repoPath);
+
+        expect(tags[0]!.isTargetUnpushed).toBe(false);
+    });
+
+    it('flags only the tags whose own commit is still unpushed', async () => {
+        const repoPath = createRepo();
+        const pushedCommit = commit(repoPath, 'a.txt', 'Pushed commit');
+        const remotePath = createBareRemote();
+        runGit(repoPath, ['remote', 'add', 'origin', remotePath]);
+        runGit(repoPath, ['push', '--set-upstream', 'origin', 'HEAD']);
+
+        const localCommit = commit(repoPath, 'b.txt', 'Local commit');
+        runGit(repoPath, ['tag', 'v1.0.0', pushedCommit]);
+        runGit(repoPath, ['tag', 'v2.0.0', localCommit]);
+
+        const { tags } = await tagsGit.getRepoTags(repoPath);
+
+        expect(Object.fromEntries(tags.map((tag) => [tag.name, tag.isTargetUnpushed]))).toEqual({ 'v1.0.0': false, 'v2.0.0': true });
+    });
+
     it('returns an empty list for a repository without tags', async () => {
         const repoPath = createRepo();
         commit(repoPath, 'a.txt', 'First commit');
