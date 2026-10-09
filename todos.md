@@ -33,6 +33,14 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Reported a repository that was removed mid-request as a handled outcome instead of a raw type error.
 - Removed an account even when its keychain entry cannot be deleted, instead of failing after the row was gone.
 - Made a repository with no commits yet report an empty history, an empty snapshot and a clean status.
+- Read the cosmetic flags off each change entry instead of searching the list for the entry being mapped.
+- Reused the loading directive's overlay layer while it is visible so updates no longer grow the z-index stack.
+- Reused prepared SQLite statements per connection instead of recompiling every query.
+- Kept the useTasks running set bounded per operation and cancelled its pending long-running timer.
+- Precomputed the file icon and language lookup at module load instead of rebuilding the table per row.
+- Looked repositories up once per bootstrap in useRepos instead of a deep watch and a nested find.
+- Ordered the change multi-selection through one index map instead of a scan per comparison.
+- Removed the debug logging from the diff render, hover and discard paths.
 
 ## Next
 
@@ -44,17 +52,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - What it is: `FileTree.vue:111` flattens the whole tree and the `v-for` at `FileTree.vue:148` mounts a full row (plus icon buttons, tooltips and menu directives) per entry; `RepChangesView`, `RepHistoryView` and `SidebarRepositories` all use it. A repo with thousands of changed files or a long history builds all rows at once, and `loadMoreHistory` keeps appending.
     - How it will be implemented: window the flattened list by scroll offset with a fixed row height, keeping the existing flatten and selection logic untouched; falls back to pagination if the row height cannot be made uniform. Note that the browser specs assert on row testids, so the existing selectors have to keep working.
 
-- [ ] **[URGENT]** The changes sidebar rebuilds each section in O(n²).
-    - What it is: `buildChangeSection` (`src/mainview/components/RepChangesView.vue:89`) calls `hasBackendNoActualChange` and `hasBackendCosmeticCheckTooLarge` for every entry, and each runs a linear `findChangeEntry` (`RepChangesView.vue:61`) over the same array. With thousands of changed files that is millions of comparisons on every changes reload.
-    - How it will be implemented: read `stagedNoActualChange`, `stagedTooLargeForCosmeticCheck` and the unstaged pair straight off the entry being mapped, since the entry that `find` searches for is already in hand; or build one `Map<path, entry>` per kind before the `.map()`.
-
 - [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
     - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
     - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
-
-- [ ] **[NOT_URGENT]** Loading indicators leak entries onto the global z-index stack.
-    - What it is: `toggleLoading` (`src/mainview/directives/VLoading.ts:65`) discards the return value of `overlayState.toggleZIndex(true, …)`, so every `updated` while a loader is visible pushes a new value onto the module-level `zIndStack` (`directives/useOverlaysState.ts:3`) that is never removed; `increaseZIndex` then computes `Math.max(...zIndStack)` over an ever-growing array.
-    - How it will be implemented: reuse the already-allocated `el.__loaderZIndex` — reassign it from the `claimZIndex()` result on show and skip claiming when the element already holds one, so the stack stays bounded and `claimZIndex` stays cheap.
 
 - [ ] **[NOT_URGENT]** An untracked file is read twice before its size check rejects it.
     - What it is: the untracked branch of `getFileDiff` (`src/backend/services/git/git-changes.ts:344`) runs `git diff --no-index` and then reads the working-tree file, and only afterwards applies the 1 MB `previewByteLimit`. A huge generated file is fully buffered and diffed before being rejected.
@@ -64,25 +64,13 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
     - What it is: `ConflictMonacoEditor.onDidChangeContent` calls `syncEditorChrome` per keystroke, which reads the full model, calls `parseMergeConflictBlocks` twice, then clears and recreates a DOM node with buttons per conflict block plus `changeViewZones` and `deltaDecorations`. Inside the parse, `countLines(content.slice(0, startOffset))` (`src/mainview/lib/mergeConflicts.ts:53`) re-scans the file from offset zero for every block.
     - How it will be implemented: debounce or rAF the chrome sync, compute the newline offsets once per parse and derive `startLine` from that table instead of re-slicing, and reuse zones keyed by block rather than destroying and recreating them.
 
-- [ ] **[NOT_URGENT]** SQLite statements are recompiled on every call.
-    - What it is: every method in `src/backend/services/database.ts` builds a new SQL string and calls `db.prepare(...)` per invocation, and `createRuntimeDatabaseClient` (`src/electronUtils/useDatabase.ts:42`) prepares a fresh statement each time. Settings are read and written on every `getChanges` and `getEditorSettings`, so hot queries recompile constantly.
-    - How it will be implemented: memoise prepared statements in a `Map<string, Statement>` inside `createRuntimeDatabaseClient` and reuse them across calls, clearing the map if the schema changes.
-
-- [ ] **[NOT_URGENT]** Missing indexes, non-transactional sequence rewrites, and a dead UPDATE in group deletion.
-    - What it is: `deleteGroup` (`src/backend/services/database.ts:364`) deletes the group's repositories and then runs `UPDATE repositories SET group_id = NULL WHERE group_id = ?`, which can no longer match anything; `normalizeSequence` and `applySequenceOrder` (`src/electronUtils/useDatabase.ts:95,103`) issue one write per row with no transaction; `repositories(group_id)`, `repositories(account_id)` and `accounts(is_default)` have no index, and a SQLite foreign key does not create one — so `listGroups`' join degrades to a scan per group.
-    - How it will be implemented: drop the redundant UPDATE, wrap the bulk sequence rewrites in `db.transaction(...)`, and add the three indexes with `CREATE INDEX IF NOT EXISTS` inside `configureDatabase` so existing databases pick them up.
+- [ ] **[NOT_URGENT]** Missing indexes and non-transactional sequence rewrites.
+    - What it is: `normalizeSequence` and `applySequenceOrder` (`src/electronUtils/useDatabase.ts:95,103`) issue one write per row with no transaction; `repositories(group_id)`, `repositories(account_id)` and `accounts(is_default)` have no index, and a SQLite foreign key does not create one — so `listGroups`' join degrades to a scan per group.
+    - How it will be implemented: wrap the bulk sequence rewrites in `db.transaction(...)`, and add the three indexes with `CREATE INDEX IF NOT EXISTS` inside `configureDatabase` so existing databases pick them up.
 
 - [ ] **[NOT_URGENT]** OAuth device sessions are never evicted and the provider poll interval is not enforced.
     - What it is: the `oauthSessions` map in `src/backend/services/oauth.ts` only removes the session currently being polled, and the provider's `intervalSeconds` is not checked server-side. An abandoned sign-in stays in memory for the process lifetime, and a renderer polling faster than the agreed interval can trip provider rate limiting.
     - How it will be implemented: sweep expired sessions at the entry of the start and poll handlers (or on a timer), and reject a poll that arrives before the next allowed poll time instead of forwarding it to the provider.
-
-- [ ] **[NOT_URGENT]** Task bookkeeping in `useTasks` grows for the session and is re-scanned on every render.
-    - What it is: `runningOperations[finalKey] = undefined` (`src/mainview/composables/useTasks.ts:37`) never deletes the key, so one entry per file path and commit sha accumulates; `isBusy`, `isAnyOperationRunning` and `getRunningOperation` walk that whole record and are read from templates. `setTimeout(updateLongRunningOperations, 500)` is also scheduled on every run and never cleared when the operation finishes first.
-    - How it will be implemented: `delete runningOperations[finalKey]` in the `finally` block, keep a separate `Set` of in-flight keys so `isBusy` is O(1), and clear the pending timer when the operation completes before it fires.
-
-- [ ] **[NOT_URGENT]** `fileIconAndLanguageByPath` allocates a fifty-entry table for every row on every render.
-    - What it is: the `map` array literal is constructed inside the function (`src/mainview/lib/utils.ts:12`), then scanned with `.some()` and `endsWith` per call. It runs per row from `ChangesFileTree.vue:44` and from `getMonacoLanguage` (`lib/monaco.ts:81`), so each re-render of a large list allocates hundreds of thousands of objects and runs tens of thousands of string checks.
-    - How it will be implemented: hoist the table to a module-level constant and precompute an extension/filename to `{ lang, icon }` lookup `Map` at module load for O(1) resolution; hoist the small maps in `statusLetter` and `statusClass` the same way.
 
 - [ ] **[NOT_URGENT]** The full file pair is normalized for "no actual change" at least twice per selection.
     - What it is: `useDiffViewer` calls `hasNoActualDiffChanges` (`src/mainview/composables/useDiffViewer.ts:33`), then `DiffsDiffEditor.createRenderedDiff` (`DiffsDiffEditor.vue:79`) calls `normalizeComparableDiffText` on both sides again, and `hasOnlyWhitespaceChanges` runs two more full-content regex replaces; `selectedDiffConflictCount` (`RepChangesView.vue:178`) regex-scans the whole modified content on top. The normalizer in `src/shared/diffIgnoredChars.ts:116` walks every character of both files per pass.
@@ -107,18 +95,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - [ ] **[NOT_URGENT]** The repositories sidebar writes reactive state on every scroll event while its dropdown is open.
     - What it is: `updateAddMenuPosition` (`src/mainview/components/SidebarRepositories.vue:101`) reads `getBoundingClientRect` and writes the reactive `addMenuPosition` on each `scroll` (capture) and `resize` event (`SidebarRepositories.vue:176`), so every scroll frame of any pane forces a layout read and a re-render.
     - How it will be implemented: throttle the handler with `requestAnimationFrame` and skip the reactive write when the computed position did not change; closing the menu on scroll is an acceptable alternative if it keeps the behaviour stable.
-
-- [ ] **[NOT_URGENT]** `useRepos` deep-watches a counter and rebuilds its repo list with a nested `find`.
-    - What it is: `_useRepositories` watches `_coreState.stateCounter` with `{ deep: true }` (`src/mainview/composables/useRepos.ts:24`) — a deep traversal of a number — and the callback runs `_coreState.repos.find(...)` once per repo, which is O(n²) and re-runs on every bootstrap.
-    - How it will be implemented: drop `deep: true` since the counter is a scalar, and build one `id → repo` `Map` per bootstrap to drive `update` instead of calling `find` per entry.
-
-- [ ] **[NOT_URGENT]** Multi-select ordering in the changes view is quadratic inside its comparator.
-    - What it is: `updateChangeSelection` (`src/mainview/components/RepChangesView.vue:402`) sorts with `entryIds.indexOf(left) - entryIds.indexOf(right)`, a linear scan per comparison, and rebuilds `entryIds` on every click. Selecting a large range (select-all then shift-click) makes this tens of millions of operations.
-    - How it will be implemented: build an `id → index` `Map` once per selection change and sort by the mapped index, reusing the same map for the identity and range checks.
-
-- [ ] **[NOT_URGENT]** Debug logging sits in hot render and hover paths.
-    - What it is: `console.log('hunk count', …)` runs on every diff render (`src/mainview/components/DiffsDiffEditor.vue:96`), `console.log('hover', { …, getBoundingClientRect() })` forces layout on every hunk-button hover (`DiffsDiffEditor.vue:304`), `console.warn('addLine not found for hunk', { i, hunk, hunks })` serialises whole hunk objects (`DiffsDiffEditor.vue:407`), and `console.log('[onDiscard]', …)` (`RepChangesView.vue:269`) and `console.log(repoTable.createTableSql())` (`src/backend/services/database.ts:146`) sit on user actions and module load.
-    - How it will be implemented: delete them; where the information is genuinely useful, route it through the existing renderer-diagnostic channel instead of `console.log`, since only `console.error` is currently forwarded.
 
 - [ ] **[NOT_URGENT]** The Explorer can only select a snapshot from the first history page.
     - What it is: `RepExplorerView` fills the snapshot `<select>` from `repo.history?.commits`, which holds one page (60) until the history view asks for more, and the Explorer has no load-more of its own — so an older commit cannot be selected in a deep repository.
@@ -199,14 +175,11 @@ database per run, so it never touches the developer's app data.
       operations, merge and stash recovery, and `resolveRepoFilePath`. Also assert that paths
       escaping the repository (for example `../../etc/passwd`) are rejected.
 - [ ] `useDatabase.ts`: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the
-      legacy-database migration path.
+      legacy-database migration path. The statement cache in `createRuntimeDatabaseClient` is covered.
 - [ ] `repoStatusCache.ts`: `invalidateAllRepoSidebarStatuses` while a computation is in flight.
 
 ### Frontend unit and component tests
 
-- [ ] `useTasks.ts` has no direct test, yet it is the wrapper every RPC call goes through and is
-      mocked by name in most specs: cover the running-state keys, per-identifier tracking,
-      error capture and clearing, and the long-running threshold.
 - [ ] Composables with no spec: `useConfirmation.ts` (queueing, anchoring, confirm/cancel) and
       `useToast.ts`.
 - [ ] `useRepo.ts`: only about fourteen of its eighty public methods are named in any spec.
@@ -221,8 +194,8 @@ database per run, so it never touches the developer's app data.
       `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`,
       `MonacoEditor.vue`, `MonacoEditorSettingsButton.vue`, and the small presentational ones
       (`Button`, `IconButton`, `Alert`, `AppErrorBanner`, `AppSuccessToast`).
-- [ ] Directives have no test at all: `VTooltip.ts`, `VContextMenu.ts`, `VError.ts`,
-      `VLoading.ts` and `ContextMenuPanel.vue`.
+- [ ] Directives: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and
+      `ContextMenuPanel.vue` still have none.
 - [ ] `lib` modules with no test: `monaco.ts`, `mergeConflicts.ts`, `nativePaths.ts`,
       `buildOpenWithEntries.ts` and `loadingIndicatorState.ts`.
 
