@@ -139,6 +139,7 @@ const _useRepository = (repo: Repo) => {
         currChangePath: undefined as string | undefined,
         currChangeKind: undefined as FileDiffRequestKind | undefined,
         curDiff: undefined as FileDiffData | undefined,
+        lastDiffRequestKey: undefined as string | undefined,
 
         history: undefined as HistoryData | undefined,
         isLoadingMoreHistory: false,
@@ -159,6 +160,7 @@ const _useRepository = (repo: Repo) => {
         currCommit: undefined as CommitDetail | undefined,
         currCommitFilePath: undefined as string | undefined,
         currCommitDiff: undefined as FileDiffData | undefined,
+        lastCommitDiffRequestKey: undefined as string | undefined,
 
         committedTree: undefined as CommittedTreeData | undefined,
         explorerCommitSha: undefined as string | undefined,
@@ -527,6 +529,7 @@ const _useRepository = (repo: Repo) => {
                 this.currChangePath = undefined;
                 this.currChangeKind = undefined;
                 this.curDiff = undefined;
+                this.lastDiffRequestKey = undefined;
                 return;
             }
 
@@ -625,6 +628,7 @@ const _useRepository = (repo: Repo) => {
                 this.currCommit = undefined;
                 this.currCommitFilePath = undefined;
                 this.currCommitDiff = undefined;
+                this.lastCommitDiffRequestKey = undefined;
                 return;
             }
 
@@ -919,18 +923,30 @@ const _useRepository = (repo: Repo) => {
             }
         },
         async selectCommit(commitSha: string) {
+            const commitChanged = this.currCommitSha !== commitSha || !this.currCommit;
+
             this.currCommitSha = commitSha;
-            this.currCommit = await tasks.getCommitDetail.run({
-                repoId: this.id,
-                commitSha,
-            });
+
+            // A commit is immutable, so reloading the same selection keeps the detail in hand.
+            if (commitChanged) {
+                this.currCommit = await tasks.getCommitDetail.run({
+                    repoId: this.id,
+                    commitSha,
+                });
+            }
+
+            const currentCommit = this.currCommit;
+            if (!currentCommit) {
+                return;
+            }
 
             const nextSelectedFile =
-                this.currCommitFilePath && this.currCommit.files.some((file) => file.path === this.currCommitFilePath) ? this.currCommitFilePath : this.currCommit.files[0]?.path;
+                this.currCommitFilePath && currentCommit.files.some((file) => file.path === this.currCommitFilePath) ? this.currCommitFilePath : currentCommit.files[0]?.path;
 
             if (!nextSelectedFile) {
                 this.currCommitFilePath = undefined;
                 this.currCommitDiff = undefined;
+                this.lastCommitDiffRequestKey = undefined;
                 return;
             }
 
@@ -945,16 +961,26 @@ const _useRepository = (repo: Repo) => {
             if (!selectedFile) {
                 this.currCommitFilePath = undefined;
                 this.currCommitDiff = undefined;
+                this.lastCommitDiffRequestKey = undefined;
                 return;
             }
 
             this.currCommitFilePath = path;
-            this.currCommitDiff = await tasks.getCommitFileDiff.run({
+            const requestKey = `${this.currCommitSha}|${path}|${selectedFile.previousPath ?? ''}`;
+
+            if (this.lastCommitDiffRequestKey === requestKey && this.currCommitDiff) {
+                return;
+            }
+
+            const nextDiff = await tasks.getCommitFileDiff.run({
                 repoId: this.id,
                 commitSha: this.currCommitSha!,
                 path,
                 previousPath: selectedFile.previousPath,
             });
+
+            this.currCommitDiff = nextDiff;
+            this.lastCommitDiffRequestKey = requestKey;
         },
         async selectCommittedFile(path: string) {
             if (!this.committedTree?.files.some((file) => file.path === path)) {
@@ -975,6 +1001,7 @@ const _useRepository = (repo: Repo) => {
             this.currChangePath = undefined;
             this.currChangeKind = undefined;
             this.curDiff = undefined;
+            this.lastDiffRequestKey = undefined;
             this.committedTree = undefined;
             this.explorerCommitSha = undefined;
             this.currCommittedFilePath = undefined;
@@ -989,6 +1016,7 @@ const _useRepository = (repo: Repo) => {
             this.currCommit = undefined;
             this.currCommitFilePath = undefined;
             this.currCommitDiff = undefined;
+            this.lastCommitDiffRequestKey = undefined;
             this.branches = undefined;
             this.branchesLastLoadedAt = undefined;
         },
@@ -1001,13 +1029,31 @@ const _useRepository = (repo: Repo) => {
             this.branchesLastLoadedAt = this.status.lastScannedAt;
         },
         async selectChange(selection: ChangeSelection) {
+            const entry = this.changes?.[selection.kind].find((candidate) => candidate.path === selection.path);
+            const requestKey = [
+                selection.kind,
+                selection.path,
+                settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '',
+                settings.state.showWhitespaceChanges ? '1' : '0',
+                entry?.contentKey ?? '',
+            ].join('|');
+
             this.currChangePath = selection.path;
             this.currChangeKind = selection.kind;
-            this.curDiff = await tasks.getFileDiff.run({
+
+            // A reload that selects the same file with the same inputs has the diff in hand.
+            if (this.lastDiffRequestKey === requestKey && this.curDiff) {
+                return;
+            }
+
+            const nextDiff = await tasks.getFileDiff.run({
                 repoId: this.id,
                 path: selection.path,
                 kind: selection.kind,
             });
+
+            this.curDiff = nextDiff;
+            this.lastDiffRequestKey = requestKey;
         },
         async selectRepositoryStash(stashRef: string, preserveSelectedFile = false) {
             this.currStashRef = stashRef;
@@ -1186,6 +1232,7 @@ const _useRepository = (repo: Repo) => {
                     this.currCommit = undefined;
                     this.currCommitFilePath = undefined;
                     this.currCommitDiff = undefined;
+                    this.lastCommitDiffRequestKey = undefined;
                     return;
                 }
 

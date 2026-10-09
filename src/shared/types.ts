@@ -185,6 +185,8 @@ export type FileChangeEntry = {
     unstagedNoActualChange?: boolean;
     stagedTooLargeForCosmeticCheck?: boolean;
     unstagedTooLargeForCosmeticCheck?: boolean;
+    /** Cheap identity of the compared content, so an unchanged selection can keep its diff. */
+    contentKey?: string;
     displayStatus: string;
 };
 

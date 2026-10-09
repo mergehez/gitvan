@@ -24,6 +24,7 @@ import {
     readGitRevisionFileSize,
     readWorkingTreeFile,
     readWorkingTreeFileBuffer,
+    readWorkingTreeFileSignature,
     readWorkingTreeFileSize,
     textByteSize,
 } from './git-helpers.js';
@@ -198,6 +199,7 @@ export const changesGit = {
                     stagedStatus,
                     unstagedStatus,
                     hasConflictMarkers: conflictMarkerPaths.has(path) ? true : undefined,
+                    contentKey: buildChangeContentKey(stagedEntry, unstagedEntry, join(repoPath, path)),
                     displayStatus: labelForStatus(primaryStatus),
                 } satisfies FileChangeEntry;
 
@@ -577,6 +579,17 @@ type CosmeticCandidate = {
 
 function isTooLargeForCosmeticCheck(...sizes: Array<number | undefined>) {
     return sizes.some((size) => size !== undefined && size > cosmeticCheckSizeLimit);
+}
+
+/**
+ * Identifies the content a changes diff would compare. The index and HEAD sides come from
+ * the raw diff shas; the working-tree side has no sha, so its stat stands in for one.
+ */
+function buildChangeContentKey(stagedEntry: ChangeMapEntry | undefined, unstagedEntry: ChangeMapEntry | undefined, absolutePath: string) {
+    const stagedPart = stagedEntry ? `${stagedEntry.oldSha ?? ''}:${stagedEntry.newSha ?? ''}` : '';
+    const unstagedPart = unstagedEntry ? `${unstagedEntry.oldSha ?? ''}:${readWorkingTreeFileSignature(absolutePath) ?? ''}` : '';
+
+    return `${stagedPart}|${unstagedPart}`;
 }
 
 function cosmeticIgnoreOptions(filePath: string) {

@@ -53,7 +53,22 @@ function createGitClientAppState() {
             if (repo) await repo.loadRepositoryStashes();
         },
 
-        async refreshForPolling() {
+        async refreshStatuses() {
+            if (tasks.isBusy) {
+                return;
+            }
+
+            try {
+                await runWithButtonLoadingIndicatorSilenced(async () => {
+                    const nextBootstrap = await appClientRpc.request.refreshRepos(undefined);
+                    _coreState.applyBootstrap(nextBootstrap);
+                });
+            } catch (error) {
+                console.error('Polling refresh failed', error);
+            }
+        },
+
+        async refreshActiveView() {
             if (tasks.isBusy) {
                 return;
             }
@@ -64,7 +79,7 @@ function createGitClientAppState() {
                     await applyMutation(nextBootstrap);
                 });
             } catch (error) {
-                console.error('Polling refresh failed', error);
+                console.error('Refresh failed', error);
             }
         },
     };
@@ -112,7 +127,7 @@ function refreshForForeground() {
     }
 
     lastForegroundRefreshAt = now;
-    void sharedState.refreshForPolling();
+    void sharedState.refreshActiveView();
 }
 
 function scheduleForegroundRefresh(delay = 120) {
@@ -177,7 +192,12 @@ export function initializeStates() {
         document.addEventListener('visibilitychange', onDocumentVisibilityChange);
 
         pollingHandle = window.setInterval(() => {
-            void sharedState!.refreshForPolling();
+            // A hidden window is not being read, so the interval pauses until focus returns.
+            if (document.visibilityState === 'hidden') {
+                return;
+            }
+
+            void sharedState!.refreshStatuses();
         }, 20_000);
     });
 

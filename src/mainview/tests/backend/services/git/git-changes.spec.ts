@@ -408,6 +408,45 @@ describe('changesGit bulk discard', () => {
     });
 });
 
+describe('changesGit content key', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    it('stays stable while the file does not change and moves when it does', async () => {
+        const repo = createRepoWithFile('story.txt', 'base\n', 'base\nchanged\n');
+        cleanups.push(() => repo.cleanup());
+
+        const first = await changesGit.getRepoChanges(repo.repoPath);
+        const second = await changesGit.getRepoChanges(repo.repoPath);
+
+        expect(first.unstaged[0]?.contentKey).toBeTruthy();
+        expect(second.unstaged[0]?.contentKey).toBe(first.unstaged[0]?.contentKey);
+
+        writeFileSync(repo.filePath, 'base\nchanged again\n', 'utf8');
+
+        const third = await changesGit.getRepoChanges(repo.repoPath);
+        expect(third.unstaged[0]?.contentKey).not.toBe(first.unstaged[0]?.contentKey);
+    });
+
+    it('moves when the staged content changes', async () => {
+        const repo = createRepoWithFile('story.txt', 'base\n', 'base\nstaged\n');
+        cleanups.push(() => repo.cleanup());
+        runGit(repo.repoPath, ['add', 'story.txt']);
+
+        const first = await changesGit.getRepoChanges(repo.repoPath);
+        writeFileSync(repo.filePath, 'base\nstaged again\n', 'utf8');
+        runGit(repo.repoPath, ['add', 'story.txt']);
+
+        const second = await changesGit.getRepoChanges(repo.repoPath);
+        expect(second.staged[0]?.contentKey).not.toBe(first.staged[0]?.contentKey);
+    });
+});
+
 describe('changesGit reword', () => {
     const cleanups: Array<() => void> = [];
 

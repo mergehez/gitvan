@@ -165,6 +165,16 @@ export function readWorkingTreeFileSize(absolutePath: string) {
     }
 }
 
+/** Cheap content identity of a working-tree file, mirroring git's own stat cache. */
+export function readWorkingTreeFileSignature(absolutePath: string) {
+    try {
+        const stats = statSync(absolutePath);
+        return `${stats.mtimeMs}:${stats.size}`;
+    } catch {
+        return undefined;
+    }
+}
+
 export function isImagePath(path: string) {
     return imageFileExtension(path) !== undefined;
 }
