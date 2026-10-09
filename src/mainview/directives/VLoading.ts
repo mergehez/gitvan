@@ -27,8 +27,6 @@ export const vLoading: Directive<HTMLElement & { __loader: any; __loaderZIndex: 
 
         const loader = document.createElement('span');
         loader.className = `v-loading ${size}`;
-        const loaderZIndex = overlayState.claimZIndex();
-        loader.style.zIndex = loaderZIndex.toString();
 
         const isBtn = el.tagName.toLowerCase() === 'button' || el.classList.contains('btn') || el.classList.contains('button');
         const icStyle = isBtn ? `style="width: ${el.clientWidth - 1}px; height: ${el.clientHeight - 1}px;"` : '';
@@ -37,7 +35,7 @@ export const vLoading: Directive<HTMLElement & { __loader: any; __loaderZIndex: 
         el.appendChild(loader);
 
         el.__loader = loader;
-        el.__loaderZIndex = loaderZIndex;
+        el.__loaderZIndex = undefined;
 
         toggleLoading(el, binding);
     },
@@ -62,7 +60,16 @@ function isButtonLikeElement(el: HTMLElement) {
 
 function toggleLoading(el: any, binding: Bindings) {
     const shouldShow = binding.value !== false && !(isButtonLikeElement(el) && isButtonLoadingIndicatorSilenced.value);
-    overlayState.toggleZIndex(shouldShow, el.__loaderZIndex);
+
+    // Claim the overlay layer only while the loader is visible, and reuse the claim already
+    // held by this element so repeated updates cannot grow the shared z-index stack.
+    if (shouldShow && el.__loaderZIndex === undefined) {
+        el.__loaderZIndex = overlayState.claimZIndex();
+        el.__loader.style.zIndex = el.__loaderZIndex.toString();
+    } else if (!shouldShow && el.__loaderZIndex !== undefined) {
+        overlayState.releaseZIndex(el.__loaderZIndex);
+        el.__loaderZIndex = undefined;
+    }
 
     el.__loader.style.display = shouldShow ? 'flex' : 'none';
     el.style.pointerEvents = shouldShow ? 'none' : 'auto';
