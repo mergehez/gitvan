@@ -1,10 +1,11 @@
 import { execFileSync } from 'child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { changesGit } from '../../../../../backend/services/git/git-changes.js';
 import { parseConflictMarkerPaths, parsePorcelainTrackedEntries, parseRawDiffOutput } from '../../../../../backend/services/git/git-helpers.js';
+import { takeInvalidatedRepoPaths } from '../../../../../backend/services/repoStatusCache.js';
 
 function runGit(cwd: string, args: string[]) {
     return execFileSync('git', args, {
@@ -68,6 +69,25 @@ function createConflictedRepo(kind: 'both-modified' | 'deleted-by-us') {
             rmSync(repoPath, { recursive: true, force: true });
         },
     };
+}
+
+function createCommittedRepo(prefix: string, files: Record<string, string>) {
+    const repoPath = mkdtempSync(join(tmpdir(), `gitvan-${prefix}-`));
+
+    runGit(repoPath, ['init', '-b', 'main']);
+    runGit(repoPath, ['config', 'user.name', 'Gitvan Test']);
+    runGit(repoPath, ['config', 'user.email', 'gitvan@example.com']);
+
+    for (const [name, content] of Object.entries(files)) {
+        const filePath = join(repoPath, name);
+        mkdirSync(dirname(filePath), { recursive: true });
+        writeFileSync(filePath, content, 'utf8');
+    }
+
+    runGit(repoPath, ['add', '.']);
+    runGit(repoPath, ['commit', '-m', 'Initial commit']);
+
+    return repoPath;
 }
 
 describe('changesGit conflicted index', () => {
@@ -682,5 +702,479 @@ describe('changesGit file diff', () => {
 
         expect(diff.entry.patch).toBe('No diff content was returned for this file.');
         expect(diff.entry.modified).toBe('No diff content was returned for this file.');
+    });
+});
+
+describe('changesGit porcelain paths', () => {
+    const cleanups: Array<() => void> = [];
+    const sha = 'a'.repeat(40);
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    it('reads a path verbatim out of NUL-separated porcelain records', () => {
+        const output = `1 .M N... 100644 100644 100644 ${sha} ${sha} café.txt\0`;
+
+        expect(parsePorcelainTrackedEntries(output)).toEqual([{ path: 'café.txt', stagedStatus: 'clean', unstagedStatus: 'modified' }]);
+    });
+
+    it('ignores a NUL-separated rename record and its original path field', () => {
+        const output = [`2 R. N... 100644 100644 100644 ${sha} ${sha} R100`, 'new-name.txt', 'old-name.txt', ''].join('\0');
+
+        expect(parsePorcelainTrackedEntries(output)).toEqual([]);
+    });
+
+    it('lists a non-ASCII path once, in the spelling the raw diff uses', async () => {
+        const repoPath = createCommittedRepo('non-ascii-path', { 'café.txt': 'role: "admin";\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+        writeFileSync(join(repoPath, 'café.txt'), "role:'admin',\n", 'utf8');
+
+        const changes = await changesGit.getRepoChanges(repoPath, { ignoredChars: ',;"\'', showWhitespaceChanges: false });
+
+        // `git status` C-quotes a non-ASCII path unless it is asked for NUL-separated records, and
+        // the quoted spelling used to be listed as a second file next to the real one.
+        expect(changes.unstaged.map((entry) => [entry.path, entry.unstagedNoActualChange])).toEqual([['café.txt', true]]);
+    });
+});
+
+describe('changesGit index operations', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithTwoFiles() {
+        const repoPath = createCommittedRepo('index-ops', { 'a.txt': 'a\n', 'b.txt': 'b\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    it('stages a single file and a batch', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+
+        await changesGit.stageRepoFile(repoPath, 'a.txt');
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('a.txt');
+
+        await changesGit.stageRepoFiles(repoPath, ['b.txt']);
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only']).split('\n')).toEqual(['a.txt', 'b.txt']);
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('');
+    });
+
+    it('stages every change including untracked and deleted files', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'untracked.txt'), 'new\n', 'utf8');
+        rmSync(join(repoPath, 'a.txt'));
+
+        await changesGit.stageAllRepoFiles(repoPath);
+
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe(['D  a.txt', 'M  b.txt', 'A  untracked.txt'].join('\n'));
+    });
+
+    it('unstages a single file and a batch', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        runGit(repoPath, ['add', '--all']);
+
+        await changesGit.unstageRepoFile(repoPath, 'a.txt');
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('b.txt');
+
+        await changesGit.unstageRepoFiles(repoPath, ['b.txt']);
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+        expect(runGit(repoPath, ['diff', '--name-only']).split('\n')).toEqual(['a.txt', 'b.txt']);
+    });
+
+    it('does nothing for an empty path list', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+
+        await changesGit.stageRepoFiles(repoPath, []);
+        await changesGit.unstageRepoFiles(repoPath, []);
+        await changesGit.deleteStagedRepoFiles(repoPath, []);
+
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('a.txt');
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+    });
+
+    it('unstages everything at once', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        runGit(repoPath, ['add', '--all']);
+
+        await changesGit.unstageAllRepoFiles(repoPath);
+
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+        expect(runGit(repoPath, ['diff', '--name-only']).split('\n')).toEqual(['a.txt', 'b.txt']);
+    });
+});
+
+describe('changesGit restore and delete', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithTwoFiles() {
+        const repoPath = createCommittedRepo('restore-delete', { 'a.txt': 'a\n', 'b.txt': 'b\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    it('restores one file on the unstaged and the staged side', async () => {
+        const repoPath = repoWithTwoFiles();
+
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        await changesGit.restoreRepoFile(repoPath, 'a.txt', 'unstaged');
+        expect(readFileSync(join(repoPath, 'a.txt'), 'utf8')).toBe('a\n');
+
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        runGit(repoPath, ['add', 'a.txt']);
+        await changesGit.restoreRepoFile(repoPath, 'a.txt', 'staged');
+
+        // A staged restore rewrites the worktree from HEAD as well.
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe('');
+        expect(readFileSync(join(repoPath, 'a.txt'), 'utf8')).toBe('a\n');
+    });
+
+    it('restores a batch on both sides', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+
+        await changesGit.restoreRepoFiles(repoPath, ['a.txt', 'b.txt'], 'unstaged');
+        expect(runGit(repoPath, ['diff', '--name-only', '--', '.'])).toBe('');
+
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        runGit(repoPath, ['add', '--all']);
+        await changesGit.restoreRepoFiles(repoPath, ['a.txt', 'b.txt'], 'staged');
+
+        // A staged restore rewrites the worktree from HEAD as well.
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe('');
+        expect(readFileSync(join(repoPath, 'a.txt'), 'utf8')).toBe('a\n');
+        expect(readFileSync(join(repoPath, 'b.txt'), 'utf8')).toBe('b\n');
+    });
+
+    it('deletes one staged file and a batch', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        runGit(repoPath, ['add', '--all']);
+
+        await changesGit.deleteStagedRepoFile(repoPath, 'a.txt');
+        expect(existsSync(join(repoPath, 'a.txt'))).toBe(false);
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe(['D  a.txt', 'M  b.txt'].join('\n'));
+
+        await changesGit.deleteStagedRepoFiles(repoPath, ['b.txt']);
+        expect(existsSync(join(repoPath, 'b.txt'))).toBe(false);
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe(['D  a.txt', 'D  b.txt'].join('\n'));
+    });
+
+    it('discards a tracked edit and removes an untracked file', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'untracked.txt'), 'new\n', 'utf8');
+
+        await changesGit.discardRepoFile(repoPath, 'a.txt');
+        await changesGit.discardRepoFile(repoPath, 'untracked.txt');
+
+        expect(readFileSync(join(repoPath, 'a.txt'), 'utf8')).toBe('a\n');
+        expect(existsSync(join(repoPath, 'untracked.txt'))).toBe(false);
+    });
+});
+
+describe('changesGit apply patch', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithTwoFiles() {
+        const repoPath = createCommittedRepo('apply-patch', { 'a.txt': 'a\n', 'b.txt': 'b\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    it('stages only the file a patch covers', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+
+        await changesGit.applyPatch(repoPath, runGit(repoPath, ['diff', '--', 'a.txt']), 'stage');
+
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('a.txt');
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('b.txt');
+    });
+
+    it('unstages only the file a patch covers', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+        runGit(repoPath, ['add', '--all']);
+
+        await changesGit.applyPatch(repoPath, runGit(repoPath, ['diff', '--staged', '--', 'a.txt']), 'unstage');
+
+        // Unstaging leaves the worktree copy of a.txt changed against the index.
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('b.txt');
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('a.txt');
+    });
+
+    it('discards only the file a patch covers', async () => {
+        const repoPath = repoWithTwoFiles();
+        writeFileSync(join(repoPath, 'a.txt'), 'a changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'b.txt'), 'b changed\n', 'utf8');
+
+        await changesGit.applyPatch(repoPath, runGit(repoPath, ['diff', '--', 'a.txt']), 'discard');
+
+        expect(readFileSync(join(repoPath, 'a.txt'), 'utf8')).toBe('a\n');
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('b.txt');
+    });
+
+    it('propagates a patch git refuses instead of leaving a half-applied index', async () => {
+        const repoPath = repoWithTwoFiles();
+
+        await expect(changesGit.applyPatch(repoPath, 'this is not a patch', 'stage')).rejects.toThrow();
+
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('');
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe('');
+    });
+});
+
+describe('changesGit ignore path', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithTwoFiles() {
+        const repoPath = createCommittedRepo('ignore-path', { 'a.txt': 'a\n', 'b.txt': 'b\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    function readGitIgnore(repoPath: string) {
+        return readFileSync(join(repoPath, '.gitignore'), 'utf8');
+    }
+
+    it('writes the entry each mode normalizes to', async () => {
+        const repoPath = repoWithTwoFiles();
+
+        await changesGit.ignoreRepoPath(repoPath, './logs/output.log', 'file');
+        await changesGit.ignoreRepoPath(repoPath, 'node_modules/', 'directory');
+        await changesGit.ignoreRepoPath(repoPath, '*.tmp', 'pattern');
+
+        expect(readGitIgnore(repoPath)).toBe(['logs/output.log', 'node_modules/', '*.tmp', ''].join('\n'));
+    });
+
+    it('does not add an entry the file already holds', async () => {
+        const repoPath = repoWithTwoFiles();
+
+        await changesGit.ignoreRepoPath(repoPath, '*.log', 'pattern');
+        await changesGit.ignoreRepoPath(repoPath, '*.log', 'pattern');
+
+        expect(readGitIgnore(repoPath)).toBe('*.log\n');
+    });
+
+    it('invalidates the cached sidebar status for the repository', async () => {
+        const repoPath = repoWithTwoFiles();
+        takeInvalidatedRepoPaths();
+
+        await changesGit.ignoreRepoPath(repoPath, '*.log', 'pattern');
+
+        expect(takeInvalidatedRepoPaths()).toEqual(new Set([repoPath]));
+    });
+});
+
+describe('changesGit commit', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithOneFile() {
+        const repoPath = createCommittedRepo('commit', { 'a.txt': 'a\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    function stageEdit(repoPath: string, content: string) {
+        writeFileSync(join(repoPath, 'a.txt'), content, 'utf8');
+        runGit(repoPath, ['add', 'a.txt']);
+    }
+
+    it('commits the staged changes with a summary and a body', async () => {
+        const repoPath = repoWithOneFile();
+        stageEdit(repoPath, 'a changed\n');
+
+        await changesGit.commitRepoChanges(repoPath, 'Add the feature', 'It does a useful thing.');
+
+        expect(runGit(repoPath, ['log', '-1', '--format=%B'])).toBe('Add the feature\n\nIt does a useful thing.');
+        expect(runGit(repoPath, ['status', '--porcelain'])).toBe('');
+    });
+
+    it('leaves the body out when the description is blank', async () => {
+        const repoPath = repoWithOneFile();
+        stageEdit(repoPath, 'a changed\n');
+
+        await changesGit.commitRepoChanges(repoPath, 'Only a summary', '   ');
+
+        expect(runGit(repoPath, ['log', '-1', '--format=%B'])).toBe('Only a summary');
+    });
+
+    it('amends the last commit in place', async () => {
+        const repoPath = repoWithOneFile();
+        stageEdit(repoPath, 'a changed\n');
+        await changesGit.commitRepoChanges(repoPath, 'First message', '');
+
+        stageEdit(repoPath, 'a changed again\n');
+        await changesGit.commitRepoChanges(repoPath, 'Reworded message', '', true);
+
+        // The amend replaces the second commit instead of adding a third.
+        expect(runGit(repoPath, ['rev-list', '--count', 'HEAD'])).toBe('2');
+        expect(runGit(repoPath, ['log', '-1', '--format=%B'])).toBe('Reworded message');
+    });
+
+    it('refuses an empty summary', async () => {
+        const repoPath = repoWithOneFile();
+        stageEdit(repoPath, 'a changed\n');
+
+        await expect(changesGit.commitRepoChanges(repoPath, '   ', 'A body without a subject')).rejects.toThrow('Commit summary is required.');
+        expect(runGit(repoPath, ['rev-list', '--count', 'HEAD'])).toBe('1');
+    });
+
+    it('undoes the last commit and keeps its changes staged', async () => {
+        const repoPath = repoWithOneFile();
+        stageEdit(repoPath, 'a changed\n');
+        await changesGit.commitRepoChanges(repoPath, 'Second commit', '');
+
+        await changesGit.undoLastRepoCommit(repoPath);
+
+        expect(runGit(repoPath, ['log', '-1', '--format=%s'])).toBe('Initial commit');
+        expect(runGit(repoPath, ['diff', '--cached', '--name-only'])).toBe('a.txt');
+        expect(runGit(repoPath, ['diff', '--name-only'])).toBe('');
+    });
+});
+
+describe('changesGit sidebar status', () => {
+    const cleanups: Array<() => void> = [];
+
+    afterEach(() => {
+        while (cleanups.length > 0) {
+            cleanups.pop()?.();
+        }
+    });
+
+    function repoWithOneCommit() {
+        const repoPath = createCommittedRepo('sidebar-status', { 'tracked.txt': 'base\n' });
+        cleanups.push(() => rmSync(repoPath, { recursive: true, force: true }));
+
+        return repoPath;
+    }
+
+    it('reports the branch, the publishable commits and the working-tree counts', async () => {
+        const repoPath = repoWithOneCommit();
+
+        await expect(changesGit.getRepoSidebarStatus(repoPath)).resolves.toMatchObject({
+            branch: 'main',
+            ahead: 0,
+            behind: 0,
+            hasRemote: false,
+            hasUpstream: false,
+            publishableCommits: 1,
+            changedFiles: 0,
+            stagedFiles: 0,
+            unstagedFiles: 0,
+            isDirty: false,
+            error: undefined,
+        });
+
+        writeFileSync(join(repoPath, 'tracked.txt'), 'changed\n', 'utf8');
+        writeFileSync(join(repoPath, 'untracked.txt'), 'new\n', 'utf8');
+
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ changedFiles: 2, stagedFiles: 0, unstagedFiles: 2, isDirty: true });
+
+        runGit(repoPath, ['add', 'tracked.txt']);
+
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ changedFiles: 2, stagedFiles: 1, unstagedFiles: 1, isDirty: true });
+    });
+
+    it('reads ahead, behind and the upstream from the branch header', async () => {
+        const repoPath = repoWithOneCommit();
+        writeFileSync(join(repoPath, 'tracked.txt'), 'base\nsecond\n', 'utf8');
+        runGit(repoPath, ['add', 'tracked.txt']);
+        runGit(repoPath, ['commit', '-m', 'Second commit']);
+
+        const firstSha = runGit(repoPath, ['rev-list', '--max-parents=0', 'HEAD']);
+        runGit(repoPath, ['remote', 'add', 'origin', 'https://example.invalid/gitvan.git']);
+        runGit(repoPath, ['update-ref', 'refs/remotes/origin/main', firstSha]);
+
+        // A remote is configured but the branch does not track it yet, so the commit it would publish is counted.
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ hasRemote: true, hasUpstream: false, publishableCommits: 1, ahead: 0, behind: 0 });
+
+        runGit(repoPath, ['branch', '--set-upstream-to=origin/main', 'main']);
+
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ hasUpstream: true, publishableCommits: 0, ahead: 1, behind: 0 });
+
+        // Point the upstream at a descendant of HEAD so the branch is one commit behind it.
+        runGit(repoPath, ['checkout', '-q', '-b', 'upstream-work']);
+        writeFileSync(join(repoPath, 'upstream.txt'), 'upstream\n', 'utf8');
+        runGit(repoPath, ['add', 'upstream.txt']);
+        runGit(repoPath, ['commit', '-m', 'Upstream commit']);
+        runGit(repoPath, ['update-ref', 'refs/remotes/origin/main', runGit(repoPath, ['rev-parse', 'upstream-work'])]);
+        runGit(repoPath, ['checkout', '-q', 'main']);
+
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ ahead: 0, behind: 1, publishableCommits: 0 });
+    });
+
+    it('reports a detached head without publishable commits', async () => {
+        const repoPath = repoWithOneCommit();
+        runGit(repoPath, ['checkout', '-q', '--detach']);
+
+        expect(await changesGit.getRepoSidebarStatus(repoPath)).toMatchObject({ branch: 'Detached HEAD', publishableCommits: 0, error: undefined });
+    });
+
+    it('reports a failed scan as an error instead of throwing', async () => {
+        const missingPath = join(tmpdir(), `gitvan-missing-${Math.random().toString(36).slice(2)}`);
+
+        await expect(changesGit.getRepoSidebarStatus(missingPath)).resolves.toMatchObject({
+            branch: undefined,
+            ahead: 0,
+            behind: 0,
+            hasRemote: false,
+            hasUpstream: false,
+            publishableCommits: 0,
+            changedFiles: 0,
+            stagedFiles: 0,
+            unstagedFiles: 0,
+            isDirty: false,
+            error: expect.stringContaining('could not be found'),
+        });
     });
 });
