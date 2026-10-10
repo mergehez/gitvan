@@ -12,6 +12,22 @@ import {
     readGitRevisionFileSize,
 } from './git-helpers.js';
 
+/**
+ * The revision that holds the modified side of one stashed path. A stash commit tracks only the
+ * paths that existed at its base, so a file the stash introduced lives in its untracked commit or
+ * its index commit instead — and the name-status of `stash show` does not say which.
+ */
+async function resolveStashModifiedRevision(repoPath: string, stashRef: string, filePath: string) {
+    for (const revision of [stashRef, `${stashRef}^3`, `${stashRef}^2`]) {
+        if ((await readGitRevisionFileSize(repoPath, `${revision}:${filePath}`)) !== undefined) {
+            return revision;
+        }
+    }
+
+    // A path the stash deleted is missing everywhere, and its diff is the deletion against the base.
+    return stashRef;
+}
+
 export const stashGit = {
     async getRepoStashes(repoPath: string): Promise<RepoStashEntry[]> {
         const output = await runGit(['stash', 'list', '--format=%gd%x1f%gs%x1f%cr'], repoPath, [0, 1], true);
@@ -39,11 +55,12 @@ export const stashGit = {
     async getRepoStashFileDiff(repoPath: string, stashRef: string, filePath: string, previousPath?: string): Promise<FileDiffData> {
         const originalPath = previousPath ?? filePath;
         const baseRevision = `${stashRef}^1`;
+        const modifiedRevision = await resolveStashModifiedRevision(repoPath, stashRef, filePath);
 
         const [patch, originalSize, modifiedSize] = await Promise.all([
-            runGit(['diff', baseRevision, stashRef, '--', filePath], repoPath, [0, 1]),
+            runGit(['diff', baseRevision, modifiedRevision, '--', filePath], repoPath, [0, 1]),
             readGitRevisionFileSize(repoPath, `${baseRevision}:${originalPath}`),
-            readGitRevisionFileSize(repoPath, `${stashRef}:${filePath}`),
+            readGitRevisionFileSize(repoPath, `${modifiedRevision}:${filePath}`),
         ]);
 
         const stats = buildDiffStats(patch || '', originalSize, modifiedSize);
@@ -65,13 +82,13 @@ export const stashGit = {
 
         const [original, modified] = await Promise.all([
             runGit(['show', `${baseRevision}:${originalPath}`], repoPath, [0, 128], false),
-            runGit(['show', `${stashRef}:${filePath}`], repoPath, [0, 128], false),
+            runGit(['show', `${modifiedRevision}:${filePath}`], repoPath, [0, 128], false),
         ]);
         const nonCodePreview = isImagePath(filePath)
             ? buildImagePreview(
                   filePath,
                   await readGitRevisionFileBuffer(repoPath, `${baseRevision}:${originalPath}`),
-                  await readGitRevisionFileBuffer(repoPath, `${stashRef}:${filePath}`)
+                  await readGitRevisionFileBuffer(repoPath, `${modifiedRevision}:${filePath}`)
               )
             : undefined;
 

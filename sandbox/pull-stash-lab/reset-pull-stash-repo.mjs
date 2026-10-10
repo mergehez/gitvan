@@ -57,6 +57,10 @@ writeFileSync(
     'utf8'
 );
 
+// An untracked file travels with the stash too, so the stashed diff has to read it from the
+// stash's untracked commit rather than from the stash itself.
+writeFileSync(join(repoDir, 'scratch.txt'), 'Untracked lab note\n', 'utf8');
+
 console.log(`Lab repository created at: ${repoDir}`);
 console.log(`Origin remote created at: ${originDir}`);
 console.log('The repository is behind origin/main with an unstaged edit to the same file,');
