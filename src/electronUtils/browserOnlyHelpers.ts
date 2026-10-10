@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import express from 'express';
 import { isRepositoryNotFoundError } from '../shared/repositoryErrors.ts';
 import { appConfig } from './helpers.ts';
@@ -16,6 +17,60 @@ class BrowserUnavailableError extends Error {
     }
 }
 
+type NativePickerStub = {
+    directory?: string;
+    editor?: { path: string; label?: string };
+    terminal?: { path: string; label?: string; locked?: boolean };
+};
+
+/**
+ * What the browser run asks a picker to answer with. There is no native host to open a dialog, so
+ * a spec writes this file and the stand-ins below read it; see `playwright/support/nativeStub.ts`.
+ */
+function readNativePickerStub(): NativePickerStub {
+    const stubPath = process.env.GITVAN_NATIVE_STUB_FILE;
+    if (!stubPath) {
+        return {};
+    }
+
+    try {
+        return JSON.parse(readFileSync(stubPath, 'utf8')) as NativePickerStub;
+    } catch {
+        return {};
+    }
+}
+
+/** The label the native pickers derive from a chosen application path. */
+function applicationLabelFromPath(path: string) {
+    const label = path.split('/').pop() || path;
+
+    return label.endsWith('.app') || label.endsWith('.exe') ? label.slice(0, -4) : label;
+}
+
+/**
+ * The native methods browser dev mode answers instead of reporting the boundary. Opening the
+ * provider's sign-in page and choosing a file or application have no native host to run them, but
+ * the flows that call them have to be able to finish there.
+ */
+const nativeStandins: Record<string, (params: any) => Promise<unknown>> = {
+    openExternalUrl: async (params: { url: string }) => {
+        console.log(`[devServer] openExternalUrl: ${params?.url ?? ''}`);
+
+        return { opened: true };
+    },
+    pickDirectory: async () => readNativePickerStub().directory,
+    pickEditorApplication: async () => {
+        const editor = readNativePickerStub().editor;
+
+        return editor ? { path: editor.path, label: editor.label ?? applicationLabelFromPath(editor.path) } : undefined;
+    },
+    pickTerminalApplication: async () => {
+        const terminal = readNativePickerStub().terminal;
+
+        return terminal ? { path: terminal.path, label: terminal.label ?? applicationLabelFromPath(terminal.path), locked: terminal.locked ?? false } : undefined;
+    },
+};
+
 /**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
  * Run with: tsx src/backend/devServer.ts
@@ -32,14 +87,8 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
     const methodMap: GitClientRequestApi = apiMethods.reduce((acc, methodName) => {
         if (methodName in app) {
             acc[methodName] = app[methodName as keyof typeof app] as any;
-        } else if (methodName === 'openExternalUrl') {
-            // The only stand-in browser dev mode gets: opening a provider's sign-in page has no
-            // native host to run it, but the flow that calls it has to be able to finish there.
-            // It answers with a body, because the client parses every response as JSON.
-            acc[methodName] = async (params: { url: string }) => {
-                console.log(`[devServer] openExternalUrl: ${params?.url ?? ''}`);
-                return { opened: true };
-            };
+        } else if (methodName in nativeStandins) {
+            acc[methodName] = nativeStandins[methodName] as any;
         } else {
             acc[methodName] = async () => {
                 throw new BrowserUnavailableError(methodName);
@@ -146,7 +195,9 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
                 }
 
                 const result = await runWithTimeout(Promise.resolve(handler(params)), REQUEST_TIMEOUT_MS, controller);
-                res.json(result);
+                // The renderer parses every answer as JSON, so a method that returns nothing has to
+                // answer `null` rather than an empty body.
+                res.json(result ?? null);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
 

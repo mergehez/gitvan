@@ -1,4 +1,5 @@
 import { expect, test as base, type Page } from '@playwright/test';
+import { resetNativePickerStub } from './nativeStub';
 
 const apiBase = process.env.PLAYWRIGHT_API_BASE ?? 'http://127.0.0.1:5276';
 
@@ -214,6 +215,7 @@ export type OpenSandboxRepoOptions = {
  * depends on what an earlier one left behind and each one can run on its own.
  */
 export async function openSandboxRepo(page: Page, name: string, options: OpenSandboxRepoOptions = {}) {
+    resetNativePickerStub();
     await resetEditorSettings();
     await resetSpecAccounts();
     await resetOAuthProviderSettings();

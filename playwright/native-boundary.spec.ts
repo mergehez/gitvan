@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import { expect, openSandboxRepo, probeApi, test } from './support/sandbox';
 
 /**
@@ -7,9 +6,6 @@ import { expect, openSandboxRepo, probeApi, test } from './support/sandbox';
  * dev-server stub for any of them makes this list fail on purpose, so the guard is updated with it.
  */
 const nativeOnlyMethods = [
-    'pickDirectory',
-    'pickEditorApplication',
-    'pickTerminalApplication',
     'openFileInEditor',
     'revealPathInFileManager',
     'openPathWithDefaultProgram',
@@ -19,20 +15,6 @@ const nativeOnlyMethods = [
     'resizeIntegratedTerminalSession',
     'closeIntegratedTerminalSession',
 ];
-
-function errorBanner(page: Page) {
-    return page.locator('#app-error-banner p');
-}
-
-async function openSettingsPanel(page: Page, panel: string) {
-    await page.getByTestId('repos-settings').click();
-
-    const modal = page.getByTestId('centered-modal-surface').filter({ hasText: 'Settings' });
-    await expect(modal).toBeVisible();
-    await modal.getByRole('button', { name: panel, exact: true }).click();
-
-    return modal;
-}
 
 test.describe('native-only calls in browser dev mode', () => {
     test('every native-only RPC reports itself unavailable', async () => {
@@ -44,37 +26,14 @@ test.describe('native-only calls in browser dev mode', () => {
         }
     });
 
-    test('opening an external URL is the one stand-in the dev server provides', async () => {
-        // The OAuth device flow opens the provider page, so browser dev mode answers it instead of
-        // reporting the boundary the other methods do.
-        const { status } = await probeApi('openExternalUrl', { url: 'https://stub.example.com/device' });
+    test('the methods the dev server stands in for answer instead of reporting the boundary', async () => {
+        // The OAuth device flow opens the provider page and the Settings panels open a file
+        // picker, so browser dev mode answers those four rather than reporting the boundary.
+        for (const method of ['openExternalUrl', 'pickDirectory', 'pickEditorApplication', 'pickTerminalApplication']) {
+            const { status } = await probeApi(method, method === 'openExternalUrl' ? { url: 'https://stub.example.com/device' } : {});
 
-        expect(status).toBe(200);
-    });
-
-    test('a native file picker reports the failure and leaves Settings usable', async ({ page }) => {
-        await openSandboxRepo(page, 'partial-changes');
-        const modal = await openSettingsPanel(page, 'Editors');
-
-        await modal.getByRole('button', { name: 'Add editor' }).click();
-
-        await expect(errorBanner(page)).toContainText('Method pickEditorApplication is not implemented in browser dev mode.');
-        // Nothing hangs: the panel still answers while the failure sits in the banner.
-        await expect(modal.getByRole('button', { name: 'Add editor' })).toBeEnabled();
-    });
-
-    test('adding an existing repository reports the missing folder picker', async ({ page }) => {
-        await openSandboxRepo(page, 'partial-changes');
-
-        await page.getByTestId('repos-add').click();
-        await page.getByRole('button', { name: 'Add Existing Repository...' }).click();
-
-        await expect(errorBanner(page)).toContainText('Method pickDirectory is not implemented in browser dev mode.');
-        // The add menu closes and the sidebar keeps working, so the failure can be dismissed.
-        await expect(page.getByRole('button', { name: 'Add Existing Repository...' })).toBeHidden();
-        await page.locator('#app-error-banner').getByRole('button').click();
-        await expect(errorBanner(page)).toBeHidden();
-        await expect(page.getByTestId('repos-settings')).toBeEnabled();
+            expect(status, method).toBe(200);
+        }
     });
 
     test('the integrated terminal reports the missing session instead of opening', async ({ page }) => {

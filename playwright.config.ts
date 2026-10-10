@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { defineConfig } from '@playwright/test';
@@ -26,6 +26,12 @@ process.env.PLAYWRIGHT_PROVIDER_STUB_BASE = providerStubBase;
 // Creating an account writes to the macOS keychain, which a run cannot undo afterwards. A fake
 // `security` on PATH keeps those writes in a temp directory.
 const fakeKeychainBinDir = installFakeKeychain();
+
+// The pickers have no native host in browser dev mode, so the dev server answers them from a file
+// the specs write. Its path has to be known here and in the workers.
+const nativeStubFile = process.env.PLAYWRIGHT_NATIVE_STUB_FILE || join(e2eDataDir, 'native-picker-stub.json');
+writeFileSync(nativeStubFile, '{}');
+process.env.PLAYWRIGHT_NATIVE_STUB_FILE = nativeStubFile;
 
 export default defineConfig({
     testDir: './playwright',
@@ -64,6 +70,7 @@ export default defineConfig({
                 GITVAN_VUE_PORT: String(vuePort),
                 GITVAN_API_PORT: String(apiPort),
                 GITVAN_PROVIDER_BASE: providerStubBase,
+                GITVAN_NATIVE_STUB_FILE: nativeStubFile,
                 // Prepended, so the fake `security` wins over the real one.
                 PATH: `${fakeKeychainBinDir}:${process.env.PATH ?? ''}`,
             },
