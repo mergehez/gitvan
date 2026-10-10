@@ -14,7 +14,7 @@ Conventions for **Next** and **Test Suite**:
   considered in future planning.
 
 Every **Test Suite** item also carries the kind of spec that closes it: `[BROWSER]`,
-`[BACKEND UNIT]`, `[FRONTEND TEST]` or `[HARNESS]`. That section tracks coverage only.
+`[BACKEND UNIT]` or `[FRONTEND TEST]`. That section tracks coverage only.
 
 Each **Next** item is one sentence plus two lines: what it is, and how it will be
 implemented. Do not store benchmark numbers or implementation detail in **Done**.
@@ -61,6 +61,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Ran the token verification and device sign-in flows from a local provider stub that can fail on demand.
 - Covered the repository commit, file, branch, tag, stash and history flows.
 - Covered the git helpers' parsers, the keychain wrapper and the monaco language and option helpers.
+- Stood in for the native pickers in browser dev mode, so adding a repository and picking an editor or terminal have specs.
+- Covered the committed tree and file reads, the pagination bounds and the tag refs of the history service.
+- Covered the remote auth environment, the askpass script and the concurrency helper.
 
 ## Next
 
@@ -87,13 +90,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 ## Test Suite
 
 Missing test coverage only. It carries the same markers as **Next**, paired with the kind of
-spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]`, `[FRONTEND TEST]` or `[HARNESS]` —
-so one flat list says both how much it matters and what writing it means. The `[BROWSER]`
-entries come first within each marker because they cover the flows a user actually runs.
-
-- [ ] **[NOT_URGENT] [BROWSER]** Dev-server stubs for the native pickers.
-    - What it is: `native-boundary.spec.ts` pins that every `src/electron/main.ts` RPC reports itself unavailable in browser dev mode, so a stub has to update that guard. With one, creating a local repository and picking an editor or terminal from disk become testable.
-    - How it will be implemented: extend the dev-server stub to answer the picker RPCs, then update the `native-boundary.spec.ts` guard that asserts they are unavailable.
+spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]` or `[FRONTEND TEST]` — so one flat list
+says both how much it matters and what writing it means. The `[BROWSER]` entries come first
+within each marker because they cover the flows a user actually runs.
 
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-changes.ts`.
     - What it is: `applyPatch`/`applyPartialFilePatch`; `ignoreRepoPath`; `commitRepoChanges` and `undoLastRepoCommit`; the stage/unstage/restore/delete file operations; `getRepoSidebarStatus` parsing for branch, ahead, behind, upstream, publishable commits and the error path; and the non-batched cosmetic fallback.
@@ -102,14 +101,6 @@ entries come first within each marker because they cover the flows a user actual
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `app.ts` handlers that only `app.spec.ts` partially covers.
     - What it is: bootstrap and selection, repository/group/account CRUD and ordering, clone and create, remote operations, and merge and stash recovery. `resolveRepoFilePath` is covered, including the paths that escape the repository.
     - How it will be implemented: grow `app.spec.ts` per handler group, reusing its repository and account fixtures.
-
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-history.ts`.
-    - What it is: `getCommittedTree` (including ordering, types and sizes), `getCommittedFile` (cap, image preview, binary detection, "no commits yet"), `normalizePageCount` for invalid input, and tag refs inside `%d`.
-    - How it will be implemented: a fixture history with a binary, an image and an oversized file, plus a repository with no commits yet.
-
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-common.ts` remote auth path.
-    - What it is: `createRemoteGitEnvForUrl`, the non-HTTPS rejection, the host-mismatch guard and the askpass script, plus `runWithConcurrency`, `resolveGitExecutable` and the buffered run variants. Every existing remote test passes `auth: undefined`, so the whole auth branch is dead in tests.
-    - How it will be implemented: pass a resolved auth object into the existing remote tests instead of `undefined`, and assert the environment and askpass script the run receives.
 
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `useDatabase.ts` sequence handling.
     - What it is: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the legacy-database migration path. The statement cache and transactions in `createRuntimeDatabaseClient` are covered.
@@ -123,17 +114,13 @@ entries come first within each marker because they cover the flows a user actual
     - What it is: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and `ContextMenuPanel.vue` still have none.
     - How it will be implemented: mount a host element per directive, asserting the DOM it mounts and removes.
 
-- [ ] **[NOT_URGENT] [HARNESS]** Run the suites in CI.
-    - What it is: `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` are not enforced anywhere, and `vite build` does not typecheck, so a green local run is the only signal there is.
-    - How it will be implemented: one CI job per suite, reusing the commands in `package.json` and the browser run's own ports and temp database.
-
 - [ ] **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
     - Why it is deliberate: covering it would mean rendering a snapshot with no selectable file, which no real repository can produce. If that ever becomes reachable, the spec comes with it.
 
-- [ ] **[NOT_PLANNED] [HARNESS]** `src/mainview/tests/App.real.spec.ts` stays excluded.
+- [ ] **[NOT_PLANNED] [FRONTEND TEST]** `src/mainview/tests/App.real.spec.ts` stays excluded.
     - What it is: `vite.config.ts` and `package.json` exclude it, so it never runs, and it needs local fixture data.
-    - Why it is deliberate: it duplicates what the browser specs already prove against the sandbox labs, and the local fixture it needs cannot exist on CI.
+    - Why it is deliberate: it duplicates what the browser specs already prove against the sandbox labs, and the local fixture it needs is not worth carrying.
 
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
 `bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
