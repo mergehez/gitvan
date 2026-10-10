@@ -9,13 +9,14 @@ import { apiMethods } from '../../../shared/apiMethods';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 describe('apiMethods', () => {
-    it('lists exactly the handlers declared in app.ts and main.ts', () => {
+    it('lists exactly the handlers declared in app.ts and the native method files', () => {
         const appSource = readFileSync(join(repoRoot, 'src/backend/services/app.ts'), 'utf8');
         const mainSource = readFileSync(join(repoRoot, 'src/electron/main.ts'), 'utf8');
+        const nativeSource = readFileSync(join(repoRoot, 'src/electron/nativeMethods.ts'), 'utf8');
 
         // A handler that stops matching the generator's pattern would silently vanish from the
         // renderer's task table; this regenerates the list the way the plugin does.
-        expect([...apiMethods]).toEqual(extractApiMethods(appSource, mainSource));
+        expect([...apiMethods]).toEqual(extractApiMethods(appSource, mainSource, nativeSource));
     });
 
     it('keeps every runtime app handler in the renderer task list', () => {
@@ -27,13 +28,14 @@ describe('apiMethods', () => {
 
     it('extracts backend and native handlers but not IIFE getters', () => {
         const appSource = ['export const app = {', '    getChanges: async (ps: { repoId: number }) => {', '    },', '    groups: (() => () => [])(),', '};'].join('\n');
-        const mainSource = [
-            '    getNativeMethods: (mainWindow, apiPost) => ({',
+        const mainSource = 'const helpers = createElectronHelpers({ apiMethods, getNativeMethods, getMenu });';
+        const nativeSource = [
+            '    return {',
             '        pickDirectory: async () => undefined,',
             '        openExternalUrl: async () => undefined,',
-            '    }),',
+            '    };',
         ].join('\n');
 
-        expect(extractApiMethods(appSource, mainSource)).toEqual(['getChanges', 'openExternalUrl', 'pickDirectory']);
+        expect(extractApiMethods(appSource, mainSource, nativeSource)).toEqual(['getChanges', 'openExternalUrl', 'pickDirectory']);
     });
 });

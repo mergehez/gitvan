@@ -11,16 +11,18 @@ type Options = {
     preload: string;
     devServer: string;
     apiMethods: string;
+    /** Files besides `main` that declare native handlers; `main` is always included. */
+    nativeMethods?: string[];
 
     externalize?: string[];
 };
 
 /**
  * Handler names the renderer's task table is built from: the backend handlers in
- * `export const app = {` plus the native handlers in `createNativeHandlers`. The IIFE getters
- * (`name: (() => { ... })()`) are not request handlers and are skipped.
+ * `export const app = {` plus the native handlers in the main entry and the files it lists.
+ * The IIFE getters (`name: (() => { ... })()`) are not request handlers and are skipped.
  */
-export function extractApiMethods(appSource: string, mainSource: string): string[] {
+export function extractApiMethods(appSource: string, ...nativeSources: string[]): string[] {
     const appLines = appSource.split('export const app = {').pop()!.split('\n');
     const backendMethods = [...appSource.matchAll(/^    ([a-zA-Z]+):\s+(async\s+)?\(/gm)]
         .filter((m) => {
@@ -30,15 +32,15 @@ export function extractApiMethods(appSource: string, mainSource: string): string
         })
         .map((m) => m[1]);
 
-    const nativeMethods = [...mainSource.matchAll(/^\s+([a-zA-Z]+):\s+async\s+\(/gm)].map((m) => m[1]);
+    const nativeMethods = nativeSources.flatMap((source) => [...source.matchAll(/^\s+([a-zA-Z]+):\s+async\s+\(/gm)].map((m) => m[1]));
 
     return [...new Set([...backendMethods, ...nativeMethods])].sort();
 }
 
 function generateApiMethods(paths: Options) {
     const appContent = fs.readFileSync(paths.app, 'utf-8');
-    const handlersContent = fs.readFileSync(paths.main, 'utf-8');
-    const names = extractApiMethods(appContent, handlersContent)
+    const nativeSources = [paths.main, ...(paths.nativeMethods ?? [])].map((file) => fs.readFileSync(file, 'utf-8'));
+    const names = extractApiMethods(appContent, ...nativeSources)
         .map((name) => `'${name}'`)
         .join(',\n    ');
 
@@ -155,6 +157,7 @@ const electronPlugin = (paths: Options): PluginOption => {
     paths.preload = resolve(paths.preload);
     paths.devServer = resolve(paths.devServer);
     paths.apiMethods = resolve(paths.apiMethods);
+    paths.nativeMethods = paths.nativeMethods?.map((file) => resolve(file));
 
     let isProductionBuild = false;
 
@@ -193,9 +196,9 @@ const electronPlugin = (paths: Options): PluginOption => {
                 killStaleServers(appConfig.apiPort, appConfig.vuePort);
             }
 
-            server.watcher.add([paths.app, paths.main]);
+            server.watcher.add([paths.app, paths.main, ...(paths.nativeMethods ?? [])]);
             server.watcher.on('change', (file) => {
-                if (file === paths.app || file === paths.main) {
+                if (file === paths.app || file === paths.main || paths.nativeMethods?.includes(file)) {
                     generateApiMethods(paths);
                 }
             });

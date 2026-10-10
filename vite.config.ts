@@ -13,6 +13,7 @@ export default defineConfig({
         electronApiMethods({
             app: 'src/backend/services/app.ts',
             main: 'src/electron/main.ts',
+            nativeMethods: ['src/electron/nativeMethods.ts'],
             preload: 'src/electron/preload.ts',
             devServer: 'src/backend/devServer.ts',
             apiMethods: 'src/shared/apiMethods.ts',
