@@ -52,22 +52,16 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Kept a status scan that started before a refresh from repopulating the emptied cache.
 - Rejected a repository path that resolves outside the repository root.
 - Windowed the file trees with uniform rows, keeping the history tree on its page size.
+- Returned only the repositories a mutation touched and merged them in the renderer.
+- Synced the conflict chrome once per frame and reused its zones across edits.
 
 ## Next
 
-- [ ] **[URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
-    - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
-    - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
-
-- [ ] **[URGENT]** The conflict editor re-parses the file quadratically and rebuilds every view zone on each keystroke.
-    - What it is: `ConflictMonacoEditor.onDidChangeContent` calls `syncEditorChrome` per keystroke, which reads the full model, calls `parseMergeConflictBlocks` twice, then clears and recreates a DOM node with buttons per conflict block plus `changeViewZones` and `deltaDecorations`. Inside the parse, `countLines(content.slice(0, startOffset))` (`src/mainview/lib/mergeConflicts.ts:53`) re-scans the file from offset zero for every block.
-    - How it will be implemented: debounce or rAF the chrome sync, compute the newline offsets once per parse and derive `startLine` from that table instead of re-slicing, and reuse zones keyed by block rather than destroying and recreating them.
-
-- [ ] **[NOT_URGENT]** The full file pair is normalized for "no actual change" at least twice per selection.
+- [ ] **[URGENT]** The full file pair is normalized for "no actual change" at least twice per selection.
     - What it is: `useDiffViewer` calls `hasNoActualDiffChanges` (`src/mainview/composables/useDiffViewer.ts:33`), then `DiffsDiffEditor.createRenderedDiff` (`DiffsDiffEditor.vue:79`) calls `normalizeComparableDiffText` on both sides again, and `hasOnlyWhitespaceChanges` runs two more full-content regex replaces; `selectedDiffConflictCount` (`RepChangesView.vue:178`) regex-scans the whole modified content on top. The normalizer in `src/shared/diffIgnoredChars.ts:116` walks every character of both files per pass.
     - How it will be implemented: compute the normalized pair once per diff and pass the result into `DiffsDiffEditor` instead of recomputing it there, and derive the conflict-marker count from that same pass; also early-return from the normalizer when `ignoredChars` is empty and whitespace stripping is off.
 
-- [ ] **[NOT_URGENT]** Hunk anchors re-split the whole patch and re-query the shadow DOM per hunk.
+- [ ] **[URGENT]** Hunk anchors re-split the whole patch and re-query the shadow DOM per hunk.
     - What it is: `setHunkAnchors` (`src/mainview/components/DiffsDiffEditor.vue:360`) runs from `onPostRender` on every render and, per hunk, does `gutter.querySelector` plus `addLine.querySelectorAll('.gitvan-hunk-button')`, while `buildChangeBlockPatch` (`DiffsDiffEditor.vue:191`) re-splits the entire patch with `fullPatch.split(/^@@ /m)`. A diff with hundreds of hunks costs O(hunks × patch size) string scanning on each render.
     - How it will be implemented: split the patch once per diff and cache the per-hunk patches in a `Map`, and build the anchors once per rendered node instead of from the post-render callback.
 
@@ -157,7 +151,7 @@ database per run, so it never touches the developer's app data.
       branch operations, tag operations, the stash operations, and the history/file-history
       loaders.
 - [ ] Components with no dedicated spec, most valuable first: `DiffsDiffEditor.vue` (hunk
-      anchoring), `ConflictMonacoEditor.vue`, `Popover.vue`, `ChangesFileTree.vue`,
+      anchoring), `Popover.vue`, `ChangesFileTree.vue`,
       `DraggableList.vue`, `RepExplorerView.vue`,
       `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`,
       `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`,
@@ -165,7 +159,7 @@ database per run, so it never touches the developer's app data.
       (`Button`, `IconButton`, `Alert`, `AppErrorBanner`, `AppSuccessToast`).
 - [ ] Directives: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and
       `ContextMenuPanel.vue` still have none.
-- [ ] `lib` modules with no test: `monaco.ts` and `mergeConflicts.ts`.
+- [ ] `lib` modules with no test: `monaco.ts`.
 
 ### Harness
 
