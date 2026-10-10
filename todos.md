@@ -75,6 +75,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 ## Next
 
+- [ ] **[NOT_URGENT]** Gate every change on the unit and browser suites in CI, with a coverage report.
+    - What it is: nothing runs the suites automatically, and no coverage provider or threshold is configured, so "the tests are green" is a local observation rather than something a change has to pass.
+    - How it will be implemented: a workflow that installs Playwright chromium, runs `bun run test:ui` and `bun run test:e2e`, and adds `@vitest/coverage-v8` with thresholds once the Electron spec in the Test Suite list lands in the same job.
+
 - [ ] **[NOT_PLANNED]** Keep the localhost Express backend and the IPC-to-HTTP transport as the single request path.
     - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:24`, `src/electronUtils/browserOnlyHelpers.ts:79`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
     - Why it is deliberate: the same transport is what makes the browser `dev2` mode and the standalone server work, and collapsing the Electron path into direct handler calls would fork the request path. Keep the extra serialization as the price of one transport; the payloads themselves are the thing to shrink.
@@ -102,9 +106,33 @@ spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]` or `[FRONTEND TEST]` 
 says both how much it matters and what writing it means. The `[BROWSER]` entries come first
 within each marker because they cover the flows a user actually runs.
 
+- [ ] **[NOT_URGENT] [BROWSER]** The Electron shell and the packaged app have no end-to-end spec.
+    - What it is: `playwright.config.ts` boots `bun run dev`, so no spec ever launches Electron, and the preload bridge, the IPC registration, window creation, the application menu and the built bundle (`src/electron/main.ts`, `src/electron/preload.ts`, `src/electronUtils/mainProloadHelpers.ts:36,169`) run only when a person starts the app. `native-boundary.spec.ts` proves the opposite direction — that those methods are unavailable in browser dev mode.
+    - How it will be implemented: launch the app with Playwright's `_electron`, open a sandbox lab, drive one native action through the real preload bridge, open and close the integrated terminal and quit; point the same spec at the built bundle behind the release script.
+
+- [ ] **[NOT_URGENT] [BACKEND UNIT]** `mainProloadHelpers.ts` and the API request wrapper.
+    - What it is: `generateHandlers` forwards every backend method to `callApiPost` (`src/electronUtils/helpers.ts:35`) and merges the native methods, `registerIpcHandlers` registers `api:<name>` and the `renderer:diagnostic` channel, `createWindow` owns the size policy, the dev-server probe and the missing-build error, and `createPreloadApi` fans `native-command` out to listeners with an unsubscribe. None of them has a spec.
+    - How it will be implemented: inject fake `electron` and preload objects, then assert the registered channel list, the forwarded params, the diagnostic colouring, the window options, and the error envelope and 12-minute timeout a failed request produces.
+
+- [ ] **[NOT_URGENT] [BACKEND UNIT]** `main.ts` native methods and application menu.
+    - What it is: the picker cancel handling and `.app`/`.exe` label trimming, `openFileInEditor`'s two existence guards, `revealPathInFileManager`'s two modes, `openDirectoryInTerminal`'s terminal fallback list, and the menu template with its settings accelerator.
+    - How it will be implemented: build the helpers with injected `dialog`, `shell` and `executeCommand` fakes and assert both the calls and the thrown messages.
+
+- [ ] **[NOT_URGENT] [BACKEND UNIT]** `integratedTerminal.ts` PTY lifecycle.
+    - What it is: shell resolution, spawn, the `data`/`exit` events, write, resize and the SIGHUP close. A component spec can only stub the modal around it.
+    - How it will be implemented: spawn a real shell through node-pty, run one command and assert its output arrives, then resize, write and close.
+
+- [ ] **[NOT_URGENT] [BACKEND UNIT]** The Keychain wrapper against the real `security` CLI.
+    - What it is: `auth.ts` is only exercised with a mocked `executeCommand` and, in the browser run, a fake `security` earlier on `PATH` (`playwright/support/fakeKeychain.ts`), so the real add/find/delete and the missing-entry exit code never run.
+    - How it will be implemented: an opt-in spec that stores, reads and deletes a throwaway item under its own service name, skipped unless an environment flag asks for it.
+
 - [ ] **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
     - Why it is deliberate: covering it would mean rendering a snapshot with no selectable file, which no real repository can produce. If that ever becomes reachable, the spec comes with it.
+
+- [ ] **[NOT_PLANNED] [BROWSER]** Signing and notarization stay a release-script check, not a spec.
+    - What it is: `src/electronUtils/releaseHelpers.ts` builds, signs and notarizes the app, and nothing in the suite verifies the signature.
+    - Why it is deliberate: signing and notarization need Apple credentials and a notary round trip, so the release script is the only place that can check them. The launch smoke for the produced bundle is tracked by the Electron shell item above.
 
 - [ ] **[NOT_PLANNED] [FRONTEND TEST]** `src/mainview/tests/App.real.spec.ts` stays excluded.
     - What it is: `vite.config.ts` and `package.json` exclude it, so it never runs, and it needs local fixture data.
@@ -117,6 +145,14 @@ within each marker because they cover the flows a user actually runs.
 - [ ] **[NOT_PLANNED] [FRONTEND TEST]** `GitClientHeader`'s no-repository branch stays uncovered.
     - What it is: the header carries fallbacks for an undefined selected repository, but the account button dereferences `repo` without a guard, so mounting it with no selection throws before those fallbacks render.
     - Why it is deliberate: `App.vue` renders the header only inside `v-if="selectedRepo"`, so no real session can reach it. If a no-selection render ever becomes reachable, the spec and the guard come with it.
+
+- [ ] **[NOT_PLANNED] [BACKEND UNIT]** Real GitHub and GitLab calls stay behind the local provider stub.
+    - What it is: `oauth.ts` and `listCloneableRepos` are exercised against `playwright/support/providerStub.ts`, which fails on demand, so no spec ever reaches a real provider.
+    - Why it is deliberate: a network dependency in the suite is flaky, needs credentials and hits rate limits, while answering nothing the stub does not. The sign-in and discovery flows are already covered end to end against it.
+
+- [ ] **[NOT_PLANNED] [BACKEND UNIT]** The performance baseline stays a manual `bun do.ts perf` run.
+    - What it is: `src/electronUtils/perfBaseline.ts` measures the hot endpoints, but no spec asserts a budget.
+    - Why it is deliberate: a wall-clock budget in the suite would be machine-dependent and flaky. The baseline is meant to be read before and after a change, which the Done entry records.
 
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
 `bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
