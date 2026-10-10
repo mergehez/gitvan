@@ -6,8 +6,15 @@ function getKeychainAccountName(accountId: number) {
     return `gitvan-account-${accountId}`;
 }
 
-async function runSecurityCommand(args: string[], allowedExitCodes: number[] = [0]) {
-    const [, stdout] = await executeCommand({
+/** The service name and the runner are injectable so a spec can exercise the real `security` CLI in isolation. */
+export type KeychainOptions = {
+    serviceName?: string;
+    run?: typeof executeCommand;
+};
+
+async function runSecurityCommand(args: string[], allowedExitCodes: number[] = [0], options: KeychainOptions = {}) {
+    const run = options.run ?? executeCommand;
+    const [, stdout] = await run({
         command: 'security',
         args,
         allowedExitCodes,
@@ -23,32 +30,41 @@ function ensureSupportedPlatform() {
     }
 }
 
-export async function storeAccountSecret(accountId: number, label: string, secret: string) {
+export async function storeAccountSecret(accountId: number, label: string, secret: string, options: KeychainOptions = {}) {
     ensureSupportedPlatform();
 
-    await runSecurityCommand(['add-generic-password', '-a', getKeychainAccountName(accountId), '-s', KEYCHAIN_SERVICE_NAME, '-l', label, '-w', secret, '-U']);
+    await runSecurityCommand(
+        ['add-generic-password', '-a', getKeychainAccountName(accountId), '-s', options.serviceName ?? KEYCHAIN_SERVICE_NAME, '-l', label, '-w', secret, '-U'],
+        [0],
+        options
+    );
 }
 
-export async function readAccountSecret(accountId: number) {
+export async function readAccountSecret(accountId: number, options: KeychainOptions = {}) {
     ensureSupportedPlatform();
 
-    return await runSecurityCommand(['find-generic-password', '-a', getKeychainAccountName(accountId), '-s', KEYCHAIN_SERVICE_NAME, '-w']);
+    return await runSecurityCommand(
+        ['find-generic-password', '-a', getKeychainAccountName(accountId), '-s', options.serviceName ?? KEYCHAIN_SERVICE_NAME, '-w'],
+        [0],
+        options
+    );
 }
 
-export async function deleteAccountSecret(accountId: number) {
+export async function deleteAccountSecret(accountId: number, options: KeychainOptions = {}) {
     ensureSupportedPlatform();
 
-    await runSecurityCommand(['delete-generic-password', '-a', getKeychainAccountName(accountId), '-s', KEYCHAIN_SERVICE_NAME], [0, 44]);
+    // `security` reports a missing item with exit code 44, which is the same as already deleted.
+    await runSecurityCommand(['delete-generic-password', '-a', getKeychainAccountName(accountId), '-s', options.serviceName ?? KEYCHAIN_SERVICE_NAME], [0, 44], options);
 }
 
-export async function storeAccountAccessToken(accountId: number, label: string, accessToken: string) {
-    await storeAccountSecret(accountId, label, accessToken);
+export async function storeAccountAccessToken(accountId: number, label: string, accessToken: string, options: KeychainOptions = {}) {
+    await storeAccountSecret(accountId, label, accessToken, options);
 }
 
-export async function readAccountAccessToken(accountId: number) {
-    return await readAccountSecret(accountId);
+export async function readAccountAccessToken(accountId: number, options: KeychainOptions = {}) {
+    return await readAccountSecret(accountId, options);
 }
 
-export async function deleteAccountAccessToken(accountId: number) {
-    await deleteAccountSecret(accountId);
+export async function deleteAccountAccessToken(accountId: number, options: KeychainOptions = {}) {
+    await deleteAccountSecret(accountId, options);
 }
