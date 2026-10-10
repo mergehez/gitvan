@@ -60,6 +60,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Covered the stash service, which turned up a stashed diff that read a file from the wrong commit.
 - Ran the token verification and device sign-in flows from a local provider stub that can fail on demand.
 - Covered the repository commit, file, branch, tag, stash and history flows.
+- Covered the git helpers' parsers, the keychain wrapper and the monaco language and option helpers.
 
 ## Next
 
@@ -102,10 +103,6 @@ entries come first within each marker because they cover the flows a user actual
     - What it is: bootstrap and selection, repository/group/account CRUD and ordering, clone and create, remote operations, and merge and stash recovery. `resolveRepoFilePath` is covered, including the paths that escape the repository.
     - How it will be implemented: grow `app.spec.ts` per handler group, reusing its repository and account fixtures.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-helpers.ts`.
-    - What it is: `appendGitIgnoreEntry`, `buildImagePreview`, `readGitMetadataFile`, `readGitIndexStageFile`, `parseIncomingBranchFromMergeMessage`, `countConflictMarkers`, `parseTrackCounts`, `labelForStatus`, `extractConflictPathsFromCommitBody`, `buildDiffStats`, and the rename/copy branch of `parseCommitFilesWithConflicts`.
-    - How it will be implemented: table-driven unit tests over each parser's input shapes, with no repository fixture where a string is enough.
-
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-history.ts`.
     - What it is: `getCommittedTree` (including ordering, types and sizes), `getCommittedFile` (cap, image preview, binary detection, "no commits yet"), `normalizePageCount` for invalid input, and tag refs inside `%d`.
     - How it will be implemented: a fixture history with a binary, an image and an oversized file, plus a repository with no commits yet.
@@ -113,10 +110,6 @@ entries come first within each marker because they cover the flows a user actual
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-common.ts` remote auth path.
     - What it is: `createRemoteGitEnvForUrl`, the non-HTTPS rejection, the host-mismatch guard and the askpass script, plus `runWithConcurrency`, `resolveGitExecutable` and the buffered run variants. Every existing remote test passes `auth: undefined`, so the whole auth branch is dead in tests.
     - How it will be implemented: pass a resolved auth object into the existing remote tests instead of `undefined`, and assert the environment and askpass script the run receives.
-
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `auth.ts` has no test.
-    - What it is: the macOS keychain wrapper and its platform guard are uncovered.
-    - How it will be implemented: stub the keychain command per platform and assert the guard rejects the unsupported ones.
 
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `useDatabase.ts` sequence handling.
     - What it is: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the legacy-database migration path. The statement cache and transactions in `createRuntimeDatabaseClient` are covered.
@@ -129,10 +122,6 @@ entries come first within each marker because they cover the flows a user actual
 - [ ] **[NOT_URGENT] [FRONTEND TEST]** Directives.
     - What it is: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and `ContextMenuPanel.vue` still have none.
     - How it will be implemented: mount a host element per directive, asserting the DOM it mounts and removes.
-
-- [ ] **[NOT_URGENT] [FRONTEND TEST]** `lib` modules with no test.
-    - What it is: `monaco.ts` is uncovered.
-    - How it will be implemented: test the language and option mapping it derives, mocking the monaco module it loads.
 
 - [ ] **[NOT_URGENT] [HARNESS]** Run the suites in CI.
     - What it is: `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` are not enforced anywhere, and `vite build` does not typecheck, so a green local run is the only signal there is.
