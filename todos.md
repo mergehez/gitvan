@@ -55,6 +55,8 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Synced the conflict chrome once per frame and reused its zones across edits.
 - Normalized the diff pair once per diff and reused it for the badge, the renderer and the conflict count.
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
+- Covered the Electron window/preload helpers, the API request wrapper and the native methods with unit specs.
+- Gave the integrated terminal a PTY lifecycle spec and the keychain wrapper an opt-in spec against the real `security` CLI.
 - Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
 - Covered the whole merge service: conflict state, per-file details, ours/theirs resolution, mark resolved, save resolution, abort and commit.
 - Covered the stash service, which turned up a stashed diff that read a file from the wrong commit.
@@ -106,19 +108,20 @@ come first within each marker because they cover the flows a user actually runs.
     - What it is: `playwright.config.ts` boots `bun run dev`, so no spec ever launches Electron, and the preload bridge, the IPC registration, window creation, the application menu and the built bundle (`src/electron/main.ts`, `src/electron/preload.ts`, `src/electronUtils/mainProloadHelpers.ts:36,169`) run only when a person starts the app. `native-boundary.spec.ts` proves the opposite direction — that those methods are unavailable in browser dev mode.
     - How it will be implemented: launch the app with Playwright's `_electron`, open a sandbox lab, drive one native action through the real preload bridge, open and close the integrated terminal and quit; point the same spec at the built bundle behind the release script.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `mainProloadHelpers.ts` and the API request wrapper.
+- [x] **[NOT_URGENT] [BACKEND UNIT]** `mainProloadHelpers.ts` and the API request wrapper.
     - What it is: `generateHandlers` forwards every backend method to `callApiPost` (`src/electronUtils/helpers.ts:35`) and merges the native methods, `registerIpcHandlers` registers `api:<name>` and the `renderer:diagnostic` channel, `createWindow` owns the size policy, the dev-server probe and the missing-build error, and `createPreloadApi` fans `native-command` out to listeners with an unsubscribe. None of them has a spec.
     - How it will be implemented: inject fake `electron` and preload objects, then assert the registered channel list, the forwarded params, the diagnostic colouring, the window options, and the error envelope and 12-minute timeout a failed request produces.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `main.ts` native methods and application menu.
+- [x] **[NOT_URGENT] [BACKEND UNIT]** `main.ts` native methods and application menu.
     - What it is: the picker cancel handling and `.app`/`.exe` label trimming, `openFileInEditor`'s two existence guards, `revealPathInFileManager`'s two modes, `openDirectoryInTerminal`'s terminal fallback list, and the menu template with its settings accelerator.
     - How it will be implemented: build the helpers with injected `dialog`, `shell` and `executeCommand` fakes and assert both the calls and the thrown messages.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `integratedTerminal.ts` PTY lifecycle.
+- [x] **[NOT_URGENT] [BACKEND UNIT]** `integratedTerminal.ts` PTY lifecycle.
     - What it is: shell resolution, spawn, the `data`/`exit` events, write, resize and the SIGHUP close. A component spec can only stub the modal around it.
     - How it will be implemented: spawn a real shell through node-pty, run one command and assert its output arrives, then resize, write and close.
+    - Note: the PTY cases skip themselves on hosts whose `spawn-helper` cannot run; the shell-resolution and event-wiring cases run everywhere.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** The Keychain wrapper against the real `security` CLI.
+- [x] **[NOT_URGENT] [BACKEND UNIT]** The Keychain wrapper against the real `security` CLI.
     - What it is: `auth.ts` is only exercised with a mocked `executeCommand` and, in the browser run, a fake `security` earlier on `PATH` (`playwright/support/fakeKeychain.ts`), so the real add/find/delete and the missing-entry exit code never run.
     - How it will be implemented: an opt-in spec that stores, reads and deletes a throwaway item under its own service name, skipped unless an environment flag asks for it.
 
