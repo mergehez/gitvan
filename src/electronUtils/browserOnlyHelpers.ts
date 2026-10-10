@@ -32,6 +32,14 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
     const methodMap: GitClientRequestApi = apiMethods.reduce((acc, methodName) => {
         if (methodName in app) {
             acc[methodName] = app[methodName as keyof typeof app] as any;
+        } else if (methodName === 'openExternalUrl') {
+            // The only stand-in browser dev mode gets: opening a provider's sign-in page has no
+            // native host to run it, but the flow that calls it has to be able to finish there.
+            // It answers with a body, because the client parses every response as JSON.
+            acc[methodName] = async (params: { url: string }) => {
+                console.log(`[devServer] openExternalUrl: ${params?.url ?? ''}`);
+                return { opened: true };
+            };
         } else {
             acc[methodName] = async () => {
                 throw new BrowserUnavailableError(methodName);

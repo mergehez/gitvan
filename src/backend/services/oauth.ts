@@ -49,6 +49,16 @@ type JsonValue = Record<string, unknown>;
 
 const oauthSessions = new Map<string, OAuthDeviceSession>();
 
+/**
+ * Where provider requests go. The browser specs set this to the provider stub they run, so a spec
+ * can cover the verify and device-sign-in flows without reaching GitHub or GitLab.
+ */
+const providerBase = process.env.GITVAN_PROVIDER_BASE?.replace(/\/+$/u, '');
+
+function providerUrl(url: string) {
+    return providerBase ? `${providerBase}${new URL(url).pathname}` : url;
+}
+
 /** Drops abandoned sign-ins so the session map cannot grow for the process lifetime. */
 function sweepExpiredOAuthSessions() {
     const now = Date.now();
@@ -94,7 +104,7 @@ async function parseJson(response: Response) {
 }
 
 async function fetchGithubUser(accessToken: string) {
-    const response = await fetch('https://api.github.com/user', {
+    const response = await fetch(providerUrl('https://api.github.com/user'), {
         headers: {
             Accept: 'application/vnd.github+json',
             Authorization: `Bearer ${accessToken}`,
@@ -118,7 +128,7 @@ async function fetchGithubUser(accessToken: string) {
 }
 
 async function fetchGitlabUser(accessToken: string, host: string) {
-    const response = await fetch(`${baseUrlForHost(host)}/api/v4/user`, {
+    const response = await fetch(providerUrl(`${baseUrlForHost(host)}/api/v4/user`), {
         headers: {
             Accept: 'application/json',
             Authorization: `Bearer ${accessToken}`,
@@ -141,7 +151,7 @@ async function fetchGitlabUser(accessToken: string, host: string) {
 }
 
 async function fetchBitbucketUser(accessToken: string) {
-    const response = await fetch('https://api.bitbucket.org/2.0/user', {
+    const response = await fetch(providerUrl('https://api.bitbucket.org/2.0/user'), {
         headers: {
             Accept: 'application/json',
             Authorization: `Bearer ${accessToken}`,
@@ -176,7 +186,7 @@ export async function verifyProviderAccessToken(params: { provider: string; user
 }
 
 async function startGithubDeviceFlow(clientId: string) {
-    const response = await fetch('https://github.com/login/device/code', {
+    const response = await fetch(providerUrl('https://github.com/login/device/code'), {
         method: 'POST',
         headers: {
             Accept: 'application/json',
@@ -202,7 +212,7 @@ async function startGithubDeviceFlow(clientId: string) {
 }
 
 async function startGitlabDeviceFlow(clientId: string, host: string) {
-    const response = await fetch(`${baseUrlForHost(host)}/oauth/authorize_device`, {
+    const response = await fetch(providerUrl(`${baseUrlForHost(host)}/oauth/authorize_device`), {
         method: 'POST',
         headers: {
             Accept: 'application/json',
@@ -228,7 +238,7 @@ async function startGitlabDeviceFlow(clientId: string, host: string) {
 }
 
 async function pollGithubDeviceFlow(session: OAuthDeviceSession): Promise<OAuthProviderPollPending | OAuthProviderPollCompleted> {
-    const response = await fetch('https://github.com/login/oauth/access_token', {
+    const response = await fetch(providerUrl('https://github.com/login/oauth/access_token'), {
         method: 'POST',
         headers: {
             Accept: 'application/json',
@@ -276,7 +286,7 @@ async function pollGithubDeviceFlow(session: OAuthDeviceSession): Promise<OAuthP
 }
 
 async function pollGitlabDeviceFlow(session: OAuthDeviceSession): Promise<OAuthProviderPollPending | OAuthProviderPollCompleted> {
-    const response = await fetch(`${baseUrlForHost(session.host)}/oauth/token`, {
+    const response = await fetch(providerUrl(`${baseUrlForHost(session.host)}/oauth/token`), {
         method: 'POST',
         headers: {
             Accept: 'application/json',

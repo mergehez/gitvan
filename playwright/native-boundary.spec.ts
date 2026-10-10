@@ -10,7 +10,6 @@ const nativeOnlyMethods = [
     'pickDirectory',
     'pickEditorApplication',
     'pickTerminalApplication',
-    'openExternalUrl',
     'openFileInEditor',
     'revealPathInFileManager',
     'openPathWithDefaultProgram',
@@ -43,6 +42,14 @@ test.describe('native-only calls in browser dev mode', () => {
             expect(status, method).toBe(500);
             expect(body, method).toContain(`Method ${method} is not implemented in browser dev mode.`);
         }
+    });
+
+    test('opening an external URL is the one stand-in the dev server provides', async () => {
+        // The OAuth device flow opens the provider page, so browser dev mode answers it instead of
+        // reporting the boundary the other methods do.
+        const { status } = await probeApi('openExternalUrl', { url: 'https://stub.example.com/device' });
+
+        expect(status).toBe(200);
     });
 
     test('a native file picker reports the failure and leaves Settings usable', async ({ page }) => {

@@ -115,6 +115,24 @@ export async function probeApi(method: string, params?: unknown): Promise<{ stat
     return { status: response.status, body: await response.text() };
 }
 
+const providerStubBase = process.env.PLAYWRIGHT_PROVIDER_STUB_BASE ?? 'http://127.0.0.1:5278';
+
+/**
+ * Arms the provider stub the app talks to. `fail` makes the next provider request answer with a
+ * rejection instead of its canned payload, so a spec can cover the error paths.
+ */
+export async function setProviderStubMode(mode: 'slow' | 'quick' | 'fail'): Promise<void> {
+    const response = await fetch(`${providerStubBase}/__control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`The provider stub did not accept mode "${mode}" (${response.status}).`);
+    }
+}
+
 /** Removes the accounts a spec created; System Git is never touched. */
 async function resetSpecAccounts() {
     const bootstrap = await callApi<{ accounts: Array<{ id: number; label: string }> }>('getBootstrap');
@@ -218,19 +236,37 @@ export async function openSandboxRepo(page: Page, name: string, options: OpenSan
  * `test` asserts that nothing unexpected failed in the backend while the test ran. Without it a
  * green run happily hides a handler that threw on every request.
  */
+/**
+ * Declares a backend error the test asserts on through the UI, so the fixture below does not also
+ * fail the test for it. The patterns are cleared when the test ends.
+ */
+const expectedErrorPatterns: string[] = [];
+
+export function expectBackendError(pattern: string | RegExp): void {
+    expectedErrorPatterns.push(typeof pattern === 'string' ? pattern : pattern.source);
+}
+
 export const test = base.extend({
     page: async ({ page }, use, testInfo) => {
         const before = await readHealth();
         const alreadyRecorded = new Set(before.handlerErrors.map((error) => error.seq));
+        expectedErrorPatterns.length = 0;
 
         await use(page);
 
         // A failing test already reports its own cause; do not replace it with a backend one.
         if (testInfo.errors.length > 0) {
+            expectedErrorPatterns.length = 0;
             return;
         }
 
-        const unexpected = (await readHealth()).handlerErrors.filter((error) => !alreadyRecorded.has(error.seq) && !expectedErrorCodes.has(error.code));
+        const unexpected = (await readHealth()).handlerErrors.filter(
+            (error) =>
+                !alreadyRecorded.has(error.seq) &&
+                !expectedErrorCodes.has(error.code) &&
+                !expectedErrorPatterns.some((pattern) => error.message.includes(pattern))
+        );
+        expectedErrorPatterns.length = 0;
 
         expect(
             unexpected,
