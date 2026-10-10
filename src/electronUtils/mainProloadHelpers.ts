@@ -14,7 +14,6 @@ const config = appConfig;
 // __dirname: CJS provides it directly; ESM needs fileURLToPath(import.meta.url)
 const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
-const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
 export type RendererDiagnosticPayload = {
     type: 'console-debug' | 'console-info' | 'console-log' | 'console-warn' | 'console-error' | 'window-error' | 'unhandled-rejection';
@@ -32,9 +31,14 @@ type Opts<AppServiceType extends Record<string, any>, NativeMethods extends Reco
     getNativeMethods: (mainWindow: BrowserWindow, apiPost: (method: string, params?: unknown) => Promise<unknown>) => NativeMethods;
     getMenu: (mainWindow: BrowserWindow) => Electron.MenuItemConstructorOptions[];
     windowSize?: (screen: Electron.Display['workAreaSize']) => { width: number; height: number; x: number; y: number };
+    /** Defaults to `fs.existsSync`; injected so a test can choose whether the built frontend exists. */
+    fileExists?: (path: string) => boolean;
 };
 export function createElectronHelpers<AppServiceType extends Record<string, any>, NativeMethods extends Record<string, any>>(opts: Opts<AppServiceType, NativeMethods>) {
     const { apiMethods, getNativeMethods, getMenu } = opts;
+    const fileExists = opts.fileExists ?? existsSync;
+    // Read at creation time rather than at module scope so a test (and a fork) can set it first.
+    const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
     function generateHandlers(mainWindow: BrowserWindow) {
         // type AppMethodKeys = { [K in keyof AppServiceType]: AppServiceType[K] extends (...args: any[]) => any ? K : never }[keyof AppServiceType];
@@ -127,20 +131,22 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
         }
 
         const indexPath = join(projectRoot, 'dist', 'index.html');
-        if (existsSync(indexPath)) await mainWindow.loadFile(indexPath);
+        if (fileExists(indexPath)) await mainWindow.loadFile(indexPath);
         else throw new Error(`Frontend build not found at ${indexPath}. Run 'vp build' first.`);
 
         // final height
         console.log('final bounds: ', mainWindow.getBounds());
     }
 
-    function start() {
+    /** `loadBackend` is the sibling backend bundle by default; a test injects a stand-in that resolves at once. */
+    function start(loadBackend?: () => { ready?: Promise<void> }) {
         const _require = createRequire(typeof __filename !== 'undefined' ? __filename : import.meta.url);
+        const load = loadBackend ?? (() => _require('./backend.cjs') as { ready?: Promise<void> });
 
         app.whenReady().then(async () => {
             console.log('Starting backend server...');
-            await ((): Promise<void> => {
-                const mod = _require('./backend.cjs') as { ready?: Promise<void> };
+            await (async (): Promise<void> => {
+                const mod = load();
                 return mod.ready ?? Promise.resolve();
             })();
             console.log('Backend started. Creating window...');
