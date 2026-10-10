@@ -173,6 +173,10 @@ const _useRepository = (repo: Repo) => {
         lastCommitDiffRequestKey: undefined as string | undefined,
 
         committedTree: undefined as CommittedTreeData | undefined,
+        // The commit list the Explorer's snapshot picker shows. It pages on its own so the
+        // History view's list is not extended behind its back by an older snapshot selection.
+        explorerHistory: undefined as HistoryData | undefined,
+        isLoadingMoreExplorerHistory: false,
         explorerCommitSha: undefined as string | undefined,
         currCommittedFilePath: undefined as string | undefined,
         currCommittedFile: undefined as CommittedFileData | undefined,
@@ -607,9 +611,45 @@ const _useRepository = (repo: Repo) => {
         },
 
         async loadCommittedTree(commitSha?: string, refreshHistory = true) {
-            const nextHistory = refreshHistory || !this.history ? await tasks.getHistory.run({ repoId: this.id }) : this.history;
+            // A refresh keeps every commit already paged in, and selecting one that is not in the
+            // window pages forward until it is found. Either way the selection survives.
+            const loadedCount = this.explorerHistory?.commits.length ?? 0;
+            const shouldFindRequestedCommit = Boolean(commitSha) && !this.explorerHistory?.commits.some((commit) => commit.sha === commitSha);
+            let nextHistory =
+                refreshHistory || !this.explorerHistory
+                    ? await tasks.getHistory.run({
+                          repoId: this.id,
+                          limit: loadedCount || undefined,
+                      })
+                    : this.explorerHistory;
 
-            this.history = nextHistory;
+            if (shouldFindRequestedCommit) {
+                this.isLoadingMoreExplorerHistory = true;
+
+                try {
+                    while (nextHistory.hasMore && !nextHistory.commits.some((commit) => commit.sha === commitSha)) {
+                        const knownCount = nextHistory.commits.length;
+                        const nextPage = await tasks.getHistory.run({
+                            repoId: this.id,
+                            skip: knownCount,
+                        });
+
+                        if (nextPage.commits.length === 0) {
+                            break;
+                        }
+
+                        const knownShas = new Set(nextHistory.commits.map((commit) => commit.sha));
+                        nextHistory = {
+                            commits: [...nextHistory.commits, ...nextPage.commits.filter((commit) => !knownShas.has(commit.sha))],
+                            hasMore: nextPage.hasMore,
+                        };
+                    }
+                } finally {
+                    this.isLoadingMoreExplorerHistory = false;
+                }
+            }
+
+            this.explorerHistory = nextHistory;
             const nextExplorerCommitSha =
                 (commitSha && nextHistory.commits.some((commit) => commit.sha === commitSha) && commitSha) ||
                 (this.explorerCommitSha && nextHistory.commits.some((commit) => commit.sha === this.explorerCommitSha) && this.explorerCommitSha) ||
@@ -641,6 +681,39 @@ const _useRepository = (repo: Repo) => {
         },
         async selectExplorerCommit(commitSha: string) {
             await this.loadCommittedTree(commitSha, false);
+        },
+        async loadMoreExplorerCommits() {
+            const history = this.explorerHistory;
+
+            if (!history?.hasMore || this.isLoadingMoreExplorerHistory) {
+                return false;
+            }
+
+            this.isLoadingMoreExplorerHistory = true;
+
+            try {
+                const nextPage = await tasks.getHistory.run({
+                    repoId: this.id,
+                    skip: history.commits.length,
+                });
+
+                // A refresh replaced the list while this page was loading.
+                if (this.explorerHistory !== history) {
+                    return false;
+                }
+
+                const knownShas = new Set(history.commits.map((commit) => commit.sha));
+                const appendedCommits = nextPage.commits.filter((commit) => !knownShas.has(commit.sha));
+
+                this.explorerHistory = {
+                    commits: [...history.commits, ...appendedCommits],
+                    hasMore: nextPage.hasMore,
+                };
+
+                return appendedCommits.length > 0;
+            } finally {
+                this.isLoadingMoreExplorerHistory = false;
+            }
         },
 
         async loadHistory() {
@@ -1038,6 +1111,8 @@ const _useRepository = (repo: Repo) => {
             this.curDiff = undefined;
             this.lastDiffRequestKey = undefined;
             this.committedTree = undefined;
+            this.explorerHistory = undefined;
+            this.isLoadingMoreExplorerHistory = false;
             this.explorerCommitSha = undefined;
             this.currCommittedFilePath = undefined;
             this.currCommittedFile = undefined;

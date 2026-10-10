@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { CommittedFileEntry } from '../../shared/types.ts';
 import { useRepos } from '../composables/useRepos';
 import { fileIconAndLanguageByPath, formatBytes, readableDate } from '../lib/utils';
+import Button from './Button.vue';
 import EtSplitter from './EtSplitter.vue';
 import FileTree, { type FileTreeItem } from './FileTree.vue';
 import MonacoEditor from './MonacoEditor.vue';
@@ -92,7 +93,9 @@ function buildExplorerTree(files: CommittedFileEntry[]) {
 }
 
 const treeItem = computed(() => buildExplorerTree(repo.value.committedTree?.files ?? []));
-const explorerCommit = computed(() => repo.value.history?.commits.find((commit) => commit.sha === repo.value.explorerCommitSha));
+const snapshotCommits = computed(() => repo.value.explorerHistory?.commits ?? []);
+const hasMoreSnapshots = computed(() => Boolean(repo.value.explorerHistory?.hasMore));
+const explorerCommit = computed(() => snapshotCommits.value.find((commit) => commit.sha === repo.value.explorerCommitSha));
 const explorerCommitShortSha = computed(() => explorerCommit.value?.shortSha ?? repo.value.committedTree?.commitSha?.slice(0, 7) ?? undefined);
 
 function formatCommitOptionLabel(commit: NonNullable<typeof explorerCommit.value>) {
@@ -106,6 +109,10 @@ async function onCommitSelection(event: Event) {
     }
 
     await repo.value.selectExplorerCommit(nextCommitSha);
+}
+
+async function onLoadMoreSnapshots() {
+    await repo.value.loadMoreExplorerCommits();
 }
 </script>
 
@@ -123,11 +130,21 @@ async function onCommitSelection(event: Event) {
                     :value="repo.explorerCommitSha"
                     @change="onCommitSelection"
                 >
-                    <option v-for="commit in repo.history?.commits ?? []" :key="commit.sha" :value="commit.sha">
+                    <option v-for="commit in snapshotCommits" :key="commit.sha" :value="commit.sha">
                         {{ formatCommitOptionLabel(commit) }}
                     </option>
                 </select>
             </label>
+            <Button
+                v-if="hasMoreSnapshots || repo.isLoadingMoreExplorerHistory"
+                severity="light"
+                smaller
+                data-testid="explorer-load-more-snapshots"
+                :disabled="repo.isLoadingMoreExplorerHistory"
+                @click="onLoadMoreSnapshots"
+            >
+                {{ repo.isLoadingMoreExplorerHistory ? 'Loading...' : 'Older snapshots' }}
+            </Button>
         </div>
         <EtSplitter class="flex-1 overflow-y-auto" base-side="left" default-width="280px" min-width="220px" max-width="50%" local-storage-key="explorerSidebarWidth">
             <template #left>
@@ -160,7 +177,7 @@ async function onCommitSelection(event: Event) {
             </template>
 
             <template #right>
-                <div v-if="!(repo.history?.commits.length ?? 0)" class="grid h-full place-items-center px-6 text-sm text-white/45">No commits found.</div>
+                <div v-if="!snapshotCommits.length" class="grid h-full place-items-center px-6 text-sm text-white/45">No commits found.</div>
 
                 <div v-else-if="!(repo.committedTree?.files.length ?? 0)" class="grid h-full place-items-center px-6 text-sm text-white/45">
                     No committed files found in this snapshot.
