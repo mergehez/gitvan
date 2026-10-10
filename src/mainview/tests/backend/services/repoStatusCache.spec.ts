@@ -51,6 +51,7 @@ describe('repo sidebar status cache', () => {
     });
 
     afterEach(() => {
+        vi.restoreAllMocks();
         invalidateAllRepoSidebarStatuses();
         rmSync(repoPath, { recursive: true, force: true });
     });
@@ -124,14 +125,17 @@ describe('repo sidebar status cache', () => {
             return await changesGit.getRepoSidebarStatus(repoPath);
         };
 
+        // The clock is driven by hand so the assertion does not race the ttl.
+        const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+
         const first = await readRepoSidebarStatus(repoPath, compute, 1);
         const whileValid = await readRepoSidebarStatus(repoPath, compute, 30_000);
 
         expect(whileValid).toBe(first);
         expect(computed).toBe(1);
 
-        // The ttl is applied when the entry is written, so a 1ms entry is stale by the next read.
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        // The ttl is applied when the entry is written, so the 1ms entry is stale past 1001.
+        nowSpy.mockReturnValue(1_002);
 
         const afterExpiry = await readRepoSidebarStatus(repoPath, compute, 1);
 
