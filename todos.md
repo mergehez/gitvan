@@ -68,6 +68,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Covered the database sequence operations and opened a pre-groups database, which turned up a migration that failed before it added the column its index needs.
 - Covered the tooltip, error and context menu directives.
 - Covered the small presentational components, including the task error banner and the toast precedence.
+- Covered the app bootstrap, selection, repository, group and account handlers, including the CRUD validation and the ordering operations.
+- Covered the app create, clone, settings and the account token verification, repository discovery and device sign-in flows.
+- Covered the app remote operations and the merge, stash and retry-pull recovery results.
+- Covered every component that was without a spec: the popover, input modal, monaco settings button, draggable list, changes file tree, client header, create repository modal, settings and its editors panel, the diffs editor hunk anchoring, the commit inspect pane and the explorer.
 
 ## Next
 
@@ -98,14 +102,6 @@ spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]` or `[FRONTEND TEST]` 
 says both how much it matters and what writing it means. The `[BROWSER]` entries come first
 within each marker because they cover the flows a user actually runs.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `app.ts` handlers that only `app.spec.ts` partially covers.
-    - What it is: bootstrap and selection, repository/group/account CRUD and ordering, clone and create, remote operations, and merge and stash recovery. `resolveRepoFilePath` is covered, including the paths that escape the repository.
-    - How it will be implemented: grow `app.spec.ts` per handler group, reusing its repository and account fixtures.
-
-- [ ] **[NOT_URGENT] [FRONTEND TEST]** Components with no dedicated spec.
-    - What it is: `DiffsDiffEditor.vue` (hunk anchoring), `Popover.vue`, `ChangesFileTree.vue`, `DraggableList.vue`, `RepExplorerView.vue`, `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`, `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue` and `MonacoEditorSettingsButton.vue`.
-    - How it will be implemented: most valuable first, mounting each against the mocks its neighbours already use in `src/mainview/tests/components`.
-
 - [ ] **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
     - Why it is deliberate: covering it would mean rendering a snapshot with no selectable file, which no real repository can produce. If that ever becomes reachable, the spec comes with it.
@@ -117,6 +113,10 @@ within each marker because they cover the flows a user actually runs.
 - [ ] **[NOT_PLANNED] [BACKEND UNIT]** The non-batched cosmetic fallback in `git-changes.ts` stays uncovered.
     - What it is: `applyCosmeticChangeChecks` sends a modified entry to the bounded per-file pool when the raw diff carries no blob for it, which only a porcelain-only row produces.
     - Why it is deliberate: `git status --porcelain=v2 -z` and `git diff --raw -z` now spell every path verbatim and report the same modified paths, so only a defensive branch is left. The non-ASCII path that used to reach it has its own regression spec.
+
+- [ ] **[NOT_PLANNED] [FRONTEND TEST]** `GitClientHeader`'s no-repository branch stays uncovered.
+    - What it is: the header carries fallbacks for an undefined selected repository, but the account button dereferences `repo` without a guard, so mounting it with no selection throws before those fallbacks render.
+    - Why it is deliberate: `App.vue` renders the header only inside `v-if="selectedRepo"`, so no real session can reach it. If a no-selection render ever becomes reachable, the spec and the guard come with it.
 
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
 `bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
