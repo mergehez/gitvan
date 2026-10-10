@@ -57,6 +57,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
 - Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
 - Covered the whole merge service: conflict state, per-file details, ours/theirs resolution, mark resolved, save resolution, abort and commit.
+- Covered the stash service, which turned up a stashed diff that read a file from the wrong commit.
+- Ran the token verification and device sign-in flows from a local provider stub that can fail on demand.
+- Covered the repository commit, file, branch, tag, stash and history flows.
 
 ## Next
 
@@ -86,18 +89,6 @@ Missing test coverage only. It carries the same markers as **Next**, paired with
 spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]`, `[FRONTEND TEST]` or `[HARNESS]` —
 so one flat list says both how much it matters and what writing it means. The `[BROWSER]`
 entries come first within each marker because they cover the flows a user actually runs.
-
-- [ ] **[URGENT] [BACKEND UNIT]** `git-stash.ts` has no test at all.
-    - What it is: list, detail, file diff, create, restore and discard are uncovered, including the stash-restore conflict classification.
-    - How it will be implemented: stash a fixture working tree, then assert each operation and the conflict outcome of restoring over a conflicting tree.
-
-- [ ] **[URGENT] [BROWSER]** Settings leftovers need a stub that can fail on demand.
-    - What it is: verifying a provider token and starting the OAuth device sign-in both need the provider's API, so neither can be driven from a spec today. The panels, the account lifecycle and the OAuth provider settings have specs.
-    - How it will be implemented: a dev-server route that answers the provider endpoints and can be told to fail, so the success and failure paths of both flows become testable.
-
-- [ ] **[URGENT] [FRONTEND TEST]** `useRepo.ts` names only about fourteen of its eighty public methods in any spec.
-    - What it is: the commit flow (`commitRepository`, `suggestedCommitSummary`, `canCommit`, amend/cancel), file operations (stage/unstage/discard/delete/revert, single and bulk), branch and tag operations, the stash operations, and the history/file-history loaders have no direct coverage; recent work added specs for the diff-reuse and explorer-paging paths only.
-    - How it will be implemented: extend the existing per-concern `useRepo-*.spec.ts` files rather than one large spec, mocking `useTasks` per operation.
 
 - [ ] **[NOT_URGENT] [BROWSER]** Dev-server stubs for the native pickers.
     - What it is: `native-boundary.spec.ts` pins that every `src/electron/main.ts` RPC reports itself unavailable in browser dev mode, so a stub has to update that guard. With one, creating a local repository and picking an editor or terminal from disk become testable.
