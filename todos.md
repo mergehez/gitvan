@@ -56,12 +56,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Synced the conflict chrome once per frame and reused its zones across edits.
 - Normalized the diff pair once per diff and reused it for the badge, the renderer and the conflict count.
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
+- Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
 
 ## Next
-
-- [ ] **[URGENT]** The Explorer can only select a snapshot from the first history page.
-    - What it is: `RepExplorerView` fills the snapshot `<select>` from `repo.history?.commits`, which holds one page (60) until the history view asks for more, and the Explorer has no load-more of its own — so an older commit cannot be selected in a deep repository.
-    - How it will be implemented: give the Explorer its own way to page the commit list (request a larger limit while it is open, or load another page from the select) and keep `explorerCommitSha` selection stable across those loads.
 
 - [ ] **[NOT_PLANNED]** Keep the localhost Express backend and the IPC-to-HTTP transport as the single request path.
     - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:24`, `src/electronUtils/browserOnlyHelpers.ts:79`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
