@@ -51,18 +51,15 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Shared the unpushed commit set across the views that ask for it and dropped it on a mutation.
 - Kept a status scan that started before a refresh from repopulating the emptied cache.
 - Rejected a repository path that resolves outside the repository root.
+- Windowed the file trees with uniform rows, keeping the history tree on its page size.
 
 ## Next
 
-- [ ] **[URGENT]** The file and history trees render every row with no virtualization.
-    - What it is: `FileTree.vue:111` flattens the whole tree and the `v-for` at `FileTree.vue:148` mounts a full row (plus icon buttons, tooltips and menu directives) per entry; `RepChangesView`, `RepHistoryView` and `SidebarRepositories` all use it. A repo with thousands of changed files or a long history builds all rows at once, and `loadMoreHistory` keeps appending.
-    - How it will be implemented: window the flattened list by scroll offset with a fixed row height, keeping the existing flatten and selection logic untouched; falls back to pagination if the row height cannot be made uniform. Note that the browser specs assert on row testids, so the existing selectors have to keep working.
-
-- [ ] **[NOT_URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
+- [ ] **[URGENT]** A mutation response still replaces the whole repository list, even though the status it carries is now cached.
     - What it is: `buildBootstrap` (`src/backend/services/app.ts:431`) is still the return value of about forty mutating methods (`stageFile`, `commitRepo`, `renameRepo`, `discardStash`, `createTag`, …), so each one ships every repository, group and account and the renderer's `stateCounter` watch then calls `useRepo(...).update(...)` for every repository. The per-repository status sweep that used to make this expensive is now cached (`src/backend/services/repoStatusCache.ts`), so only the payload shape and the blanket renderer update remain.
     - How it will be implemented: return the cheap DB lists plus the status of the repository the mutation touched, and have the renderer apply that single repository to its existing list instead of replacing all of them; keep `getBootstrap` for startup and repo-list changes.
 
-- [ ] **[NOT_URGENT]** The conflict editor re-parses the file quadratically and rebuilds every view zone on each keystroke.
+- [ ] **[URGENT]** The conflict editor re-parses the file quadratically and rebuilds every view zone on each keystroke.
     - What it is: `ConflictMonacoEditor.onDidChangeContent` calls `syncEditorChrome` per keystroke, which reads the full model, calls `parseMergeConflictBlocks` twice, then clears and recreates a DOM node with buttons per conflict block plus `changeViewZones` and `deltaDecorations`. Inside the parse, `countLines(content.slice(0, startOffset))` (`src/mainview/lib/mergeConflicts.ts:53`) re-scans the file from offset zero for every block.
     - How it will be implemented: debounce or rAF the chrome sync, compute the newline offsets once per parse and derive `startLine` from that table instead of re-slicing, and reuse zones keyed by block rather than destroying and recreating them.
 
@@ -160,8 +157,8 @@ database per run, so it never touches the developer's app data.
       branch operations, tag operations, the stash operations, and the history/file-history
       loaders.
 - [ ] Components with no dedicated spec, most valuable first: `DiffsDiffEditor.vue` (hunk
-      anchoring), `ConflictMonacoEditor.vue`, `Popover.vue`, `FileTree.vue` and
-      `ChangesFileTree.vue`, `DraggableList.vue`, `RepExplorerView.vue`,
+      anchoring), `ConflictMonacoEditor.vue`, `Popover.vue`, `ChangesFileTree.vue`,
+      `DraggableList.vue`, `RepExplorerView.vue`,
       `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`,
       `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`,
       `MonacoEditorSettingsButton.vue`, and the small presentational ones
