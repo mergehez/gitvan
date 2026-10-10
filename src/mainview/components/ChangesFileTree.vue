@@ -14,6 +14,7 @@ const props = withDefaults(
         emptyText?: string;
         itemClass?: string;
         noActions?: boolean;
+        virtualize?: boolean;
         showPathTooltip?: boolean;
         onSelect: (item: ChangesFileTreeEntry, event?: MouseEvent) => void;
         getContextMenuItems?: (item: ChangesFileTreeEntry) => ContextMenuEntry[];
@@ -32,6 +33,7 @@ const props = withDefaults(
         :empty-text="props.emptyText"
         :item-class="props.itemClass"
         :no-actions="props.noActions"
+        :virtualize="props.virtualize"
         :onSelect="props.onSelect"
         :getContextMenuItems="props.getContextMenuItems"
         :getHeaderContextMenuItems="props.getHeaderContextMenuItems"

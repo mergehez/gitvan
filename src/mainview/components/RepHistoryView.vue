@@ -387,6 +387,8 @@ function buildCommitContextMenuEntries(item: CommitListItem): ContextMenuEntry[]
                 />
                 <span v-if="isHistorySearching" class="shrink-0 text-2xs tracking-tight opacity-60">{{ historySearchStatusLabel }}</span>
             </div>
+            <!-- History rows wrap their summary, so they have no uniform height. The tree stays
+                 un-virtualized and relies on the page size plus the load-more footer instead. -->
             <FileTree
                 :item="treeItem"
                 :empty-text="historyEmptyText"

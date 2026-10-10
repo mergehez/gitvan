@@ -634,6 +634,7 @@ function fetchGroupRepos(groupId: number) {
                     :key="treeItem.id"
                     :item="treeItem"
                     empty-text="No repositories"
+                    virtualize
                     :selection="repos.selectedRepoId"
                     :outline-selection="contextMenuRepoId"
                     :header-outlined="contextMenuGroupId === treeItem.id"

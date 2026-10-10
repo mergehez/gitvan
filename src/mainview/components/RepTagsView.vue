@@ -179,6 +179,7 @@ function buildTagContextMenuEntries(item: TagListItem): ContextMenuEntry[] {
                 :item="treeItem"
                 :empty-text="tagsEmptyText"
                 item-class="px-0!"
+                virtualize
                 :selection="repo.selectedTagName"
                 :onSelect="(item) => repo.selectTag(item.id)"
                 :getContextMenuItems="buildTagContextMenuEntries"

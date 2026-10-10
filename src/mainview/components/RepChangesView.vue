@@ -902,6 +902,7 @@ onUnmounted(() => {
                             v-for="item in treeItems"
                             :key="item.title"
                             :item="item"
+                            virtualize
                             :empty-text="activeFileFilter ? 'No files match the search' : 'No files'"
                             :selection="visibleSelectionForKind(item.isStaged ? 'staged' : 'unstaged')"
                             :getContextMenuItems="getContextMenuItems"
@@ -1051,6 +1052,7 @@ onUnmounted(() => {
                                 class="w-full shrink-0"
                                 :item="stashFilesTreeItem"
                                 empty-text="No files"
+                                virtualize
                                 :selection="repo.currStashFilePath ?? undefined"
                                 no-actions
                                 :onSelect="(t) => t.path && repo.selectRepositoryStashFile(t.path)"

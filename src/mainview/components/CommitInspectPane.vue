@@ -88,6 +88,7 @@ function buildFileContextMenuEntries(file: { path?: string; title: string }): Co
                         class="w-full shrink-0"
                         :item="treeItemFiles"
                         empty-text="No files"
+                        virtualize
                         :selection="props.selectedFilePath"
                         show-path-tooltip
                         no-actions

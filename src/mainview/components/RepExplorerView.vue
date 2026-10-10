@@ -134,6 +134,7 @@ async function onCommitSelection(event: Event) {
                 <FileTree
                     :item="treeItem"
                     empty-text="No committed files found"
+                    virtualize
                     :selection="repo.currCommittedFilePath"
                     no-actions
                     :onSelect="(item) => item.kind === 'file' && repo.selectCommittedFile(item.path)"
