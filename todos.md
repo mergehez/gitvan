@@ -64,6 +64,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Stood in for the native pickers in browser dev mode, so adding a repository and picking an editor or terminal have specs.
 - Covered the committed tree and file reads, the pagination bounds and the tag refs of the history service.
 - Covered the remote auth environment, the askpass script and the concurrency helper.
+- Covered the git changes index, patch, ignore and commit operations and the sidebar status, which turned up a non-ASCII path listed as a second, mangled row.
+- Covered the database sequence operations and opened a pre-groups database, which turned up a migration that failed before it added the column its index needs.
+- Covered the tooltip, error and context menu directives.
+- Covered the small presentational components, including the task error banner and the toast precedence.
 
 ## Next
 
@@ -94,25 +98,13 @@ spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]` or `[FRONTEND TEST]` 
 says both how much it matters and what writing it means. The `[BROWSER]` entries come first
 within each marker because they cover the flows a user actually runs.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `git-changes.ts`.
-    - What it is: `applyPatch`/`applyPartialFilePatch`; `ignoreRepoPath`; `commitRepoChanges` and `undoLastRepoCommit`; the stage/unstage/restore/delete file operations; `getRepoSidebarStatus` parsing for branch, ahead, behind, upstream, publishable commits and the error path; and the non-batched cosmetic fallback.
-    - How it will be implemented: a fixture repository per operation group, asserting the resulting index and status rather than the git commands issued.
-
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** `app.ts` handlers that only `app.spec.ts` partially covers.
     - What it is: bootstrap and selection, repository/group/account CRUD and ordering, clone and create, remote operations, and merge and stash recovery. `resolveRepoFilePath` is covered, including the paths that escape the repository.
     - How it will be implemented: grow `app.spec.ts` per handler group, reusing its repository and account fixtures.
 
-- [ ] **[NOT_URGENT] [BACKEND UNIT]** `useDatabase.ts` sequence handling.
-    - What it is: sequence normalization, `moveSequence`/`reorderSequence` bounds, and the legacy-database migration path. The statement cache and transactions in `createRuntimeDatabaseClient` are covered.
-    - How it will be implemented: drive each sequence operation at its bounds, and open a legacy database fixture to walk the migration.
-
 - [ ] **[NOT_URGENT] [FRONTEND TEST]** Components with no dedicated spec.
-    - What it is: `DiffsDiffEditor.vue` (hunk anchoring), `Popover.vue`, `ChangesFileTree.vue`, `DraggableList.vue`, `RepExplorerView.vue`, `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`, `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue`, `MonacoEditorSettingsButton.vue`, and the small presentational ones (`Button`, `IconButton`, `Alert`, `AppErrorBanner`, `AppSuccessToast`).
+    - What it is: `DiffsDiffEditor.vue` (hunk anchoring), `Popover.vue`, `ChangesFileTree.vue`, `DraggableList.vue`, `RepExplorerView.vue`, `AppCreateRepositoryModal.vue`, `Settings.vue` and `SettingsEditors.vue`, `GitClientHeader.vue`, `CommitInspectPane.vue`, `CenteredInputModal.vue` and `MonacoEditorSettingsButton.vue`.
     - How it will be implemented: most valuable first, mounting each against the mocks its neighbours already use in `src/mainview/tests/components`.
-
-- [ ] **[NOT_URGENT] [FRONTEND TEST]** Directives.
-    - What it is: `VLoading.ts` has a spec; `VTooltip.ts`, `VContextMenu.ts`, `VError.ts` and `ContextMenuPanel.vue` still have none.
-    - How it will be implemented: mount a host element per directive, asserting the DOM it mounts and removes.
 
 - [ ] **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
@@ -121,6 +113,10 @@ within each marker because they cover the flows a user actually runs.
 - [ ] **[NOT_PLANNED] [FRONTEND TEST]** `src/mainview/tests/App.real.spec.ts` stays excluded.
     - What it is: `vite.config.ts` and `package.json` exclude it, so it never runs, and it needs local fixture data.
     - Why it is deliberate: it duplicates what the browser specs already prove against the sandbox labs, and the local fixture it needs is not worth carrying.
+
+- [ ] **[NOT_PLANNED] [BACKEND UNIT]** The non-batched cosmetic fallback in `git-changes.ts` stays uncovered.
+    - What it is: `applyCosmeticChangeChecks` sends a modified entry to the bounded per-file pool when the raw diff carries no blob for it, which only a porcelain-only row produces.
+    - Why it is deliberate: `git status --porcelain=v2 -z` and `git diff --raw -z` now spell every path verbatim and report the same modified paths, so only a defensive branch is left. The non-ASCII path that used to reach it has its own regression spec.
 
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
 `bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
