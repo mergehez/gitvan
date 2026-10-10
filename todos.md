@@ -56,6 +56,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Normalized the diff pair once per diff and reused it for the badge, the renderer and the conflict count.
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
 - Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
+- Covered the whole merge service: conflict state, per-file details, ours/theirs resolution, mark resolved, save resolution, abort and commit.
 
 ## Next
 
@@ -85,10 +86,6 @@ Missing test coverage only. It carries the same markers as **Next**, paired with
 spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]`, `[FRONTEND TEST]` or `[HARNESS]` —
 so one flat list says both how much it matters and what writing it means. The `[BROWSER]`
 entries come first within each marker because they cover the flows a user actually runs.
-
-- [ ] **[URGENT] [BACKEND UNIT]** `git-merge.ts` has no test at all.
-    - What it is: every merge path is uncovered — merge conflict state, per-file conflict details, ours/theirs resolution, mark resolved, save resolution, abort and commit merge.
-    - How it will be implemented: a fixture repository per merge outcome, driving the service the way `app.spec.ts` drives its handlers.
 
 - [ ] **[URGENT] [BACKEND UNIT]** `git-stash.ts` has no test at all.
     - What it is: list, detail, file diff, create, restore and discard are uncovered, including the stash-restore conflict classification.
