@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppBootstrapApi, EditorSettings, Repo } from '../../../shared/types';
+import type { AppMutationApi, EditorSettings, Repo } from '../../../shared/types';
 import { _useRepositories } from '../../composables/useRepos';
 import type { ContextMenuEntry, ContextMenuItem } from '../../directives';
 
@@ -28,7 +28,7 @@ const { testEditor, mockRequest, mockTasks, mockApplyMutation, mockSettings, moc
                 run: vi.fn(),
             },
         } as any,
-        mockApplyMutation: vi.fn(async (_bootstrap: AppBootstrapApi) => undefined),
+        mockApplyMutation: vi.fn(async (_state: AppMutationApi) => undefined),
         mockSettings: {
             state: {
                 editors: [{ path: `/Applications/${testEditor}`, label: testEditor.replace('.app', '') }],
@@ -140,9 +140,10 @@ function isMenuItem(entry: ContextMenuEntry | undefined): entry is ContextMenuIt
     return Boolean(entry && 'id' in entry);
 }
 
-function createBootstrap(): AppBootstrapApi {
+function createBootstrap(): AppMutationApi {
     return {
         repos: [],
+        statuses: [],
         groups: [],
         accounts: [],
         selectedRepoId: undefined,

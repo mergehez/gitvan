@@ -29,6 +29,7 @@ import {
     textByteSize,
 } from './git-helpers.js';
 import { readCachedUnpushedCommitSet } from './unpushedCommitCache.js';
+import { invalidateRepoSidebarStatus } from '../repoStatusCache.js';
 
 export const changesGit = {
     async getRepoSidebarStatus(repoPath: string): Promise<RepoSidebarStatus> {
@@ -492,6 +493,8 @@ export const changesGit = {
     },
     async ignoreRepoPath(repoPath: string, targetPath: string, mode: 'file' | 'directory' | 'pattern') {
         appendGitIgnoreEntry(repoPath, normalizeGitIgnoreEntry(targetPath, mode));
+        // Written straight to disk, so no git command invalidated the cached status for it.
+        invalidateRepoSidebarStatus(repoPath);
     },
     async commitRepoChanges(repoPath: string, summary: string, description: string, amend = false) {
         const trimmedSummary = summary.trim();

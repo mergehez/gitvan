@@ -31,6 +31,8 @@ const inFlightStatuses = new Map<string, Promise<RepoSidebarStatus>>();
  * reading the old state, so it must not repopulate the cache the refresh just emptied.
  */
 let invalidationGeneration = 0;
+/** Repository paths dropped by a mutating command since the last `takeInvalidatedRepoPaths`. */
+const invalidatedPaths = new Set<string>();
 
 /**
  * Returns the cached status for a repository when it is still valid, otherwise computes it.
@@ -71,9 +73,27 @@ export async function readRepoSidebarStatus(repoPath: string, compute: () => Pro
 /** Drops one repository's status. Called for every git command that can change repository state. */
 export function invalidateRepoSidebarStatus(repoPath: string) {
     statusCache.delete(repoPath);
+    invalidatedPaths.add(repoPath);
 }
 
 export function invalidateAllRepoSidebarStatuses() {
     invalidationGeneration += 1;
     statusCache.clear();
+    invalidatedPaths.clear();
+}
+
+/**
+ * The repositories a mutating command has invalidated since this was last called. A mutation
+ * response only has to refresh those statuses instead of sweeping every repository.
+ */
+export function takeInvalidatedRepoPaths(): Set<string> {
+    const paths = new Set(invalidatedPaths);
+    invalidatedPaths.clear();
+
+    return paths;
+}
+
+/** Whether a status is already cached, used to spot a repository the renderer has never seen. */
+export function hasCachedRepoSidebarStatus(repoPath: string): boolean {
+    return statusCache.has(repoPath);
 }

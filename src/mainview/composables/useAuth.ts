@@ -41,7 +41,7 @@ export function _useAccounts() {
             if (result.status === 'completed') {
                 clearOAuthPolling();
                 this.oauthDeviceFlow = undefined;
-                _coreState.applyBootstrap(result.bootstrap);
+                _coreState.applyMutation(result.bootstrap);
                 toast.showSuccessToast(`${provider === 'github' ? 'GitHub' : 'GitLab'} account connected.`);
                 return;
             }
@@ -122,13 +122,13 @@ export function _useAccounts() {
                 setAsDefault: params.setAsDefault,
             });
 
-            _coreState.applyBootstrap(nextBootstrap);
+            _coreState.applyMutation(nextBootstrap);
             toast.showSuccessToast('Account created.');
         },
         async reorderAccount(accountId: number, toIndex: number) {
             const nextBootstrap = await tasks.reorderAccount.run({ accountId, toIndex });
 
-            _coreState.applyBootstrap(nextBootstrap);
+            _coreState.applyMutation(nextBootstrap);
         },
         async updateAccount(params: {
             accountId: number;
@@ -140,7 +140,7 @@ export function _useAccounts() {
         }) {
             const nextBootstrap = await tasks.updateAccount.run(params);
 
-            _coreState.applyBootstrap(nextBootstrap);
+            _coreState.applyMutation(nextBootstrap);
             toast.showSuccessToast('Account updated.');
         },
         async deleteAccount(accountId: number) {
@@ -158,7 +158,7 @@ export function _useAccounts() {
 
             const nextBootstrap = await tasks.deleteAccount.run({ accountId });
 
-            _coreState.applyBootstrap(nextBootstrap);
+            _coreState.applyMutation(nextBootstrap);
             toast.showSuccessToast('Account deleted.');
         },
         async assignRepoAccount(accountId: number | undefined) {
@@ -174,7 +174,7 @@ export function _useAccounts() {
                 accountId,
             });
 
-            _coreState.applyBootstrap(nextBootstrap);
+            _coreState.applyMutation(nextBootstrap);
             // toast.showSuccessToast(accountId === undefined ? 'Repository account cleared.' : 'Repository account assigned.');
         },
     });

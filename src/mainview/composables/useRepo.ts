@@ -113,11 +113,18 @@ const _useRepository = (repo: Repo) => {
     let fileHistoryToken = 0;
     // Monotonic token so a slow diff cannot overwrite the file selected after it.
     let diffRequestToken = 0;
+    // The last repository snapshot applied here, so an unchanged one is not written again.
+    let appliedRepo: Repo = repo;
 
     const state = reactive({
         ...repo,
 
         update(nv: Repo) {
+            if (nv === appliedRepo) {
+                return;
+            }
+
+            appliedRepo = nv;
             state.id = nv.id;
             state.name = nv.name;
             state.path = nv.path;

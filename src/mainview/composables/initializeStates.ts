@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, watch } from 'vue';
-import type { AppBootstrapApi } from '../../shared/types.ts';
+import type { AppBootstrapApi, AppMutationApi } from '../../shared/types.ts';
 import { ignoreRemovedRepository } from '../../shared/repositoryErrors.ts';
 import { appClientRpc } from '../appClient.ts';
 import { runWithButtonLoadingIndicatorSilenced } from '../lib/loadingIndicatorState.ts';
@@ -9,7 +9,14 @@ import { useRepos } from './useRepos.ts';
 import { useSettings } from './useSettings.ts';
 import { initTasks, tasks } from './useTasks.ts';
 
-export async function applyMutation(nextBootstrap: AppBootstrapApi) {
+/** Applies a mutation's repository patch and reloads the data the views read. */
+export async function applyMutation(nextState: AppMutationApi) {
+    _coreState.applyMutation(nextState);
+    await loadSelectedRepositoryData();
+}
+
+/** Applies a full bootstrap, which `refreshRepos` still returns, and reloads the views. */
+export async function applyBootstrapRefresh(nextBootstrap: AppBootstrapApi) {
     _coreState.applyBootstrap(nextBootstrap);
     await loadSelectedRepositoryData();
 }
@@ -81,7 +88,7 @@ function createGitClientAppState() {
             try {
                 await runWithButtonLoadingIndicatorSilenced(async () => {
                     const nextBootstrap = await appClientRpc.request.refreshRepos(undefined);
-                    await applyMutation(nextBootstrap);
+                    await applyBootstrapRefresh(nextBootstrap);
                 });
             } catch (error) {
                 console.error('Refresh failed', error);

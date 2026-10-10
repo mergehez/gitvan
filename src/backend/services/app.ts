@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { executeCommand } from '../../electronUtils/executeCommand.js';
 import type {
     AppBootstrapApi,
+    AppMutationApi,
     BranchesData,
     CloneableRepo,
     CloneRepoDefaults,
@@ -25,6 +26,9 @@ import type {
     RemoteOperation,
     Repo,
     RepoChangesData,
+    RepoSidebarStatus,
+    RepoStatusPatch,
+    RepoSummary,
     TagsData,
 } from '../../shared/types.js';
 import { repositoryNotFoundMessage } from '../../shared/repositoryErrors.js';
@@ -34,7 +38,7 @@ import { useDb } from './database.js';
 import { git, GitCommandError } from './git.js';
 import type { OAuthCompletedDeviceResult } from './oauth.js';
 import { pollOAuthDeviceSession, startOAuthDeviceSession, verifyProviderAccessToken } from './oauth.js';
-import { invalidateAllRepoSidebarStatuses, invalidateRepoSidebarStatus, readRepoSidebarStatus } from './repoStatusCache.js';
+import { hasCachedRepoSidebarStatus, invalidateAllRepoSidebarStatuses, invalidateRepoSidebarStatus, readRepoSidebarStatus, takeInvalidatedRepoPaths } from './repoStatusCache.js';
 import { invalidateAllUnpushedCommitSets, invalidateUnpushedCommitSet } from './git/unpushedCommitCache.js';
 
 const db = useDb();
@@ -145,18 +149,18 @@ const defaultEditorSettings: EditorSettings = {
 
 type RemoteOperationResult =
     | {
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
           status: 'completed';
           stashed: false;
       }
     | {
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
           status: 'conflicted';
           stashed: false;
           conflictingFiles: string[];
       }
     | {
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
           status: 'blocked-by-local-changes';
           stashed: false;
           conflictingFiles: string[];
@@ -164,12 +168,12 @@ type RemoteOperationResult =
 
 type RetryPullAfterStashResult =
     | {
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
           status: 'completed';
           stashed: true;
       }
     | {
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
           status: 'conflicted';
           stashed: true;
           conflictingFiles: string[];
@@ -443,52 +447,93 @@ function rethrowRemoteAuthError(error: unknown, auth: RepoRemoteAuth | undefined
     throw error;
 }
 
-async function buildBootstrap(): Promise<AppBootstrapApi> {
-    const repoRows = db.listRepos();
-    const repos: AppBootstrapApi['repos'] = await Promise.all(
-        repoRows.map(async (row: ReturnType<typeof db.listRepos>[number]) => {
-            const status = await readRepoSidebarStatus(row.path, () => git.getRepoSidebarStatus(row.path));
+type RepoListRow = ReturnType<typeof db.listRepos>[number];
 
-            const r: Repo = {
-                id: row.id,
-                name: row.name,
-                path: row.path,
-                sequence: typeof row.sequence === 'bigint' ? Number(row.sequence) : row.sequence,
-                groupId: row.group_id,
-                groupName: row.group_name,
-                accountId: row.account_id,
-                accountLabel: row.account_label,
-                terminalPath: row.terminal_path,
-                addedAt: row.created_at,
-                lastOpenedAt: row.last_opened_at,
-                status,
-            };
+/** The cheap half of a repository: everything the database already holds, without git status. */
+function toRepoSummary(row: RepoListRow): RepoSummary {
+    return {
+        id: row.id,
+        name: row.name,
+        path: row.path,
+        sequence: typeof row.sequence === 'bigint' ? Number(row.sequence) : row.sequence,
+        groupId: row.group_id,
+        groupName: row.group_name,
+        accountId: row.account_id,
+        accountLabel: row.account_label,
+        terminalPath: row.terminal_path,
+        addedAt: row.created_at,
+        lastOpenedAt: row.last_opened_at,
+    };
+}
 
-            return r;
-        })
-    );
+function readStatusForRepo(row: RepoListRow): Promise<RepoSidebarStatus> {
+    return readRepoSidebarStatus(row.path, () => git.getRepoSidebarStatus(row.path));
+}
 
+/** Keeps the stored selection pointing at a repository that still exists. */
+function resolveSelectedRepoId(repoRows: RepoListRow[]) {
     let selectedRepoId = db.getSelectedRepoId();
 
-    if (selectedRepoId === undefined && repos.length > 0) {
-        selectedRepoId = repos[0]?.id ?? undefined;
+    if (selectedRepoId === undefined && repoRows.length > 0) {
+        selectedRepoId = repoRows[0]?.id ?? undefined;
         db.setSelectedRepoId(selectedRepoId);
     }
 
-    if (selectedRepoId !== undefined && !repos.some((repo) => repo.id === selectedRepoId)) {
-        selectedRepoId = repos[0]?.id ?? undefined;
+    if (selectedRepoId !== undefined && !repoRows.some((row) => row.id === selectedRepoId)) {
+        selectedRepoId = repoRows[0]?.id ?? undefined;
         db.setSelectedRepoId(selectedRepoId);
     }
 
-    const bootstrap: AppBootstrapApi = {
-        repos,
+    return selectedRepoId;
+}
+
+function buildStateLists() {
+    return {
         groups: db.listGroups(),
         accounts: db.listAccounts(),
-        selectedRepoId,
         sandboxLabsAvailable: sandboxLabsPath !== undefined,
     };
+}
 
-    return bootstrap;
+/** Startup and the poll re-read every repository's status. */
+async function buildBootstrap(): Promise<AppBootstrapApi> {
+    const repoRows = db.listRepos();
+    const repos: Repo[] = await Promise.all(
+        repoRows.map(async (row) => ({
+            ...toRepoSummary(row),
+            status: await readStatusForRepo(row),
+        }))
+    );
+
+    return {
+        repos,
+        selectedRepoId: resolveSelectedRepoId(repoRows),
+        ...buildStateLists(),
+    };
+}
+
+/**
+ * A mutation response. Statuses are only re-read for the repositories a mutating command
+ * invalidated and for ones that have never been read (a freshly added repository), so the
+ * response no longer sweeps every repository.
+ */
+async function buildMutationResult(): Promise<AppMutationApi> {
+    const repoRows = db.listRepos();
+    const invalidatedPaths = takeInvalidatedRepoPaths();
+    const rowsNeedingStatus = repoRows.filter((row) => invalidatedPaths.has(row.path) || !hasCachedRepoSidebarStatus(row.path));
+    const statuses: RepoStatusPatch[] = await Promise.all(
+        rowsNeedingStatus.map(async (row) => ({
+            id: row.id,
+            status: await readStatusForRepo(row),
+        }))
+    );
+
+    return {
+        repos: repoRows.map(toRepoSummary),
+        statuses,
+        selectedRepoId: resolveSelectedRepoId(repoRows),
+        ...buildStateLists(),
+    };
 }
 
 /**
@@ -553,7 +598,7 @@ export const app = {
         const selectedPath = ps.path.trim();
 
         if (!selectedPath) {
-            return buildBootstrap();
+            return buildMutationResult();
         }
 
         const repo = await git.resolveGitRepo(selectedPath);
@@ -563,7 +608,7 @@ export const app = {
         }
         db.setSelectedRepoId(repoId);
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     listCloneableRepos: async (ps: { accountId: number }): Promise<CloneableRepo[]> => {
         const account = db.getAccountAuthById(ps.accountId);
@@ -687,7 +732,7 @@ export const app = {
         }
 
         db.setSelectedRepoId(repoId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     createTrackedLocalRepo: async (ps: { name: string; parentDirectory: string; groupId?: number | undefined }) => {
         const normalizedName = ps.name.trim();
@@ -715,7 +760,7 @@ export const app = {
         const repoId = db.upsertRepo(repo.path, repo.name, ps.groupId ?? undefined);
         db.setSelectedRepoId(repoId);
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     selectRepo: async (ps: { repoId: number }) => {
         if (!db.repoExists(ps.repoId)) {
@@ -723,7 +768,7 @@ export const app = {
         }
 
         db.setSelectedRepoId(ps.repoId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     refreshRepos: async () => {
         // Polling and the manual refresh are what notice working-tree edits made outside
@@ -770,7 +815,7 @@ export const app = {
             db.upsertRepo(repo.path, sandbox.folder, groupSandbox!.id);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     removeRepo: async (ps: { repoId: number }) => {
         const removedRepoPath = db.getRepo(ps.repoId)?.path;
@@ -785,7 +830,7 @@ export const app = {
             db.setSelectedRepoId(undefined);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     createRepoGroup: async (ps: { name: string }) => {
         const normalizedName = ((groupName: string): string => groupName.trim())(ps.name);
@@ -799,7 +844,7 @@ export const app = {
         }
 
         db.createGroup(normalizedName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteTrackedRepoGroup: async (ps: { groupId: number }) => {
         if (!db.groupExists(ps.groupId)) {
@@ -814,7 +859,7 @@ export const app = {
         db.moveGroup(ps.groupId, 'down');
         db.moveGroup(ps.groupId, 'down');
         db.deleteGroup(ps.groupId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     renameRepoGroup: async (ps: { groupId: number; name: string }) => {
         const normalizedName = ((groupName: string): string => groupName.trim())(ps.name);
@@ -833,7 +878,7 @@ export const app = {
         }
 
         db.updateGroupName(ps.groupId, normalizedName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     renameRepo: async (ps: { repoId: number; name: string }) => {
         const normalizedName = ps.name.trim();
@@ -847,7 +892,7 @@ export const app = {
         }
 
         db.updateRepoName(ps.repoId, normalizedName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     updateRepoGroup: async (ps: { repoId: number; groupId: number | undefined }) => {
         if (!db.repoExists(ps.repoId)) {
@@ -859,7 +904,7 @@ export const app = {
         }
 
         db.updateRepoGroup(ps.repoId, ps.groupId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     updateRepoGroups: async (ps: { updates: Array<{ repoId: number; groupId: number | undefined }> }) => {
         for (const update of ps.updates) {
@@ -874,7 +919,7 @@ export const app = {
             db.updateRepoGroup(update.repoId, update.groupId);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     moveRepo: async (ps: { repoId: number; direction: 'up' | 'down' }) => {
         if (!db.repoExists(ps.repoId)) {
@@ -882,7 +927,7 @@ export const app = {
         }
 
         db.moveRepo(ps.repoId, ps.direction);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     reorderRepo: async (ps: { repoId: number; toIndex: number }) => {
         if (!db.repoExists(ps.repoId)) {
@@ -890,7 +935,7 @@ export const app = {
         }
 
         db.reorderRepo(ps.repoId, ps.toIndex);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     moveRepoGroup: async (ps: { groupId: number; direction: 'up' | 'down' }) => {
         if (!db.groupExists(ps.groupId)) {
@@ -898,7 +943,7 @@ export const app = {
         }
 
         db.moveGroup(ps.groupId, ps.direction);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     createAccount: async (ps: {
         label: string;
@@ -946,7 +991,7 @@ export const app = {
             }
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     updateAccount: async (ps: {
         accountId: number;
@@ -987,7 +1032,7 @@ export const app = {
         }
 
         db.updateAccount(ps.accountId, normalizedLabel, nextUsername, nextHost, ps.setAsDefault);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteAccount: async (ps: { accountId: number }) => {
         if (!db.accountExists(ps.accountId)) {
@@ -1002,7 +1047,7 @@ export const app = {
         }
 
         db.removeAccount(ps.accountId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     reorderAccount: async (ps: { accountId: number; toIndex: number }) => {
         if (!db.accountExists(ps.accountId)) {
@@ -1010,7 +1055,7 @@ export const app = {
         }
 
         db.reorderAccount(ps.accountId, ps.toIndex);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     startOAuthDeviceFlow: async (ps: { provider: 'github' | 'gitlab'; label: string; setAsDefault: boolean }): Promise<OAuthDeviceStartResult> => {
         const settings = app.getOAuthProviderSettings();
@@ -1048,7 +1093,7 @@ export const app = {
 
         return {
             status: 'completed',
-            bootstrap: await buildBootstrap(),
+            bootstrap: await buildMutationResult(),
         };
     },
     assignRepoAccount: async (ps: { repoId: number; accountId: number | undefined }) => {
@@ -1059,7 +1104,7 @@ export const app = {
         }
 
         db.assignRepoAccount(ps.repoId, ps.accountId);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     assignRepoTerminal: async (ps: { repoId: number; terminalPath: string | undefined }) => {
         requireRepo(ps.repoId);
@@ -1070,7 +1115,7 @@ export const app = {
         }
 
         db.assignRepoTerminal(ps.repoId, ps.terminalPath);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     getChanges: async (ps: { repoId: number; ignoredChars?: string; showWhitespaceChanges?: boolean }): Promise<RepoChangesData> => {
         const settings = app.getEditorSettings();
@@ -1103,110 +1148,110 @@ export const app = {
     },
     stageFile: async (ps: { repoId: number; path: string }) => {
         await git.stageRepoFile(requireRepo(ps.repoId).path, ps.path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     stageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.stageRepoFiles(requireRepo(ps.repoId).path, ps.paths);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     stageAllFiles: async (ps: { repoId: number }) => {
         await git.stageAllRepoFiles(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     unstageFile: async (ps: { repoId: number; path: string }) => {
         await git.unstageRepoFile(requireRepo(ps.repoId).path, ps.path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     unstageRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.unstageRepoFiles(requireRepo(ps.repoId).path, ps.paths);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     discardFile: async (ps: { repoId: number; path: string }) => {
         await git.discardRepoFile(requireRepo(ps.repoId).path, ps.path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     applyPatch: async (ps: { repoId: number; patch: string; mode: 'stage' | 'unstage' | 'discard' }) => {
         await git.applyPatch(requireRepo(ps.repoId).path, ps.patch, ps.mode);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     discardRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.discardRepoFiles(requireRepo(ps.repoId).path, ps.paths);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     unstageAllFiles: async (ps: { repoId: number }) => {
         await git.unstageAllRepoFiles(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     discardAllChanges: async (ps: { repoId: number }) => {
         await git.discardAllRepoChanges(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     restoreRepoFile: async (ps: { repoId: number; path: string; kind: 'staged' | 'unstaged' }) => {
         await git.restoreRepoFile(requireRepo(ps.repoId).path, ps.path, ps.kind);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     restoreRepoFiles: async (ps: { repoId: number; paths: string[]; kind: 'staged' | 'unstaged' }) => {
         await git.restoreRepoFiles(requireRepo(ps.repoId).path, ps.paths, ps.kind);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteStagedRepoFile: async (ps: { repoId: number; path: string }) => {
         await git.deleteStagedRepoFile(requireRepo(ps.repoId).path, ps.path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteStagedRepoFiles: async (ps: { repoId: number; paths: string[] }) => {
         await git.deleteStagedRepoFiles(requireRepo(ps.repoId).path, ps.paths);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     ignoreRepoPath: async (ps: { repoId: number; path: string; mode: 'file' | 'directory' | 'pattern' }) => {
         await git.ignoreRepoPath(requireRepo(ps.repoId).path, ps.path, ps.mode);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     resolveMergeConflictFile: async (ps: { repoId: number; path: string; resolution: 'ours' | 'theirs' }) => {
         await git.resolveRepoMergeConflict(requireRepo(ps.repoId).path, ps.path, ps.resolution);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     markMergeConflictResolved: async (ps: { repoId: number; path: string }) => {
         await git.markRepoConflictResolved(requireRepo(ps.repoId).path, ps.path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     saveMergeConflictResolution: async (ps: { repoId: number; path: string; resolvedContent: string }) => {
         await git.saveRepoMergeConflictResolution(requireRepo(ps.repoId).path, ps.path, ps.resolvedContent);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     abortMerge: async (ps: { repoId: number }) => {
         await git.abortRepoMerge(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     commitMerge: async (ps: { repoId: number }) => {
         await git.commitRepoMerge(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     commitRepo: async (ps: { repoId: number; summary: string; description: string; amend: CommitFormState['amend'] }) => {
         await git.commitRepoChanges(requireRepo(ps.repoId).path, ps.summary, ps.description, ps.amend);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     rewordCommit: async (ps: { repoId: number; commitSha: string; summary: string; description: string }) => {
         await git.rewordRepoCommit(requireRepo(ps.repoId).path, ps.commitSha, ps.summary, ps.description);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     undoLastCommit: async (ps: { repoId: number }) => {
         await git.undoLastRepoCommit(requireRepo(ps.repoId).path);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     getTags: async (ps: { repoId: number }): Promise<TagsData> => {
         return git.getRepoTags(requireRepo(ps.repoId).path);
     },
     createTag: async (ps: { repoId: number; commitSha: string; tagName: string; message?: string }) => {
         await git.createRepoTag(requireRepo(ps.repoId).path, ps.commitSha, ps.tagName, ps.message);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     renameTag: async (ps: { repoId: number; tagName: string; nextTagName: string }) => {
         await git.renameRepoTag(requireRepo(ps.repoId).path, ps.tagName, ps.nextTagName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteTag: async (ps: { repoId: number; tagName: string }) => {
         await git.deleteRepoTag(requireRepo(ps.repoId).path, ps.tagName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     pushTag: async (ps: { repoId: number; tagName: string }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1217,7 +1262,7 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     pushAllTags: async (ps: { repoId: number }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1228,7 +1273,7 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     deleteRemoteTag: async (ps: { repoId: number; tagName: string }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1239,7 +1284,7 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     getHistory: async (ps: { repoId: number; limit?: number; skip?: number; search?: string; path?: string; followRenames?: boolean }): Promise<HistoryData> => {
         return git.getRepoHistory(requireRepo(ps.repoId).path, {
@@ -1270,11 +1315,11 @@ export const app = {
     },
     checkoutBranch: async (ps: { repoId: number; branchName: string }) => {
         await git.checkoutRepoBranch(requireRepo(ps.repoId).path, ps.branchName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     createBranch: async (ps: { repoId: number; branchName: string }) => {
         await git.createRepoBranch(requireRepo(ps.repoId).path, ps.branchName);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     createRemoteBranch: async (ps: { repoId: number; branchName: string }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1285,7 +1330,7 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     runRemoteOperation: async (ps: { repoId: number; operation: RemoteOperation }): Promise<RemoteOperationResult> => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1295,7 +1340,7 @@ export const app = {
         } catch (error) {
             if (ps.operation === 'pull' && git.isPullMergeConflictError(error)) {
                 return {
-                    bootstrap: await buildBootstrap(),
+                    bootstrap: await buildMutationResult(),
                     status: 'conflicted',
                     stashed: false,
                     conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
@@ -1304,7 +1349,7 @@ export const app = {
 
             if (ps.operation === 'pull' && git.isPullBlockedByLocalChangesError(error)) {
                 return {
-                    bootstrap: await buildBootstrap(),
+                    bootstrap: await buildMutationResult(),
                     status: 'blocked-by-local-changes',
                     stashed: false,
                     conflictingFiles: git.getPullBlockedByLocalChangesFiles(error),
@@ -1315,7 +1360,7 @@ export const app = {
         }
 
         return {
-            bootstrap: await buildBootstrap(),
+            bootstrap: await buildMutationResult(),
             status: 'completed',
             stashed: false,
         };
@@ -1329,7 +1374,7 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
     retryPullAfterStash: async (ps: { repoId: number }): Promise<RetryPullAfterStashResult> => {
         await app.stashRepo({ repoId: ps.repoId });
@@ -1341,7 +1386,7 @@ export const app = {
         } catch (error) {
             if (git.isPullMergeConflictError(error)) {
                 return {
-                    bootstrap: await buildBootstrap(),
+                    bootstrap: await buildMutationResult(),
                     status: 'conflicted',
                     stashed: true,
                     conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
@@ -1352,7 +1397,7 @@ export const app = {
         }
 
         return {
-            bootstrap: await buildBootstrap(),
+            bootstrap: await buildMutationResult(),
             status: 'completed',
             stashed: true,
         };
@@ -1361,7 +1406,7 @@ export const app = {
         try {
             await git.restoreRepoStash(requireRepo(ps.repoId).path, ps.stashRef);
             return {
-                bootstrap: await buildBootstrap(),
+                bootstrap: await buildMutationResult(),
                 status: 'completed' as const,
                 kept: false,
                 conflictingFiles: [] as string[],
@@ -1369,7 +1414,7 @@ export const app = {
         } catch (error) {
             if (git.isStashRestoreConflictError(error)) {
                 return {
-                    bootstrap: await buildBootstrap(),
+                    bootstrap: await buildMutationResult(),
                     status: 'conflicted' as const,
                     kept: true,
                     conflictingFiles: await git.listUnmergedRepoFiles(requireRepo(ps.repoId).path),
@@ -1381,7 +1426,7 @@ export const app = {
     },
     discardStash: async (ps: { repoId: number; stashRef: string }) => {
         await git.discardRepoStash(requireRepo(ps.repoId).path, ps.stashRef);
-        return buildBootstrap();
+        return buildMutationResult();
     },
     publishBranch: async (ps: { repoId: number }) => {
         const auth = await resolveRepoRemoteAuth(ps.repoId);
@@ -1392,6 +1437,6 @@ export const app = {
             rethrowRemoteAuthError(error, auth);
         }
 
-        return buildBootstrap();
+        return buildMutationResult();
     },
 };

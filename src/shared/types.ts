@@ -139,7 +139,7 @@ export type OAuthDevicePollResult =
       }
     | {
           status: 'completed';
-          bootstrap: AppBootstrapApi;
+          bootstrap: AppMutationApi;
       };
 
 export type CloneRepoSourceTab = 'github' | 'enterprise' | 'url';
@@ -393,6 +393,28 @@ export type DiffViewMode = 'changes' | 'full-file';
 
 export type AppBootstrapApi = {
     repos: Repo[];
+    groups: GroupSummary[];
+    accounts: AccountSummary[];
+    selectedRepoId: number | undefined;
+    sandboxLabsAvailable: boolean;
+};
+
+/** A repository row without its git status, which the renderer already holds. */
+export type RepoSummary = Omit<Repo, 'status'>;
+
+export type RepoStatusPatch = {
+    id: number;
+    status: RepoSidebarStatus;
+};
+
+/**
+ * What a mutation returns. The repository rows, groups and accounts are cheap database reads;
+ * only the statuses the mutation could have changed are carried, and the renderer merges them
+ * into the repository objects it already has instead of replacing the whole list.
+ */
+export type AppMutationApi = {
+    repos: RepoSummary[];
+    statuses: RepoStatusPatch[];
     groups: GroupSummary[];
     accounts: AccountSummary[];
     selectedRepoId: number | undefined;

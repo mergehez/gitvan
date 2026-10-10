@@ -8,7 +8,7 @@ import { isButtonBusyStateSilenced, runWithButtonBusyStateSilenced } from '../li
 import { writeClipboardText } from '../lib/nativePaths.ts';
 import { confirmAction } from '../lib/utils.ts';
 import { _coreState } from './coreState.ts';
-import { applyMutation } from './initializeStates.ts';
+import { applyBootstrapRefresh, applyMutation } from './initializeStates.ts';
 import { useRepo } from './useRepo.ts';
 import { useSettings } from './useSettings.ts';
 import { tasks } from './useTasks.ts';
@@ -64,7 +64,7 @@ export function _useRepositories() {
             await runWithButtonBusyStateSilenced(async () => {
                 const nextBootstrap = await tasks.refreshRepos.run(undefined);
 
-                await applyMutation(nextBootstrap);
+                await applyBootstrapRefresh(nextBootstrap);
                 toast.showSuccessToast('Repositories refreshed.');
             });
         },
