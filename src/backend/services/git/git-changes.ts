@@ -143,7 +143,9 @@ export const changesGit = {
             runGit(['diff', '--staged', '--raw', '-z', '--find-renames', '--'], repoPath),
             runGit(['diff', '--raw', '-z', '--find-renames', '--'], repoPath),
             runGit(['ls-files', '--others', '--exclude-standard', '-z'], repoPath),
-            runGit(['status', '--porcelain=v2'], repoPath),
+            // `-z` keeps paths verbatim; without it git C-quotes a non-ASCII path and the
+            // quarantined spelling no longer matches the raw diff's own path field.
+            runGit(['status', '--porcelain=v2', '-z'], repoPath),
             runGit(['diff', 'HEAD', '--check', '--'], repoPath, [0, 1, 2, 128]).catch(() => ''),
         ]);
 

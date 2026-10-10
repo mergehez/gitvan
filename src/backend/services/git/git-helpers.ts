@@ -353,9 +353,24 @@ export function normalizeBranchName(name: string) {
 
 export function parsePorcelainTrackedEntries(output: string) {
     const entries: Array<{ path: string; stagedStatus: ChangeStatus; unstagedStatus: ChangeStatus }> = [];
+    // `-z` separates records with NUL and keeps paths verbatim; the newline form is still read
+    // for a plain `git status` output, where a quoted path would not match a raw diff path.
+    const nullSeparated = output.includes('\0');
+    const records = output.split(nullSeparated ? '\0' : '\n');
 
-    for (const line of output.split('\n')) {
+    for (let index = 0; index < records.length; index++) {
+        const line = records[index];
+
         if (!line || line.startsWith('# ') || line.startsWith('? ') || line.startsWith('! ')) {
+            continue;
+        }
+
+        if (line.startsWith('2 ')) {
+            // A rename/copy record carries its original path as the next NUL field, and the raw
+            // diff already reports the rename, so only that extra field has to be consumed.
+            if (nullSeparated) {
+                index++;
+            }
             continue;
         }
 
