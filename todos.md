@@ -75,10 +75,6 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 ## Next
 
-- [ ] **[NOT_URGENT]** Gate every change on the unit and browser suites in CI, with a coverage report.
-    - What it is: nothing runs the suites automatically, and no coverage provider or threshold is configured, so "the tests are green" is a local observation rather than something a change has to pass.
-    - How it will be implemented: a workflow that installs Playwright chromium, runs `bun run test:ui` and `bun run test:e2e`, and adds `@vitest/coverage-v8` with thresholds once the Electron spec in the Test Suite list lands in the same job.
-
 - [ ] **[NOT_PLANNED]** Keep the localhost Express backend and the IPC-to-HTTP transport as the single request path.
     - What it is: every call is structured-cloned over IPC, sent as JSON to the Express server, parsed, answered as JSON, parsed again in the renderer and cloned back (`src/electronUtils/helpers.ts:24`, `src/electronUtils/browserOnlyHelpers.ts:79`, `src/electronUtils/mainProloadHelpers.ts:169`), which costs more than an in-process call for large diff payloads.
     - Why it is deliberate: the same transport is what makes the browser `dev2` mode and the standalone server work, and collapsing the Electron path into direct handler calls would fork the request path. Keep the extra serialization as the price of one transport; the payloads themselves are the thing to shrink.
@@ -102,9 +98,9 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 ## Test Suite
 
 Missing test coverage only. It carries the same markers as **Next**, paired with the kind of
-spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]` or `[FRONTEND TEST]` — so one flat list
-says both how much it matters and what writing it means. The `[BROWSER]` entries come first
-within each marker because they cover the flows a user actually runs.
+spec that closes the gap — `[BROWSER]`, `[BACKEND UNIT]`, `[FRONTEND TEST]` or `[HARNESS]` — so
+one flat list says both how much it matters and what writing it means. The `[BROWSER]` entries
+come first within each marker because they cover the flows a user actually runs.
 
 - [ ] **[NOT_URGENT] [BROWSER]** The Electron shell and the packaged app have no end-to-end spec.
     - What it is: `playwright.config.ts` boots `bun run dev`, so no spec ever launches Electron, and the preload bridge, the IPC registration, window creation, the application menu and the built bundle (`src/electron/main.ts`, `src/electron/preload.ts`, `src/electronUtils/mainProloadHelpers.ts:36,169`) run only when a person starts the app. `native-boundary.spec.ts` proves the opposite direction — that those methods are unavailable in browser dev mode.
@@ -125,6 +121,10 @@ within each marker because they cover the flows a user actually runs.
 - [ ] **[NOT_URGENT] [BACKEND UNIT]** The Keychain wrapper against the real `security` CLI.
     - What it is: `auth.ts` is only exercised with a mocked `executeCommand` and, in the browser run, a fake `security` earlier on `PATH` (`playwright/support/fakeKeychain.ts`), so the real add/find/delete and the missing-entry exit code never run.
     - How it will be implemented: an opt-in spec that stores, reads and deletes a throwaway item under its own service name, skipped unless an environment flag asks for it.
+
+- [ ] **[NOT_URGENT] [HARNESS]** Run the suites in CI.
+    - What it is: `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` are not enforced anywhere, and `vite build` does not typecheck, so a green local run is the only signal there is. No coverage provider or threshold is configured either.
+    - How it will be implemented: one CI job per suite, reusing the commands in `package.json` and the browser run's own ports and temp database, with `@vitest/coverage-v8` thresholds and the Electron spec above added once they exist.
 
 - [ ] **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
