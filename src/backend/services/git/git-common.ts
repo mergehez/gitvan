@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { repositoryNotFoundMessage } from '../../../shared/repositoryErrors.js';
 import { executeCommand } from '../../../electronUtils/executeCommand.js';
 import { invalidateRepoSidebarStatus } from '../repoStatusCache.js';
 import { invalidateUnpushedCommitSet } from './unpushedCommitCache.js';
@@ -98,6 +99,26 @@ export class GitCommandError extends Error {
     }
 }
 
+/**
+ * A repository removed while a command was in flight cannot start that command at all, because its
+ * working directory is gone and `spawn` fails with ENOENT. That is the same removed-repository
+ * outcome as a missing row, so it is reported as one instead of as an internal fault.
+ */
+function toGitCommandError(error: unknown, args: string[], cwd: string) {
+    if (error instanceof GitCommandError) {
+        return error;
+    }
+
+    const spawnError = error as NodeJS.ErrnoException;
+    if (spawnError?.code === 'ENOENT' && !existsSync(cwd)) {
+        return new GitCommandError(repositoryNotFoundMessage, [resolveGitExecutable(), ...args], repositoryNotFoundMessage);
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+
+    return new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+}
+
 export async function runGit(args: string[], cwd: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
     try {
         const gitExecutable = resolveGitExecutable();
@@ -114,12 +135,7 @@ export async function runGit(args: string[], cwd: string, allowedExitCodes: numb
 
         return trimOutput ? stdout.trim() : stdout;
     } catch (error) {
-        if (error instanceof GitCommandError) {
-            throw error;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+        throw toGitCommandError(error, args, cwd);
     }
 }
 
@@ -140,12 +156,7 @@ export async function runGitWithInput(args: string[], cwd: string, input: string
 
         return trimOutput ? stdout.trim() : stdout;
     } catch (error) {
-        if (error instanceof GitCommandError) {
-            throw error;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+        throw toGitCommandError(error, args, cwd);
     }
 }
 
@@ -166,12 +177,7 @@ export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes
 
         return stdout;
     } catch (error) {
-        if (error instanceof GitCommandError) {
-            throw error;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+        throw toGitCommandError(error, args, cwd);
     }
 }
 
@@ -193,12 +199,7 @@ export async function runGitBufferWithInput(args: string[], cwd: string, input: 
 
         return stdout;
     } catch (error) {
-        if (error instanceof GitCommandError) {
-            throw error;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        throw new GitCommandError(message, [resolveGitExecutable(), ...args], message);
+        throw toGitCommandError(error, args, cwd);
     }
 }
 
@@ -212,9 +213,11 @@ export function createRemoteGitEnvForUrl(remoteUrl: string, auth: GitRemoteAuth 
     }
 
     const remoteHost = parseRemoteHost(remoteUrl);
-    if (auth.host && remoteHost && auth.host !== remoteHost) {
+    // Hosts are case-insensitive, and the account's host is stored lowercased.
+    const accountHost = auth.host?.toLowerCase();
+    if (accountHost && remoteHost && accountHost !== remoteHost) {
         throw new GitCommandError(
-            `The assigned account is configured for ${auth.host}, but the repository remote points to ${remoteHost}.`,
+            `The assigned account is configured for ${accountHost}, but the repository remote points to ${remoteHost}.`,
             ['git', 'remote', 'get-url', 'origin'],
             remoteUrl
         );
