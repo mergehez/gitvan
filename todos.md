@@ -54,18 +54,12 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Windowed the file trees with uniform rows, keeping the history tree on its page size.
 - Returned only the repositories a mutation touched and merged them in the renderer.
 - Synced the conflict chrome once per frame and reused its zones across edits.
+- Normalized the diff pair once per diff and reused it for the badge, the renderer and the conflict count.
+- Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
 
 ## Next
 
-- [ ] **[URGENT]** The full file pair is normalized for "no actual change" at least twice per selection.
-    - What it is: `useDiffViewer` calls `hasNoActualDiffChanges` (`src/mainview/composables/useDiffViewer.ts:33`), then `DiffsDiffEditor.createRenderedDiff` (`DiffsDiffEditor.vue:79`) calls `normalizeComparableDiffText` on both sides again, and `hasOnlyWhitespaceChanges` runs two more full-content regex replaces; `selectedDiffConflictCount` (`RepChangesView.vue:178`) regex-scans the whole modified content on top. The normalizer in `src/shared/diffIgnoredChars.ts:116` walks every character of both files per pass.
-    - How it will be implemented: compute the normalized pair once per diff and pass the result into `DiffsDiffEditor` instead of recomputing it there, and derive the conflict-marker count from that same pass; also early-return from the normalizer when `ignoredChars` is empty and whitespace stripping is off.
-
-- [ ] **[URGENT]** Hunk anchors re-split the whole patch and re-query the shadow DOM per hunk.
-    - What it is: `setHunkAnchors` (`src/mainview/components/DiffsDiffEditor.vue:360`) runs from `onPostRender` on every render and, per hunk, does `gutter.querySelector` plus `addLine.querySelectorAll('.gitvan-hunk-button')`, while `buildChangeBlockPatch` (`DiffsDiffEditor.vue:191`) re-splits the entire patch with `fullPatch.split(/^@@ /m)`. A diff with hundreds of hunks costs O(hunks × patch size) string scanning on each render.
-    - How it will be implemented: split the patch once per diff and cache the per-hunk patches in a `Map`, and build the anchors once per rendered node instead of from the post-render callback.
-
-- [ ] **[NOT_URGENT]** The Explorer can only select a snapshot from the first history page.
+- [ ] **[URGENT]** The Explorer can only select a snapshot from the first history page.
     - What it is: `RepExplorerView` fills the snapshot `<select>` from `repo.history?.commits`, which holds one page (60) until the history view asks for more, and the Explorer has no load-more of its own — so an older commit cannot be selected in a deep repository.
     - How it will be implemented: give the Explorer its own way to page the commit list (request a larger limit while it is open, or load another page from the select) and keep `explorerCommitSha` selection stable across those loads.
 
