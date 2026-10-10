@@ -175,18 +175,20 @@ export function useDb() {
                     ${accountTable.createTableSql()}
                     ${groupsTable.createTableSql()}
                     ${repoTable.createTableSql()}
+                `);
 
+                // `CREATE TABLE IF NOT EXISTS` cannot add a column to a database that was
+                // created without it, so databases made before `group_id` joined the schema
+                // need it added explicitly, and the index below needs the column to exist.
+                db.ensureColumn('repositories', 'group_id', 'INTEGER');
+
+                db.exec(`
                     -- SQLite does not index a foreign key, so the group and account joins and
                     -- the default-account lookup would each scan their table.
                     CREATE INDEX IF NOT EXISTS idx_repositories_group_id ON repositories(group_id);
                     CREATE INDEX IF NOT EXISTS idx_repositories_account_id ON repositories(account_id);
                     CREATE INDEX IF NOT EXISTS idx_accounts_is_default ON accounts(is_default);
                 `);
-
-                // `CREATE TABLE IF NOT EXISTS` cannot add a column to a database that was
-                // created without it, so databases made before `group_id` joined the schema
-                // need it added explicitly.
-                db.ensureColumn('repositories', 'group_id', 'INTEGER');
 
                 const accountCount = accountTable.getCount(db);
 
