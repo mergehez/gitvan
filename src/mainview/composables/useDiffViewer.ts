@@ -34,19 +34,6 @@ function hasOnlyWhitespaceChanges(original: string, modified: string) {
     return original.replace(/\s+/g, '') === modified.replace(/\s+/g, '');
 }
 
-export function hasNoActualDiffChanges(diff: FileDiffData, ignoredChars: string, showWhitespaceChanges: boolean) {
-    const nonCodePreview = diff.entry.nonCodePreview?.kind === 'image' ? diff.entry.nonCodePreview : undefined;
-
-    if (diff.entry.previewMessage || nonCodePreview || diff.entry.original === diff.entry.modified) {
-        return false;
-    }
-
-    return !normalizeComparableDiffPair(diff.entry.original, diff.entry.modified, !showWhitespaceChanges, {
-        ignoredChars,
-        sortModuleImports: isJavaScriptTypeScriptPath(diff.path),
-    }).hasVisibleChanges;
-}
-
 export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) {
     const settings = useSettings();
 

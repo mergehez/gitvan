@@ -81,8 +81,8 @@ function createFile(name: string, contents: string): FileContents {
 function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean, normalizedPair?: { original: string; modified: string }) {
     const hideWhitespace = !showWhitespaceChanges;
     const ignoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(name) };
-    const normalizedOriginal = normalizedPair?.original ?? normalizeComparableDiffText(original, ignoredChars, hideWhitespace, ignoreOptions).text;
-    const normalizedModified = normalizedPair?.modified ?? normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, ignoreOptions).text;
+    const normalizedOriginal = normalizedPair?.original ?? normalizeComparableDiffText(original, ignoredChars, hideWhitespace, ignoreOptions);
+    const normalizedModified = normalizedPair?.modified ?? normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, ignoreOptions);
 
     const hasVisibleChanges = normalizedOriginal !== normalizedModified;
     const hideDecorations = original !== modified && !hasVisibleChanges;

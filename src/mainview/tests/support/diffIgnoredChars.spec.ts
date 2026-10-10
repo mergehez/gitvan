@@ -10,18 +10,13 @@ import {
 const sectionFixtureOld = '{ key: "val" };\n{ num: \'42\' },';
 const sectionFixtureNew = '{key:\'val\'},{num:"42"};';
 
-/** Line maps are only needed where the diff renderer labels its own lines. */
-function stripIgnoredCharsWithMaps(text: string, ignoredChars: string, hideWhitespace = false, options: { sortModuleImports?: boolean } = {}) {
-    return normalizeComparableDiffText(text, ignoredChars, hideWhitespace, { ...options, withLineMaps: true });
-}
-
 describe('diffIgnoredChars', () => {
-    it('removes ignored punctuation from shadow diff text for the user example', () => {
-        const original = stripIgnoredCharsWithMaps('role: "admin";', ',;"\'');
-        const modified = stripIgnoredCharsWithMaps("role:'admin',", ',;"\'');
+    it('removes ignored punctuation from the comparable diff text for the user example', () => {
+        const original = normalizeComparableDiffText('role: "admin";', ',;"\'', false);
+        const modified = normalizeComparableDiffText("role:'admin',", ',;"\'', false);
 
-        expect(original.text).toBe('role:admin');
-        expect(modified.text).toBe('role:admin');
+        expect(original).toBe('role:admin');
+        expect(modified).toBe('role:admin');
     });
 
     it('treats the user example as equivalent when ignored punctuation is removed', () => {
@@ -44,14 +39,8 @@ describe('diffIgnoredChars', () => {
         expect(areEquivalentComparableDiffText(sectionFixtureOld, sectionFixtureNew, ',;"\'', false)).toBe(false);
     });
 
-    it('preserves line structure while stripping whitespace from shadow diff text', () => {
-        const stripped = stripIgnoredCharsWithMaps('a \n b\t', '', true);
-
-        expect(stripped.text).toBe('a\nb');
-        expect(stripped.lineMaps).toEqual([
-            [1, 2],
-            [2, 3],
-        ]);
+    it('preserves line structure while stripping whitespace from the comparable diff text', () => {
+        expect(normalizeComparableDiffText('a \n b\t', '', true)).toBe('a\nb');
     });
 });
 
@@ -87,18 +76,16 @@ describe('comparable diff pair', () => {
 describe('normalizer fast path', () => {
     it('returns the input untouched when nothing can be stripped', () => {
         const text = 'const value = 1;\n';
-        const normalized = normalizeComparableDiffText(text, '', false);
 
-        expect(normalized.text).toBe(text);
-        expect(normalized.lineMaps).toEqual([]);
+        expect(normalizeComparableDiffText(text, '', false)).toBe(text);
     });
 
     it('still strips whitespace when whitespace hiding is on', () => {
-        expect(normalizeComparableDiffText('a \n b\t', '', true).text).toBe('a\nb');
+        expect(normalizeComparableDiffText('a \n b\t', '', true)).toBe('a\nb');
     });
 
     it('still strips ignored characters when whitespace hiding is off', () => {
-        expect(normalizeComparableDiffText('role: "admin";', ',;"\'', false).text).toBe('role:admin');
+        expect(normalizeComparableDiffText('role: "admin";', ',;"\'', false)).toBe('role:admin');
     });
 
     it('reduces an ignored-character setting to its usable characters', () => {
@@ -145,11 +132,10 @@ describe('module import ordering', () => {
         expect(areEquivalentComparableDiffText(original, modified, '', true, { sortModuleImports: true })).toBe(false);
     });
 
-    it('keeps shadow diff maps aligned with the reordered lines', () => {
-        const stripped = stripIgnoredCharsWithMaps("import { b } from './b';\nimport { a } from './a';\n", '', false, { sortModuleImports: true });
+    it('reorders the comparable text into the canonical import order', () => {
+        const normalized = normalizeComparableDiffText("import { b } from './b';\nimport { a } from './a';\n", '', false, { sortModuleImports: true });
 
-        expect(stripped.text).toBe("import { a } from './a';\nimport { b } from './b';\n");
-        expect(stripped.lineMaps).toHaveLength(stripped.text.split('\n').length);
+        expect(normalized).toBe("import { a } from './a';\nimport { b } from './b';\n");
     });
 
     it('does not reorder statements outside the import preamble', () => {
