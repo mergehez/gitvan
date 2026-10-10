@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -290,5 +290,187 @@ describe('historyGit.getRepoHistory without any commits', () => {
         const repoPath = createRepoWithCommits(0);
 
         await expect(historyGit.getRepoHistory(repoPath, { limit: 10 })).resolves.toMatchObject({ commits: [], hasMore: false });
+    });
+});
+
+describe('historyGit.getCommittedTree', () => {
+    /** A tree with a nested path, a file whose name sorts late, and a submodule entry. */
+    function createTreeRepo() {
+        const repoPath = createRepoWithCommits(0);
+
+        runGit(repoPath, ['commit', '--allow-empty', '-m', 'Initial baseline']);
+        writeFileSync(join(repoPath, 'README.md'), '# Readme\n', 'utf8');
+        writeFileSync(join(repoPath, 'zeta.txt'), 'z\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add top level files']);
+
+        mkdirSync(join(repoPath, 'src'), { recursive: true });
+        writeFileSync(join(repoPath, 'src/app.ts'), 'export const value = 1;\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a nested path']);
+
+        return repoPath;
+    }
+
+    it('lists every blob sorted by path with its size', async () => {
+        const tree = await historyGit.getCommittedTree(createTreeRepo());
+
+        expect(tree.files).toEqual([
+            { path: 'README.md', sizeBytes: 9 },
+            { path: 'src/app.ts', sizeBytes: 24 },
+            { path: 'zeta.txt', sizeBytes: 2 },
+        ]);
+    });
+
+    it('reads the tree of an older commit when one is named', async () => {
+        const repoPath = createTreeRepo();
+        const olderSha = runGit(repoPath, ['rev-parse', 'HEAD~1']);
+
+        const tree = await historyGit.getCommittedTree(repoPath, olderSha);
+
+        expect(tree.commitSha).toBe(olderSha);
+        expect(tree.files.map((file) => file.path)).toEqual(['README.md', 'zeta.txt']);
+    });
+
+    it('reports an empty tree for a repository with no commits yet', async () => {
+        await expect(historyGit.getCommittedTree(createRepoWithCommits(0))).resolves.toEqual({ commitSha: undefined, files: [] });
+    });
+
+    it('ignores a nested repository entry, which has no blob size', async () => {
+        const repoPath = createRepoWithCommits(0);
+        runGit(repoPath, ['commit', '--allow-empty', '-m', 'Initial baseline']);
+        writeFileSync(join(repoPath, 'module.txt'), 'kept\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a file']);
+
+        // Committing a nested repository records a gitlink, which `ls-tree` reports with `-` size.
+        const nestedPath = join(repoPath, 'linked');
+        mkdirSync(nestedPath, { recursive: true });
+        runGit(nestedPath, ['init', '-b', 'main']);
+        runGit(nestedPath, ['config', 'user.name', 'Gitvan Nested']);
+        runGit(nestedPath, ['config', 'user.email', 'nested@example.com']);
+        writeFileSync(join(nestedPath, 'inside.txt'), 'inside\n', 'utf8');
+        runGit(nestedPath, ['add', '.']);
+        runGit(nestedPath, ['commit', '-m', 'Nested baseline']);
+        runGit(repoPath, ['add', 'linked']);
+        runGit(repoPath, ['commit', '-m', 'Link a nested repository']);
+
+        const tree = await historyGit.getCommittedTree(repoPath);
+
+        expect(tree.files.map((file) => file.path)).toEqual(['module.txt']);
+    });
+});
+
+describe('historyGit.getCommittedFile', () => {
+    it('returns the committed text of a file', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'notes.txt'), 'note one\nnote two\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add notes']);
+
+        const file = await historyGit.getCommittedFile(repoPath, 'notes.txt');
+
+        expect(file).toMatchObject({ path: 'notes.txt', content: 'note one\nnote two\n', sizeBytes: 18 });
+        expect(file.previewMessage).toBeUndefined();
+    });
+
+    it('serves an image as a data URL instead of text', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a logo']);
+
+        const file = await historyGit.getCommittedFile(repoPath, 'logo.png');
+
+        expect(file.content).toBe('');
+        expect(file.preview).toMatchObject({ kind: 'image' });
+        expect(file.preview?.src).toMatch(/^data:image\/png;base64,/);
+    });
+
+    it('refuses a binary file with a message instead of content', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'blob.bin'), Buffer.from([0x00, 0x01, 0x02, 0x00]));
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a binary file']);
+
+        const file = await historyGit.getCommittedFile(repoPath, 'blob.bin');
+
+        expect(file.content).toBe('');
+        expect(file.previewMessage).toBe('Binary file cannot be previewed.');
+    });
+
+    it('caps a file above the preview limit without reading it', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'huge.txt'), `${'x'.repeat(1024 * 1024 + 1)}\n`, 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add a large file']);
+
+        const file = await historyGit.getCommittedFile(repoPath, 'huge.txt');
+
+        expect(file.content).toBe('');
+        expect(file.previewMessage).toBe('File too big to preview');
+    });
+
+    it('reads the version a named commit holds', async () => {
+        const repoPath = createRepoWithCommits(0);
+        writeFileSync(join(repoPath, 'notes.txt'), 'first\n', 'utf8');
+        runGit(repoPath, ['add', '.']);
+        runGit(repoPath, ['commit', '-m', 'Add notes']);
+        const firstSha = runGit(repoPath, ['rev-parse', 'HEAD']);
+        writeFileSync(join(repoPath, 'notes.txt'), 'second\n', 'utf8');
+        runGit(repoPath, ['commit', '-am', 'Edit notes']);
+
+        const file = await historyGit.getCommittedFile(repoPath, 'notes.txt', firstSha);
+
+        expect(file.commitSha).toBe(firstSha);
+        expect(file.content).toBe('first\n');
+    });
+
+    it('refuses a repository with no commits yet', async () => {
+        await expect(historyGit.getCommittedFile(createRepoWithCommits(0), 'anything.txt')).rejects.toThrow('The repository does not have any commits yet.');
+    });
+});
+
+describe('historyGit pagination bounds', () => {
+    it('falls back to the default page for a limit that is not a number', async () => {
+        const repoPath = createRepoWithCommits(80);
+
+        const history = await historyGit.getRepoHistory(repoPath, { limit: Number.NaN });
+
+        // The default page is 60, and the extra walk finds the one that makes `hasMore` true.
+        expect(history.commits).toHaveLength(60);
+        expect(history.hasMore).toBe(true);
+    });
+
+    it('never returns an empty page for a limit below one', async () => {
+        const repoPath = createRepoWithCommits(3);
+
+        expect((await historyGit.getRepoHistory(repoPath, { limit: 0 })).commits).toHaveLength(1);
+        expect((await historyGit.getRepoHistory(repoPath, { limit: -5 })).commits).toHaveLength(1);
+    });
+
+    it('treats a negative skip as the first page', async () => {
+        const repoPath = createRepoWithCommits(3);
+
+        const history = await historyGit.getRepoHistory(repoPath, { limit: 2, skip: -10 });
+
+        expect(history.commits.map((commit) => commit.summary)).toEqual(['Commit 2', 'Commit 1']);
+    });
+});
+
+describe('historyGit tag refs', () => {
+    it('reads the tags the ref decoration carries', async () => {
+        const repoPath = createRepoWithCommits(2);
+        const headSha = runGit(repoPath, ['rev-parse', 'HEAD']);
+        runGit(repoPath, ['tag', 'v1.0.0']);
+        runGit(repoPath, ['tag', '-a', 'v1.1.0', '-m', 'Release v1.1.0']);
+        runGit(repoPath, ['tag', 'v1.2.0', 'HEAD~1']);
+
+        const history = await historyGit.getRepoHistory(repoPath, { limit: 10 });
+
+        expect(history.commits[0]?.sha).toBe(headSha);
+        expect(history.commits[0]?.tags.map((tag) => tag.name).sort()).toEqual(['v1.0.0', 'v1.1.0']);
+        expect(history.commits[0]?.tags.every((tag) => tag.isUnpushed)).toBe(true);
+        expect(history.commits[1]?.tags.map((tag) => tag.name)).toEqual(['v1.2.0']);
     });
 });
