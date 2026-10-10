@@ -71,7 +71,7 @@ describe('startOAuthDeviceSession', () => {
         });
 
         expect(fetchCalls.map((call) => call.url)).toEqual(['https://github.com/login/device/code']);
-        expect(String(fetchCalls[0]!.init?.body)).toContain('client_id=github-client');
+        expect((fetchCalls[0]!.init!.body as URLSearchParams).toString()).toContain('client_id=github-client');
     });
 
     it('starts a GitLab device flow against the configured host', async () => {
@@ -85,7 +85,7 @@ describe('startOAuthDeviceSession', () => {
         expect(result.sessionId).toBe('session-1');
         expect(result.intervalSeconds).toBe(10);
         expect(fetchCalls[0]!.url).toBe('https://gitlab.example.com/oauth/authorize_device');
-        expect(String(fetchCalls[0]!.init?.body)).toContain('client_id=gitlab-client');
+        expect((fetchCalls[0]!.init!.body as URLSearchParams).toString()).toContain('client_id=gitlab-client');
     });
 
     it('refuses to start a GitHub flow without a client id', async () => {
@@ -236,7 +236,7 @@ describe('verifyProviderAccessToken', () => {
             host: 'github.com',
         });
         expect(fetchCalls[0]!.url).toBe('https://api.github.com/user');
-        expect((fetchCalls[0]!.init?.headers as Record<string, string>).Authorization).toBe('Bearer gh-token');
+        expect((fetchCalls[0]!.init!.headers as Record<string, string>).Authorization).toBe('Bearer gh-token');
     });
 
     it('falls back to the login when GitHub returns no name', async () => {
