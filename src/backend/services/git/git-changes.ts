@@ -1,6 +1,6 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../../shared/diffIgnoredChars.js';
+import { areEquivalentComparableDiffText, isJavaScriptTypeScriptPath } from '../../../shared/diffIgnoredChars.js';
 import type { ChangeStatus, FileChangeEntry, FileDiffData, FileDiffEntry, FileDiffRequestKind, RepoChangesData, RepoSidebarStatus } from '../../../shared/types.js';
 import { GitCommandError, runGit, runGitWithInput, runWithConcurrency } from './git-common.js';
 import {
@@ -700,7 +700,7 @@ async function applyCosmeticChangeChecks(repoPath: string, candidates: CosmeticC
 
             assignCosmeticResult(
                 candidate,
-                areEquivalentIgnoringDiffChars(
+                areEquivalentComparableDiffText(
                     original,
                     modified,
                     options.ignoredChars ?? '',
@@ -747,7 +747,7 @@ async function hasNoActualChangeForKind(
         const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `HEAD:${filePath}`), readGitRevisionFile(repoPath, `:${filePath}`)]);
 
         return {
-            noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
+            noActualChange: areEquivalentComparableDiffText(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
             tooLarge: false,
         };
     }
@@ -761,7 +761,7 @@ async function hasNoActualChangeForKind(
     const [original, modified] = await Promise.all([readGitRevisionFile(repoPath, `:${filePath}`), Promise.resolve(readWorkingTreeFile(absolutePath))]);
 
     return {
-        noActualChange: areEquivalentIgnoringDiffChars(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
+        noActualChange: areEquivalentComparableDiffText(original, modified, ignoredChars ?? '', !(showWhitespaceChanges ?? false), diffIgnoreOptions),
         tooLarge: false,
     };
 }

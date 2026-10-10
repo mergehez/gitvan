@@ -10,9 +10,8 @@ import {
     type UnresolvedFileOptions,
 } from '@pierre/diffs';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
-import { isJavaScriptTypeScriptPath } from '../../shared/diffIgnoredChars';
+import { isJavaScriptTypeScriptPath, normalizeComparableDiffText } from '../../shared/diffIgnoredChars';
 import { useSettings } from '../composables/useSettings';
-import { normalizeComparableDiffText } from '../lib/diffIgnoredChars';
 import type { HunkActionsConfig } from '../lib/hunkActions';
 
 const emit = defineEmits<{
@@ -25,6 +24,9 @@ const props = defineProps<{
     pathForLanguage?: string;
     original?: string;
     modified?: string;
+    /** Comparable view of both sides, supplied by the owner so they are normalized only once. */
+    normalizedOriginal?: string;
+    normalizedModified?: string;
     conflictFile?: string;
     diffViewMode?: 'changes' | 'full-file';
     diffIgnoredChars?: string;
@@ -76,10 +78,11 @@ function createFile(name: string, contents: string): FileContents {
     return { name, contents };
 }
 
-function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean) {
+function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean, normalizedPair?: { original: string; modified: string }) {
+    const hideWhitespace = !showWhitespaceChanges;
     const ignoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(name) };
-    const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, !showWhitespaceChanges, ignoreOptions);
-    const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, !showWhitespaceChanges, ignoreOptions);
+    const normalizedOriginal = normalizedPair?.original ?? normalizeComparableDiffText(original, ignoredChars, hideWhitespace, ignoreOptions).text;
+    const normalizedModified = normalizedPair?.modified ?? normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, ignoreOptions).text;
 
     const hasVisibleChanges = normalizedOriginal !== normalizedModified;
     const hideDecorations = original !== modified && !hasVisibleChanges;
@@ -121,8 +124,12 @@ const diffState = computed(() => {
     const name = props.pathForLanguage || 'diff.txt';
     const original = props.original ?? '';
     const modified = props.modified ?? '';
+    const normalizedPair =
+        props.normalizedOriginal !== undefined && props.normalizedModified !== undefined
+            ? { original: props.normalizedOriginal, modified: props.normalizedModified }
+            : undefined;
 
-    return createRenderedDiff(name, original, modified, props.diffIgnoredChars ?? '', props.showWhitespaceChanges ?? false);
+    return createRenderedDiff(name, original, modified, props.diffIgnoredChars ?? '', props.showWhitespaceChanges ?? false, normalizedPair);
 });
 
 type DiffOptions = UnresolvedFileOptions<undefined> & Pick<FileDiffOptions<undefined, undefined>, 'diffStyle'>;

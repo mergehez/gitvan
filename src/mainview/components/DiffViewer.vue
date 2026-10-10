@@ -112,6 +112,8 @@ function onVisibleDiffChange(hasVisibleChanges: boolean | undefined) {
             v-else
             :original="state?.original"
             :modified="state?.modified"
+            :normalized-original="state?.normalizedOriginal"
+            :normalized-modified="state?.normalizedModified"
             :path-for-language="state?.pathForLanguage"
             :diff-view-mode="settings.state.diffViewMode"
             :diff-ignored-chars="settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : ''"

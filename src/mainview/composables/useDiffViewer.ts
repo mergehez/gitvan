@@ -1,5 +1,5 @@
 import { computed, type MaybeRefOrGetter, toValue } from 'vue';
-import { areEquivalentIgnoringDiffChars, isJavaScriptTypeScriptPath } from '../../shared/diffIgnoredChars.ts';
+import { isJavaScriptTypeScriptPath, normalizeComparableDiffPair } from '../../shared/diffIgnoredChars.ts';
 import type { FileDiffData } from '../../shared/types.ts';
 import { formatBytes } from '../lib/utils.ts';
 import { useSettings } from './useSettings.ts';
@@ -17,6 +17,10 @@ export type DiffViewerState = {
     previewMessage: string | undefined;
     onlyWhitespaceChanges: boolean;
     noActualChange: boolean;
+    conflictMarkerCount: number;
+    /** The comparable view of both sides, so the diff renderer does not normalize them again. */
+    normalizedOriginal: string;
+    normalizedModified: string;
     metaItems: DiffViewerMetaItem[];
     originalSrc: string | undefined;
     modifiedSrc: string | undefined;
@@ -33,12 +37,14 @@ function hasOnlyWhitespaceChanges(original: string, modified: string) {
 export function hasNoActualDiffChanges(diff: FileDiffData, ignoredChars: string, showWhitespaceChanges: boolean) {
     const nonCodePreview = diff.entry.nonCodePreview?.kind === 'image' ? diff.entry.nonCodePreview : undefined;
 
-    return (
-        !diff.entry.previewMessage &&
-        !nonCodePreview &&
-        diff.entry.original !== diff.entry.modified &&
-        areEquivalentIgnoringDiffChars(diff.entry.original, diff.entry.modified, ignoredChars, !showWhitespaceChanges, { sortModuleImports: isJavaScriptTypeScriptPath(diff.path) })
-    );
+    if (diff.entry.previewMessage || nonCodePreview || diff.entry.original === diff.entry.modified) {
+        return false;
+    }
+
+    return !normalizeComparableDiffPair(diff.entry.original, diff.entry.modified, !showWhitespaceChanges, {
+        ignoredChars,
+        sortModuleImports: isJavaScriptTypeScriptPath(diff.path),
+    }).hasVisibleChanges;
 }
 
 export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) {
@@ -74,7 +80,15 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
         }
 
         const effectiveIgnored = settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '';
-        const noActualChange = hasNoActualDiffChanges(currentDiff, effectiveIgnored, settings.state.showWhitespaceChanges);
+
+        // One pass over both sides feeds the renderer, the "no actual change" badge and the
+        // conflict-marker count, instead of each of them normalizing the full pair again.
+        const diffPair = normalizeComparableDiffPair(currentDiff.entry.original, currentDiff.entry.modified, !settings.state.showWhitespaceChanges, {
+            ignoredChars: effectiveIgnored,
+            sortModuleImports: isJavaScriptTypeScriptPath(currentDiff.path),
+        });
+
+        const isComparable = !currentDiff.entry.previewMessage && !nonCodePreview && currentDiff.entry.original !== currentDiff.entry.modified;
 
         return {
             title: currentDiff.path,
@@ -82,8 +96,11 @@ export function useDiffViewer(diff: MaybeRefOrGetter<FileDiffData | undefined>) 
             modified: currentDiff.entry.modified,
             pathForLanguage: currentDiff.path,
             previewMessage: currentDiff.entry.previewMessage,
-            onlyWhitespaceChanges: !currentDiff.entry.previewMessage && !nonCodePreview && hasOnlyWhitespaceChanges(currentDiff.entry.original, currentDiff.entry.modified),
-            noActualChange,
+            onlyWhitespaceChanges: isComparable && hasOnlyWhitespaceChanges(currentDiff.entry.original, currentDiff.entry.modified),
+            noActualChange: isComparable && !diffPair.hasVisibleChanges,
+            conflictMarkerCount: diffPair.conflictMarkerCount,
+            normalizedOriginal: diffPair.original,
+            normalizedModified: diffPair.modified,
             metaItems: metaItems,
             originalSrc: nonCodePreview?.originalSrc,
             modifiedSrc: nonCodePreview?.modifiedSrc,

@@ -169,10 +169,7 @@ function onFileFilterKeydown(event: KeyboardEvent) {
     closeFileFilter();
 }
 
-const selectedDiffConflictCount = computed(() => {
-    const matches = repo.value.curDiff?.entry.modified.match(/^<<<<<<< /gm);
-    return matches?.length ?? 0;
-});
+const selectedDiffConflictCount = computed(() => baseSelectedDiffViewerState.value?.conflictMarkerCount ?? 0);
 const baseSelectedDiffViewerState = useDiffViewer(computed(() => repo.value.curDiff));
 const selectedStashDiffViewerState = useDiffViewer(computed(() => repo.value.currStashDiff));
 

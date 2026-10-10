@@ -54,12 +54,21 @@ const diffsDiffEditorStub = defineComponent({
             type: String,
             default: '',
         },
+        normalizedOriginal: {
+            type: String,
+            default: '',
+        },
+        normalizedModified: {
+            type: String,
+            default: '',
+        },
         hunkActionsConfig: {
             type: Object,
             default: undefined,
         },
     },
-    template: '<div data-testid="diffs-diff-editor" :data-has-hunk-config="String(Boolean(hunkActionsConfig))" :data-diff-ignored-chars="diffIgnoredChars">Diffs</div>',
+    template:
+        '<div data-testid="diffs-diff-editor" :data-has-hunk-config="String(Boolean(hunkActionsConfig))" :data-diff-ignored-chars="diffIgnoredChars" :data-normalized-original="normalizedOriginal" :data-normalized-modified="normalizedModified">Diffs</div>',
 });
 
 const monacoEditorSettingsButtonStub = {
@@ -68,16 +77,22 @@ const monacoEditorSettingsButtonStub = {
 };
 
 function mountDiffViewer(onlyWhitespaceChanges: boolean, noActualChange = false, hunkActionsConfig?: HunkActionsConfig) {
+    const original = 'one\nline\n';
+    const modified = onlyWhitespaceChanges ? 'one\nline  \n' : 'one\nchanged\n';
+
     return mount(DiffViewer, {
         props: {
             state: {
                 title: 'README.md',
-                original: 'one\nline\n',
-                modified: onlyWhitespaceChanges ? 'one\nline  \n' : 'one\nchanged\n',
+                original,
+                modified,
                 pathForLanguage: 'README.md',
                 previewMessage: undefined,
                 onlyWhitespaceChanges,
                 noActualChange,
+                conflictMarkerCount: 0,
+                normalizedOriginal: original.replace(/\s+/g, ''),
+                normalizedModified: modified.replace(/\s+/g, ''),
                 metaItems: [],
                 originalSrc: undefined,
                 modifiedSrc: undefined,
@@ -149,5 +164,14 @@ describe('DiffViewer', () => {
         const wrapper = mountDiffViewer(false);
 
         expect(wrapper.get('[data-testid="diffs-diff-editor"]').attributes('data-diff-ignored-chars')).toBe(',;"\'');
+    });
+
+    it('hands the comparable pair to the diff renderer instead of letting it normalize again', () => {
+        const wrapper = mountDiffViewer(true);
+
+        const editor = wrapper.get('[data-testid="diffs-diff-editor"]');
+
+        expect(editor.attributes('data-normalized-original')).toBe('oneline');
+        expect(editor.attributes('data-normalized-modified')).toBe('oneline');
     });
 });

@@ -2,6 +2,26 @@ export type DiffIgnoreOptions = {
     sortModuleImports?: boolean;
 };
 
+export type NormalizeDiffTextOptions = DiffIgnoreOptions & {
+    /** Ignored characters, already filtered by the caller's enabled setting. */
+    ignoredChars?: string;
+    /** Skip line maps when only the comparable text is needed. */
+    withLineMaps?: boolean;
+};
+
+export type ComparableDiffText = {
+    text: string;
+    /** Column of the original line that each normalized character came from. */
+    lineMaps: number[][];
+};
+
+export type ComparableDiffPair = {
+    original: string;
+    modified: string;
+    hasVisibleChanges: boolean;
+    conflictMarkerCount: number;
+};
+
 const moduleImportExtensions = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']);
 
 const preludeCommentPattern = /^(?:\/\/|\/\*|\*)/u;
@@ -113,40 +133,106 @@ export function orderModulePreludeLines(lines: string[]) {
     return [...ordered, ...lines.slice(index)];
 }
 
-export function normalizeComparableDiffText(value: string, ignoredChars: string, hideWhitespace: boolean, options: DiffIgnoreOptions = {}) {
+export function countConflictMarkers(value: string) {
+    return value.match(/^<<<<<<< /gm)?.length ?? 0;
+}
+
+export function normalizeComparableDiffText(value: string, ignoredChars: string, hideWhitespace: boolean, options: NormalizeDiffTextOptions = {}): ComparableDiffText {
     const ignored = new Set(normalizeDiffIgnoredChars(ignoredChars).split(''));
-    const lines = options.sortModuleImports === true ? orderModulePreludeLines(value.split('\n')) : value.split('\n');
+    const withLineMaps = options.withLineMaps === true;
+    const reorderImports = options.sortModuleImports === true;
 
-    return lines
-        .map((line) => {
-            const normalizedChars: string[] = [];
+    // Nothing would be stripped, so the input is already its own comparable text. Reordering the
+    // import preamble still has to run, and line maps are positional when they were asked for.
+    if (ignored.size === 0 && !hideWhitespace && !reorderImports) {
+        if (!withLineMaps) {
+            return { text: value, lineMaps: [] };
+        }
 
-            for (let index = 0; index < line.length; index += 1) {
-                const char = line[index]!;
+        return {
+            text: value,
+            lineMaps: value.split('\n').map((line) => (line.length === 0 ? [1] : [...Array.from({ length: line.length }, (_, index) => index + 1), line.length + 1])),
+        };
+    }
 
-                if (ignored.has(char)) {
-                    continue;
-                }
+    const lines = reorderImports ? orderModulePreludeLines(value.split('\n')) : value.split('\n');
+    const stripCharacters = ignored.size > 0 || hideWhitespace;
+    const normalizedLines: string[] = [];
+    const lineMaps: number[][] = [];
 
-                if (/\s/u.test(char) && (hideWhitespace || isIncidentalIgnoredWhitespace(line, index, ignored))) {
-                    continue;
-                }
+    for (const line of lines) {
+        if (!stripCharacters) {
+            normalizedLines.push(line);
 
-                normalizedChars.push(char);
+            if (withLineMaps) {
+                lineMaps.push(line.length === 0 ? [1] : [...Array.from({ length: line.length }, (_, index) => index + 1), line.length + 1]);
             }
 
-            return normalizedChars.join('');
-        })
-        .join('\n');
+            continue;
+        }
+
+        const normalizedChars: string[] = [];
+        const boundaryColumns: number[] = [];
+        let lastKeptColumnEnd = 1;
+
+        for (let index = 0; index < line.length; index += 1) {
+            const char = line[index]!;
+
+            if (ignored.has(char)) {
+                continue;
+            }
+
+            if (/\s/u.test(char) && (hideWhitespace || isIncidentalIgnoredWhitespace(line, index, ignored))) {
+                continue;
+            }
+
+            normalizedChars.push(char);
+
+            if (withLineMaps) {
+                boundaryColumns.push(index + 1);
+                lastKeptColumnEnd = index + 2;
+            }
+        }
+
+        if (withLineMaps) {
+            lineMaps.push(boundaryColumns.length > 0 ? [...boundaryColumns, lastKeptColumnEnd] : [1]);
+        }
+
+        normalizedLines.push(normalizedChars.join(''));
+    }
+
+    return { text: normalizedLines.join('\n'), lineMaps };
+}
+
+/**
+ * Normalizes both sides once and reports what the diff views ask about them: whether anything
+ * visible is left after the ignored characters and whitespace are stripped, and how many conflict
+ * markers the modified side carries.
+ */
+export function normalizeComparableDiffPair(
+    original: string,
+    modified: string,
+    hideWhitespace: boolean,
+    options: NormalizeDiffTextOptions = {}
+): ComparableDiffPair {
+    const normalizedOriginal = normalizeComparableDiffText(original, options.ignoredChars ?? '', hideWhitespace, options).text;
+    const normalizedModified = normalizeComparableDiffText(modified, options.ignoredChars ?? '', hideWhitespace, options).text;
+
+    return {
+        original: normalizedOriginal,
+        modified: normalizedModified,
+        hasVisibleChanges: hideWhitespace ? collapseAllDiffWhitespace(normalizedOriginal) !== collapseAllDiffWhitespace(normalizedModified) : normalizedOriginal !== normalizedModified,
+        conflictMarkerCount: countConflictMarkers(modified),
+    };
 }
 
 export function collapseAllDiffWhitespace(value: string) {
     return value.replace(/\s+/gu, '');
 }
 
-export function areEquivalentIgnoringDiffChars(original: string, modified: string, ignoredChars: string, hideWhitespace: boolean, options: DiffIgnoreOptions = {}) {
-    const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, hideWhitespace, options);
-    const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, options);
+export function areEquivalentComparableDiffText(original: string, modified: string, ignoredChars: string, hideWhitespace: boolean, options: DiffIgnoreOptions = {}) {
+    const normalizedOriginal = normalizeComparableDiffText(original, ignoredChars, hideWhitespace, options).text;
+    const normalizedModified = normalizeComparableDiffText(modified, ignoredChars, hideWhitespace, options).text;
 
     return hideWhitespace ? collapseAllDiffWhitespace(normalizedOriginal) === collapseAllDiffWhitespace(normalizedModified) : normalizedOriginal === normalizedModified;
 }

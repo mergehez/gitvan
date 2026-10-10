@@ -272,9 +272,7 @@ export function parseIncomingBranchFromMergeMessage(message: string | undefined)
     return undefined;
 }
 
-export function countConflictMarkers(fileContent: string) {
-    return fileContent.match(/^<<<<<<< /gm)?.length ?? 0;
-}
+export { countConflictMarkers } from '../../../shared/diffIgnoredChars.js';
 
 export function parseConflictMarkerPaths(checkOutput: string) {
     const suffix = ': leftover conflict marker';
