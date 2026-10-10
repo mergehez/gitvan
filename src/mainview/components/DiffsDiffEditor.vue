@@ -170,6 +170,23 @@ const diffOptions = computed<DiffOptions>(() => {
 
 let hunkActionsWrapper: HTMLElement;
 
+/** Bumped on every render, so anchors from a reused node are never taken for the current ones. */
+let renderEpoch = 0;
+
+// `setHunkAnchors` runs for the same diff more than once, so the patch is split once and kept
+// for the next request instead of re-scanning the whole patch per hunk.
+let cachedPatchText = '';
+let cachedPatchParts: string[] = [];
+
+function splitPatchOnce(fullPatch: string) {
+    if (fullPatch !== cachedPatchText) {
+        cachedPatchText = fullPatch;
+        cachedPatchParts = fullPatch.split(/^@@ /m);
+    }
+
+    return cachedPatchParts;
+}
+
 /**
  * Build a unified-diff patch covering only a single change block
  * (one @pierre/diffs ChangeContent), using the original git patch header.
@@ -183,16 +200,14 @@ let hunkActionsWrapper: HTMLElement;
  * approximate positions and recalculates counts from the patch content.
  */
 function buildChangeBlockPatch(
-    fullPatch: string,
+    patchParts: string[],
     rawHunk: { deletions: number; deletionLineIndex: number; additions: number; additionLineIndex: number },
     rendered: { deletionLines: string[]; additionLines: string[] }
 ): string {
-    if (!fullPatch) return '';
     if (!rendered) return '';
 
-    const parts = fullPatch.split(/^@@ /m);
-    const header = parts[0];
-    if (!header) return '';
+    const header = patchParts[0];
+    if (header === undefined) return '';
 
     const oldLine = rawHunk.deletionLineIndex + 1;
     const newLine = rawHunk.additionLineIndex + 1;
@@ -311,7 +326,7 @@ function addHunkElsToDom(label: string, addLine: HTMLElement, i: number) {
     const rawHunk = rendered.rawHunks[i];
     if (!rawHunk) return;
     const fullPatch = props.hunkActionsConfig?.patch ?? '';
-    const hunkPatch = buildChangeBlockPatch(fullPatch, rawHunk, rendered);
+    const hunkPatch = buildChangeBlockPatch(splitPatchOnce(fullPatch), rawHunk, rendered);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = '⋯';
@@ -358,11 +373,26 @@ function addHunkElsToDom(label: string, addLine: HTMLElement, i: number) {
     addLine.querySelectorAll('.gitvan-hunk-button').forEach((el) => el.remove());
     addLine.appendChild(btn);
 }
+let anchoredSignature = '';
+
+/**
+ * Identifies the anchors a rendered node carries. The render epoch covers nodes the renderer
+ * reuses across renders, so a rewritten diff is rebuilt even when its patch text is unchanged.
+ */
+function anchorSignature(patch: string) {
+    return [renderEpoch, props.original ?? '', props.modified ?? '', patch].join('\u0000');
+}
+
 function setHunkAnchors() {
     const sr = renderedNodeRef.value?.shadowRoot;
     const host = sr?.querySelector<HTMLElement>('pre[data-diff]');
     const cfg = props.hunkActionsConfig;
     if (!sr || !host || !cfg || cfg.oldSizeBytes <= 0 || cfg.newSizeBytes <= 0) return;
+
+    // The post-render callback and the reveal path both land here, so the pass is keyed on what is
+    // rendered and only runs again when that changes.
+    const signature = anchorSignature(cfg.patch);
+    if (signature === anchoredSignature) return;
 
     // we add actions wrapper only once, and populate its content on button hover, so that we don't have 100+ action wrappers in the DOM for large diffs
     let actions = host.querySelector<HTMLElement>('.gitvan-hunk-actions');
@@ -409,6 +439,8 @@ function setHunkAnchors() {
         }
         addHunkElsToDom(`#${i + 1} (${hunk.hunkSpecs})`, addLine, i);
     }
+
+    anchoredSignature = signature;
 }
 
 async function revealTargetLine() {
@@ -438,6 +470,8 @@ function renderDiff() {
     if (!host) {
         return;
     }
+
+    renderEpoch += 1;
 
     const instance = ensureDiffInstance();
     const opts = diffOptions.value;
