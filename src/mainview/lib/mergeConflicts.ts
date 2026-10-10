@@ -33,6 +33,30 @@ function countLines(input: string) {
 export function parseMergeConflictBlocks(content: string): MergeConflictBlock[] {
     const matches: MergeConflictBlock[] = [];
 
+    // The start offset of every line, built once, so a block's line number is a lookup instead
+    // of re-scanning the whole prefix for each block.
+    const lineStarts = [0];
+    for (let newlineIndex = content.indexOf('\n'); newlineIndex !== -1; newlineIndex = content.indexOf('\n', newlineIndex + 1)) {
+        lineStarts.push(newlineIndex + 1);
+    }
+
+    const lineNumberAt = (offset: number) => {
+        let low = 0;
+        let high = lineStarts.length - 1;
+
+        while (low < high) {
+            const middle = (low + high + 1) >> 1;
+
+            if (lineStarts[middle]! <= offset) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+
+        return low + 1;
+    };
+
     for (const match of content.matchAll(conflictPattern)) {
         const startOffset = match.index ?? 0;
         const fullMatch = match[0] ?? '';
@@ -50,7 +74,7 @@ export function parseMergeConflictBlocks(content: string): MergeConflictBlock[] 
         const incomingEndOffset = incomingStartOffset + incoming.length;
         const incomingHeaderStartOffset = incomingEndOffset;
         const incomingHeaderEndOffset = incomingHeaderStartOffset + incomingHeader.length;
-        const startLine = countLines(content.slice(0, startOffset)) + 1;
+        const startLine = lineNumberAt(startOffset);
         const endLine = startLine + countLines(fullMatch);
 
         matches.push({

@@ -23,11 +23,23 @@ const emit = defineEmits<{
 }>();
 
 type ConflictActionZone = {
-    domNode: HTMLDivElement;
-    zoneId: string | undefined;
+    /** The conflict text the zone was built for; an edited conflict gets a fresh zone. */
+    signature: string;
+    /** The block this zone's buttons act on, updated when an earlier conflict is resolved. */
+    blockIndex: number;
     afterLineNumber: number;
+    zoneId: string | undefined;
+    viewZone: MonacoModuleType.editor.IViewZone | undefined;
+    domNode: HTMLDivElement;
     dispose: () => void;
 };
+
+const conflictActions: Array<{ label: string; action: 'current' | 'incoming' | 'both' | 'compare' }> = [
+    { label: 'Accept Mine', action: 'current' },
+    { label: 'Accept Incoming', action: 'incoming' },
+    { label: 'Accept Both', action: 'both' },
+    { label: 'Compare Changes', action: 'compare' },
+];
 
 configureMonacoEnvironment();
 
@@ -115,26 +127,34 @@ function applyConflictResolution(blockIndex: number, resolution: 'current' | 'in
 
     comparedBlockIndex.value = undefined;
     modelValue.value = nextValue;
-    syncEditorChrome();
+    scheduleEditorChromeSync();
     editor.focus();
 }
 
 function createZone(block: MergeConflictBlock): ConflictActionZone {
-    const domNode = document.createElement('div');
-    domNode.className = 'merge-conflict-actions';
-    domNode.style.pointerEvents = 'auto';
+    const actionsNode = document.createElement('div');
+    actionsNode.className = 'merge-conflict-actions';
+    actionsNode.style.pointerEvents = 'auto';
 
-    const actions: Array<{
-        label: string;
-        action: 'current' | 'incoming' | 'both' | 'compare';
-    }> = [
-        { label: 'Accept Mine', action: 'current' },
-        { label: 'Accept Incoming', action: 'incoming' },
-        { label: 'Accept Both', action: 'both' },
-        { label: 'Compare Changes', action: 'compare' },
-    ];
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('merge-conflict-actions-container');
+    wrapper.appendChild(actionsNode);
 
-    const listeners = actions.map(({ label, action }) => {
+    const listeners: Array<() => void> = [];
+    const zone: ConflictActionZone = {
+        signature: block.fullMatch,
+        blockIndex: block.index,
+        afterLineNumber: Math.max(0, block.startLine - 1),
+        zoneId: undefined,
+        viewZone: undefined,
+        domNode: wrapper,
+        dispose() {
+            listeners.forEach((cleanup) => cleanup());
+            wrapper.remove();
+        },
+    };
+
+    for (const { label, action } of conflictActions) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'merge-conflict-actions__button';
@@ -148,29 +168,20 @@ function createZone(block: MergeConflictBlock): ConflictActionZone {
             event.stopPropagation();
 
             if (action === 'compare') {
-                comparedBlockIndex.value = block.index;
+                comparedBlockIndex.value = zone.blockIndex;
                 return;
             }
 
-            applyConflictResolution(block.index, action);
+            // The block is re-read from the model, so a stale index would still be wrong; the
+            // zone keeps its target index current across edits above it.
+            applyConflictResolution(zone.blockIndex, action);
         });
-        domNode.appendChild(button);
+        actionsNode.appendChild(button);
 
-        return () => button.remove();
-    });
+        listeners.push(() => button.remove());
+    }
 
-    const domNode2 = document.createElement('div');
-    domNode2.classList.add('merge-conflict-actions-container');
-    domNode2.appendChild(domNode);
-    return {
-        domNode: domNode2,
-        zoneId: undefined,
-        afterLineNumber: Math.max(0, block.startLine - 1),
-        dispose() {
-            listeners.forEach((cleanup) => cleanup());
-            domNode2.remove();
-        },
-    };
+    return zone;
 }
 
 function applyEditorDecorations(blocks: MergeConflictBlock[]) {
@@ -269,24 +280,91 @@ function syncEditorChrome() {
         return;
     }
 
-    clearZones();
-    const nextZones = blocks.map((block) => createZone(block));
+    // Zones are matched to conflicts by their content, so an unchanged conflict keeps its
+    // buttons and their listeners; only its anchor line has to move.
+    const reusableBySignature = new Map<string, ConflictActionZone[]>();
+    for (const zone of zoneRefs.value) {
+        const queue = reusableBySignature.get(zone.signature);
+
+        if (queue) {
+            queue.push(zone);
+        } else {
+            reusableBySignature.set(zone.signature, [zone]);
+        }
+    }
+
+    const nextZones: ConflictActionZone[] = [];
+    const removedZones: ConflictActionZone[] = [];
+
     editor.changeViewZones((accessor) => {
-        nextZones.forEach((zone) => {
-            zone.zoneId = accessor.addZone({
-                afterLineNumber: zone.afterLineNumber,
+        for (const block of blocks) {
+            const afterLineNumber = Math.max(0, block.startLine - 1);
+            const reused = reusableBySignature.get(block.fullMatch)?.shift();
+
+            if (reused) {
+                reused.blockIndex = block.index;
+
+                if (reused.afterLineNumber !== afterLineNumber && reused.viewZone && reused.zoneId) {
+                    reused.afterLineNumber = afterLineNumber;
+                    reused.viewZone.afterLineNumber = afterLineNumber;
+                    accessor.layoutZone(reused.zoneId);
+                }
+
+                nextZones.push(reused);
+                continue;
+            }
+
+            const zone = createZone(block);
+            zone.viewZone = {
+                afterLineNumber,
                 heightInPx: 32,
                 suppressMouseDown: true,
                 domNode: zone.domNode,
-            });
-        });
+            };
+            zone.zoneId = accessor.addZone(zone.viewZone);
+            nextZones.push(zone);
+        }
+
+        // Whatever is left belongs to a conflict that is gone.
+        for (const queue of reusableBySignature.values()) {
+            for (const zone of queue) {
+                if (zone.zoneId) {
+                    accessor.removeZone(zone.zoneId);
+                }
+
+                removedZones.push(zone);
+            }
+        }
     });
+
+    removedZones.forEach((zone) => zone.dispose());
     zoneRefs.value = nextZones;
     applyEditorDecorations(blocks);
     emit('conflict-count-change', blocks.length);
 
     if (comparedBlockIndex.value !== undefined && !blocks.some((block) => block.index === comparedBlockIndex.value)) {
         comparedBlockIndex.value = undefined;
+    }
+}
+
+let chromeFrameHandle: number | undefined;
+
+/** One chrome sync per frame, so typing does not re-parse and re-zone per keystroke. */
+function scheduleEditorChromeSync() {
+    if (chromeFrameHandle !== undefined) {
+        return;
+    }
+
+    chromeFrameHandle = requestAnimationFrame(() => {
+        chromeFrameHandle = undefined;
+        syncEditorChrome();
+    });
+}
+
+function cancelScheduledEditorChromeSync() {
+    if (chromeFrameHandle !== undefined) {
+        cancelAnimationFrame(chromeFrameHandle);
+        chromeFrameHandle = undefined;
     }
 }
 
@@ -310,13 +388,14 @@ async function ensureEditor() {
         }
 
         modelValue.value = modelRef.value?.getValue() ?? '';
-        syncEditorChrome();
+        scheduleEditorChromeSync();
     });
 
     syncEditorChrome();
 }
 
 function disposeEditor() {
+    cancelScheduledEditorChromeSync();
     decorationIdsRef.value = [];
     clearZones();
     editorRef.value?.dispose();
@@ -336,7 +415,7 @@ watch(
         applyingExternalValue.value = true;
         modelRef.value.setValue(nextValue);
         applyingExternalValue.value = false;
-        syncEditorChrome();
+        scheduleEditorChromeSync();
     }
 );
 
