@@ -91,6 +91,8 @@ test.describe('explorer view', () => {
         await selectSnapshot(page, 'Initial baseline');
 
         await expect(page.getByTestId('explorer-file-title')).toHaveText('README.md');
+        // Switching snapshots remounts the editor, and Monaco briefly reports two line layers.
+        await expect(previewText(page)).toHaveCount(1);
         await expect(previewText(page)).toContainText('Deep history lab');
     });
 

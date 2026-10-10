@@ -24,6 +24,7 @@ const monacoModuleRef = shallowRef<MonacoModule>();
 const editorRef = shallowRef<MonacoEditorModule.editor.IStandaloneCodeEditor>();
 const modelRef = shallowRef<MonacoEditorModule.editor.ITextModel>();
 let applyingExternalValue = false;
+let isCreatingEditor = false;
 // Set while the editor's own `onDidChangeContent` is the reason `modelValue` changed, so the
 // watcher can skip the full-model comparison and copy it would otherwise do per keystroke.
 let valueWrittenByEditor = false;
@@ -36,18 +37,27 @@ async function getMonacoModule() {
 }
 
 async function ensureEditor() {
-    if (!editorContainerRef.value || editorRef.value) return;
-    const monaco = await getMonacoModule();
-    configureMonaco(monaco);
-    monaco.editor.setTheme('vs-dark');
-    modelRef.value = monaco.editor.createModel(modelValue.value ?? '', finalLanguage.value);
-    editorRef.value = monaco.editor.create(editorContainerRef.value, options.value);
-    editorRef.value.setModel(modelRef.value);
-    modelRef.value.onDidChangeContent(() => {
-        if (applyingExternalValue) return;
-        valueWrittenByEditor = true;
-        modelValue.value = modelRef.value?.getValue() ?? '';
-    });
+    // The module loads asynchronously, and Vue can fire both the mount and the sync watcher before
+    // it resolves. Without this guard each of them creates an editor and the extra one is orphaned.
+    if (!editorContainerRef.value || editorRef.value || isCreatingEditor) return;
+
+    isCreatingEditor = true;
+
+    try {
+        const monaco = await getMonacoModule();
+        configureMonaco(monaco);
+        monaco.editor.setTheme('vs-dark');
+        modelRef.value = monaco.editor.createModel(modelValue.value ?? '', finalLanguage.value);
+        editorRef.value = monaco.editor.create(editorContainerRef.value, options.value);
+        editorRef.value.setModel(modelRef.value);
+        modelRef.value.onDidChangeContent(() => {
+            if (applyingExternalValue) return;
+            valueWrittenByEditor = true;
+            modelValue.value = modelRef.value?.getValue() ?? '';
+        });
+    } finally {
+        isCreatingEditor = false;
+    }
 }
 
 function disposeEditor() {
