@@ -39,7 +39,8 @@ Bun is the primary app runtime and script runner.
 Run tests:
 
 ```bash
-bun run test:ui
+bun run test:ui        # unit and component specs
+bun run test:e2e       # browser specs; owns its ports and a fresh database per run
 ```
 
 Build the app:
@@ -48,20 +49,13 @@ Build the app:
 bun run build
 ```
 
-Optional channel builds:
-
-```bash
-bun run build:canary
-bun run build:stable
-```
-
 Or use the combined validation script:
 
 ```bash
 bun run release:validate
 ```
 
-This runs the stable release-facing test suite and the production build. It intentionally excludes `tests/App.real.spec.ts`, which depends on local real-app fixture data and is better treated as an environment-specific integration check.
+This runs `bun run test:validate` (the unit and component suites plus `vue-tsc --noEmit`) and then the production build. It is the gate a release has to pass: `bun do.ts release` runs it for you before it builds, unless `--skip-tests` is passed.
 
 ## Build A macOS Release
 
@@ -71,18 +65,18 @@ Current local build:
 bun run release:mac
 ```
 
-This runs the Electrobun stable build wrapper, ensures the macOS iconset exists in `assets/`, produces the app bundle under `build/`, copies the built app to `/Applications`, and generates distribution artifacts under `artifacts/`.
+This runs the validation gate above, ensures the macOS iconset exists in `assets/`, builds with electron-builder, installs the app bundle to `/Applications`, and produces the DMG under `build/`.
 
 For a signed local build:
 
 ```bash
-bun do build --signed
+bun run release:mac:signed
 ```
 
 For a signed and notarized local build:
 
 ```bash
-bun do build --notarize
+bun run release:mac:notarize
 ```
 
 ## Release Hygiene
@@ -90,7 +84,7 @@ bun do build --notarize
 Run the release audit:
 
 ```bash
-bun do audit
+bun run release:audit
 ```
 
 This audit scans tracked files for publish-sensitive text, shows the current git status, and fails only when it finds actual blockers.
@@ -112,14 +106,13 @@ Recommended flow:
 1. Update the version in `package.json`.
 2. Update `CHANGELOG.md` for the release.
 3. Run `bun install` if dependencies changed.
-4. Run `bun do audit`.
-5. Run `bun run release:validate`.
-6. Build the public artifact with `bun run release:mac`.
-7. Confirm the app bundle exists under `build/` and the DMG exists under `artifacts/`.
-8. Create and push the matching git tag, for example `v0.0.1`.
-9. Create a GitHub Release from that tag.
-10. Use the matching `CHANGELOG.md` entry as the release notes.
-11. Upload the generated DMG from `artifacts/` to the release.
+4. Run `bun do.ts release:audit`.
+5. Build the public artifact with `bun run release:mac`; it runs `bun run release:validate` first and stops if a spec or the typecheck fails.
+6. Confirm the app bundle exists under `build/` and the DMG exists next to it.
+7. Create and push the matching git tag, for example `v0.0.1`.
+8. Create a GitHub Release from that tag.
+9. Use the matching `CHANGELOG.md` entry as the release notes.
+10. Upload the generated DMG from `build/` to the release.
 
 ## Signing And Notarization
 
