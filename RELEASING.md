@@ -41,6 +41,7 @@ Run tests:
 ```bash
 bun run test:ui        # unit and component specs
 bun run test:e2e       # browser specs; owns its ports and a fresh database per run
+bun run test:electron  # builds the app, then launches the packaged bundle in the Electron shell
 ```
 
 Build the app:

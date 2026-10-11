@@ -61,6 +61,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 ### Tests
 
+- **[SPEC]** Launched the packaged app with Playwright's `_electron`: the built renderer over the file protocol, window creation, the application menu, Settings opened from the real menu item through the native-command channel, a backend call through the preload bridge, a native-only method, and the integrated terminal on a real PTY before the app quits.
 - **[SPEC]** Covered the Electron window and preload layer: the handler generator and the API request wrapper, the `api:<name>` and `renderer:diagnostic` registration, the window size policy, the dev-server probe and its fallback, the missing-build error, and the preload bridge fan-out with its unsubscribe.
 - **[SPEC]** Covered the native methods and the application menu: picker cancellation and `.app`/`.exe` label trimming, the two `openFileInEditor` existence guards, both reveal modes, the per-platform terminal fallback list and the menu template with its settings accelerator.
 - **[SPEC]** Covered the integrated terminal's PTY lifecycle against a real shell: spawn and shell resolution, the `data`/`exit` events, write, resize and the SIGHUP close. The PTY cases stand down only under a sandbox that refuses `posix_openpt`.
@@ -112,10 +113,6 @@ one flat list says both how much it matters and what writing it means. The `[BRO
 come first within each marker because they cover the flows a user actually runs. A suite that
 now exists is not listed here; it moves to **Done** with `[SPEC]`.
 
-- **[NOT_URGENT] [BROWSER]** The Electron shell and the packaged app have no end-to-end spec.
-    - What it is: `playwright.config.ts` boots `bun run dev`, so no spec ever launches Electron, and the preload bridge, the IPC registration, window creation, the application menu and the built bundle (`src/electron/main.ts`, `src/electron/preload.ts`, `src/electronUtils/mainProloadHelpers.ts:36,169`) run only when a person starts the app. `native-boundary.spec.ts` proves the opposite direction — that those methods are unavailable in browser dev mode.
-    - How it will be implemented: launch the app with Playwright's `_electron`, open a sandbox lab, drive one native action through the real preload bridge, open and close the integrated terminal and quit; point the same spec at the built bundle behind the release script.
-
 - **[NOT_PLANNED] [HARNESS]** No CI. The release path runs the suites instead.
     - What it is: this is a local macOS release, so `bun do.ts release` now runs `bun run test:validate` (the unit and component suites plus `vue-tsc --noEmit`) before it builds, and aborts the release on the first failure. `--skip-tests` escapes the gate for a build that does not ship.
     - Why it is deliberate: a CI service would have to hold the signing and notarization credentials the release already needs locally, and would answer the same question a gate on the only path to a release answers. There is no hosted runner to keep green, and no provider or coverage threshold to configure.
@@ -151,4 +148,6 @@ now exists is not listed here; it moves to **Done** with `[SPEC]`.
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and
 `bun run test:e2e` (Playwright, browser). The browser run owns its own ports and a fresh
 database per run, so it never touches the developer's app data. The keychain spec joins the unit
-run only with `GITVAN_KEYCHAIN_TESTS=1`.
+run only with `GITVAN_KEYCHAIN_TESTS=1`. The shell spec is separate — `bun run test:electron`
+builds the app and launches the packaged bundle, because launching the app is not something the
+browser run should do behind a `bun run test:e2e`.
