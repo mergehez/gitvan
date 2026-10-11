@@ -10,9 +10,9 @@ import {
 import type { IntegratedTerminalEvent } from '../../../../shared/types.js';
 
 /**
- * The lifecycle cases below need a real PTY. `node-pty` shells out to its `spawn-helper` binary,
- * which some hosts (notably newer macOS builds) refuse to run; the suite then skips instead of
- * failing, and the pure shell-resolution cases still run everywhere.
+ * The lifecycle cases below need a real PTY. A sandboxed runner (the agent shell this suite is
+ * sometimes started from) refuses `posix_openpt` outright, so the suite probes it once and skips
+ * the PTY cases there rather than failing; the shell-resolution and event-wiring cases still run.
  */
 function detectPtySupport() {
     try {

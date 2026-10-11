@@ -119,7 +119,7 @@ come first within each marker because they cover the flows a user actually runs.
 - [x] **[NOT_URGENT] [BACKEND UNIT]** `integratedTerminal.ts` PTY lifecycle.
     - What it is: shell resolution, spawn, the `data`/`exit` events, write, resize and the SIGHUP close. A component spec can only stub the modal around it.
     - How it will be implemented: spawn a real shell through node-pty, run one command and assert its output arrives, then resize, write and close.
-    - Note: the PTY cases skip themselves on hosts whose `spawn-helper` cannot run; the shell-resolution and event-wiring cases run everywhere.
+    - Note: the PTY cases skip themselves only under a sandbox that refuses `posix_openpt`; the shell-resolution and event-wiring cases run everywhere.
 
 - [x] **[NOT_URGENT] [BACKEND UNIT]** The Keychain wrapper against the real `security` CLI.
     - What it is: `auth.ts` is only exercised with a mocked `executeCommand` and, in the browser run, a fake `security` earlier on `PATH` (`playwright/support/fakeKeychain.ts`), so the real add/find/delete and the missing-entry exit code never run.

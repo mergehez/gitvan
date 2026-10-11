@@ -14,7 +14,8 @@ import {
  *     GITVAN_KEYCHAIN_TESTS=1 bun run test:ui src/mainview/tests/backend/services/auth-keychain.spec.ts
  *
  * They write under a throwaway service name and remove what they created, so an opted-in run
- * never touches the `Gitvan` entries the app itself reads.
+ * never touches the `Gitvan` entries the app itself reads. A sandboxed runner that forbids the
+ * keychain keeps them skipped through the probe below.
  */
 const optedIn = process.env.GITVAN_KEYCHAIN_TESTS === '1';
 const accountsOnThisHost = new Set<number>();
@@ -35,8 +36,7 @@ async function probeRealKeychain() {
 const keychainWorks = optedIn && process.platform === 'darwin' && (await probeRealKeychain());
 
 afterAll(async () => {
-    if (!keychainWorks) return;
-
+    // Deleting an entry that is not there is tolerated, so this is safe even when the probe failed.
     for (const accountId of accountsOnThisHost) {
         await deleteAccountAccessToken(accountId, { serviceName }).catch(() => {});
     }
