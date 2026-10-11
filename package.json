@@ -20,8 +20,8 @@
     "scripts": {
         "build": "bun install && vite build && bun run build:electron",
         "build:electron": "electron-builder build --config electron.config.js --arm64",
-        "dev": "vite",
-        "dev2": "vite --mode desktop",
+        "dev": "bun scripts/dev.ts",
+        "dev2": "bun scripts/dev.ts --mode desktop",
         "test:ui": "vitest run",
         "test:validate": "vitest run && vue-tsc --noEmit",
         "release:audit": "bun do.ts audit",
@@ -30,7 +30,7 @@
         "release:mac:signed": "bun do.ts release --signed",
         "release:mac:notarize": "bun do.ts release --notarize",
         "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit",
-        "test:e2e": "playwright test",
+        "test:e2e": "bun scripts/dev.ts --reap-only --api-port 5276 --vue-port 5277 && playwright test",
         "test:electron": "bun run build && playwright test --config playwright/electron.config.ts"
     },
     "dependencies": {
