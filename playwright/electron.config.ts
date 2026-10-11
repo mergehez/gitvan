@@ -44,7 +44,8 @@ export default defineConfig({
         {
             // The sign-in and discovery flows must never reach a real provider, so the stub the
             // app is pointed at has to be up even though this spec does not drive it.
-            command: `bun run playwright/support/providerStub.ts`,
+            // A `webServer` command runs from this config's directory, like `globalTeardown`.
+            command: `bun run support/providerStub.ts`,
             url: `${providerStubBase}/__control`,
             reuseExistingServer: true,
             timeout: 30_000,
