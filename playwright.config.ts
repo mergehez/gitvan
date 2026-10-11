@@ -66,6 +66,8 @@ export default defineConfig({
             // The UI port answers before the backend is mounted, and the app cannot bootstrap
             // without it, so wait on the backend health endpoint instead.
             url: `${apiBaseUrl}/health`,
+            // `bun run test:e2e` clears these ports before Playwright probes them, so there is
+            // normally nothing to reuse; allowing it keeps a hand-started session usable.
             reuseExistingServer: true,
             timeout: 120_000,
             env: {
