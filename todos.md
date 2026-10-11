@@ -116,9 +116,9 @@ now exists is not listed here; it moves to **Done** with `[SPEC]`.
     - What it is: `playwright.config.ts` boots `bun run dev`, so no spec ever launches Electron, and the preload bridge, the IPC registration, window creation, the application menu and the built bundle (`src/electron/main.ts`, `src/electron/preload.ts`, `src/electronUtils/mainProloadHelpers.ts:36,169`) run only when a person starts the app. `native-boundary.spec.ts` proves the opposite direction — that those methods are unavailable in browser dev mode.
     - How it will be implemented: launch the app with Playwright's `_electron`, open a sandbox lab, drive one native action through the real preload bridge, open and close the integrated terminal and quit; point the same spec at the built bundle behind the release script.
 
-- **[NOT_URGENT] [HARNESS]** Run the suites in CI.
-    - What it is: `bun run test:ui`, `bun run test:e2e` and `bunx vue-tsc --noEmit` are not enforced anywhere, and `vite build` does not typecheck, so a green local run is the only signal there is. No coverage provider or threshold is configured either.
-    - How it will be implemented: one CI job per suite, reusing the commands in `package.json` and the browser run's own ports and temp database, with `@vitest/coverage-v8` thresholds and the Electron spec above added once it exists.
+- **[NOT_PLANNED] [HARNESS]** No CI. The release path runs the suites instead.
+    - What it is: this is a local macOS release, so `bun do.ts release` now runs `bun run test:validate` (the unit and component suites plus `vue-tsc --noEmit`) before it builds, and aborts the release on the first failure. `--skip-tests` escapes the gate for a build that does not ship.
+    - Why it is deliberate: a CI service would have to hold the signing and notarization credentials the release already needs locally, and would answer the same question a gate on the only path to a release answers. There is no hosted runner to keep green, and no provider or coverage threshold to configure.
 
 - **[NOT_PLANNED] [BROWSER]** The Explorer's "Select a file to inspect the committed contents." message stays uncovered.
     - What it is: loading a snapshot always selects its first file, so the message is unreachable and nothing covers it. The empty states ("No commits found.", "No committed files found") have specs through the empty lab.
