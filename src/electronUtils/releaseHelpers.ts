@@ -288,8 +288,18 @@ async function main() {
     const shouldNotarize = process.argv.includes('--notarize');
     const shouldSign = shouldNotarize || process.argv.includes('--signed');
     const shouldInstall = !process.argv.includes('--no-install');
+    const shouldSkipTests = process.argv.includes('--skip-tests');
 
     await ensureMacIconset();
+
+    // There is no CI here, so the release path is the only place the suites can be enforced.
+    if (shouldSkipTests) {
+        console.log('Skipping the test suite and typecheck (--skip-tests).');
+    } else {
+        console.log('Running the test suite and typecheck...');
+        await runCommand('bun', ['run', 'test:validate']);
+    }
+
     const env = prepareElectronEnv(shouldSign, shouldNotarize);
 
     if (shouldNotarize) {
