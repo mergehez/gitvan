@@ -1262,16 +1262,15 @@ const _useRepository = (repo: Repo) => {
             toast.showSuccessToast(isAmending ? 'Commit amended.' : 'Commit created.');
         },
         async beginAmendSelectedCommit() {
-            if (!this.history?.commits.length) {
-                await this.loadHistory();
-            }
-
-            const latestCommit = this.history?.commits[0];
+            // The amend target is the branch tip, and the page this repository holds is only
+            // reloaded while the History view is active, so it can still point at an older commit.
+            const latestPage = await tasks.getHistory.run({ repoId: this.id, limit: 1 });
+            const latestCommit = latestPage.commits[0];
             if (!latestCommit?.isUnpushed) {
                 return;
             }
 
-            if (this.currCommitSha !== latestCommit.sha) {
+            if (this.currCommitSha !== latestCommit.sha || !this.currCommit) {
                 await this.selectCommit(latestCommit.sha);
             }
 

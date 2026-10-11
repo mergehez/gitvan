@@ -82,4 +82,37 @@ test.describe('committing a change', () => {
         await expect(commitRows(page)).toHaveCount(1);
         await expect(commitRows(page).first()).toContainText('Amended from the browser');
     });
+
+    test('amends the commit made in this session, not an older cached one', async ({ page }) => {
+        await openChangesView(page);
+
+        // Visiting History is what fills the commit page the Changes view then never reloads.
+        await openHistoryView(page);
+        await page.getByRole('button', { name: 'Changes', exact: true }).click();
+        await expect(page.getByTestId('commit-summary-input')).toBeVisible();
+
+        await page.getByTestId('commit-summary-input').fill('Commit from the browser');
+        await page.getByTestId('commit-submit').click();
+        await expect(changeRow(page, 'staged', 'first.txt')).toBeHidden();
+
+        // Something staged keeps the amend button reachable in the staged header.
+        await runChangeRowAction(page, 'unstaged', 'second.txt', 'Stage File');
+        await expect(changeRow(page, 'staged', 'second.txt')).toBeVisible();
+
+        await page.getByTestId('changes-amend-latest').click();
+        await expect(page.getByText('Amending the latest unpushed commit')).toBeVisible();
+
+        const summary = page.getByTestId('commit-summary-input');
+        await expect(summary).toHaveValue('Commit from the browser');
+        await summary.fill('Amended after the commit');
+        await page.getByTestId('commit-submit').click();
+
+        await openHistoryView(page);
+        await expect(commitRows(page).first()).toContainText('Amended after the commit');
+
+        // The amend rewrote the commit this session made, so the baseline is still underneath it.
+        await page.getByTestId('history-load-more').getByRole('button').click();
+        await expect(commitRows(page)).toHaveCount(2);
+        await expect(commitRows(page).nth(1)).toContainText('Initial baseline');
+    });
 });

@@ -121,7 +121,7 @@ function change(path: string, stagedStatus: FileChangeEntry['stagedStatus'] = 'm
     };
 }
 
-function commit(sha: string): CommitSummary {
+function commit(sha: string, isUnpushed = false): CommitSummary {
     return {
         sha,
         shortSha: sha.slice(0, 7),
@@ -131,7 +131,7 @@ function commit(sha: string): CommitSummary {
         authoredAt: '2026-07-25T00:00:00.000Z',
         refs: [],
         tags: [],
-        isUnpushed: false,
+        isUnpushed,
     };
 }
 
@@ -244,6 +244,39 @@ describe('useRepo commit form', () => {
         repo.cancelAmendCommit();
 
         expect(repo.commitForm).toMatchObject({ amend: false, summary: '', description: '' });
+    });
+});
+
+describe('useRepo amend target', () => {
+    it('fills the form from the branch tip instead of the cached history page', async () => {
+        const repo = useRepo(createRepo());
+        // Nothing reloads this page while the Changes view is active, so it can still point
+        // at the commit that was the tip before the last one was created.
+        repo.history = { commits: [commit('old', true)], hasMore: false };
+        runFor('getHistory').mockResolvedValue({ commits: [commit('new', true)], hasMore: false });
+        runFor('getCommitDetail').mockImplementation(async ({ commitSha }: { commitSha: string }) => ({
+            sha: commitSha,
+            summary: commitSha === 'new' ? 'Latest message' : 'Older message',
+            body: '',
+            files: [],
+        }));
+
+        await repo.beginAmendSelectedCommit();
+
+        expect(repo.commitForm).toMatchObject({ amend: true, summary: 'Latest message' });
+        expect(runFor('getHistory')).toHaveBeenCalledWith({ repoId: repo.id, limit: 1 });
+    });
+
+    it('refuses to amend when the branch tip is not unpushed', async () => {
+        const repo = useRepo(createRepo());
+        // The cached page still says the tip is local, but the branch has been pushed since.
+        repo.history = { commits: [commit('old', true)], hasMore: false };
+        runFor('getHistory').mockResolvedValue({ commits: [commit('new', false)], hasMore: false });
+
+        await repo.beginAmendSelectedCommit();
+
+        expect(repo.commitForm).toMatchObject({ amend: false, summary: '' });
+        expect(runFor('getCommitDetail')).not.toHaveBeenCalled();
     });
 });
 

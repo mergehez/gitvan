@@ -58,6 +58,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Normalized the diff pair once per diff and reused it for the badge, the renderer and the conflict count.
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
 - Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
+- Made the amend button read the branch tip instead of the history page the Changes view never reloads.
 
 ### Tests
 
