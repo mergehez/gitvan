@@ -113,6 +113,8 @@ const _useRepository = (repo: Repo) => {
     let fileHistoryToken = 0;
     // Monotonic token so a slow diff cannot overwrite the file selected after it.
     let diffRequestToken = 0;
+    // Monotonic token so a slow changes read cannot overwrite a newer one.
+    let changesRequestToken = 0;
     // The last repository snapshot applied here, so an unchanged one is not written again.
     let appliedRepo: Repo = repo;
 
@@ -501,11 +503,18 @@ const _useRepository = (repo: Repo) => {
             }
         },
         async _loadChanges() {
+            const requestToken = ++changesRequestToken;
             const nextChanges = await tasks.getChanges.run({
                 repoId: this.id,
                 ignoredChars: settings.state.diffIgnoredCharsEnabled ? settings.state.diffIgnoredChars : '',
                 showWhitespaceChanges: settings.state.showWhitespaceChanges,
             });
+
+            // The refresh that follows a mutation and a background refresh can be in flight
+            // together, and the older read would put the committed files back in the view.
+            if (requestToken !== changesRequestToken) {
+                return;
+            }
 
             this.changes = nextChanges;
 

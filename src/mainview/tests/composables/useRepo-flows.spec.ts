@@ -280,6 +280,35 @@ describe('useRepo amend target', () => {
     });
 });
 
+describe('useRepo changes loader', () => {
+    it('keeps the newest response when two loads land out of order', async () => {
+        const repo = useRepo(createRepo());
+        let resolveOlder!: (value: unknown) => void;
+        let resolveNewer!: (value: unknown) => void;
+        runFor('getChanges')
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveOlder = resolve;
+                })
+            )
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveNewer = resolve;
+                })
+            );
+
+        const olderLoad = repo.loadChanges();
+        const newerLoad = repo.loadChanges();
+
+        resolveNewer(changes([change('new.txt')]));
+        await newerLoad;
+        resolveOlder(changes([change('old.txt')]));
+        await olderLoad;
+
+        expect(repo.changes?.staged.map((entry) => entry.path)).toEqual(['new.txt']);
+    });
+});
+
 describe('useRepo file operations', () => {
     it('stages one file and stages a deduplicated batch through the bulk command', async () => {
         const repo = useRepo(createRepo());

@@ -59,6 +59,7 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Split a hunk patch once per diff and anchored the hunk buttons once per rendered node.
 - Gave the Explorer its own pageable commit list, so an older snapshot is selectable and stays selected.
 - Made the amend button read the branch tip instead of the history page the Changes view never reloads.
+- Ignored a changes read that lands after a newer one, so it cannot put committed files back in the view.
 
 ### Tests
 
