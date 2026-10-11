@@ -35,6 +35,9 @@ process.env.PLAYWRIGHT_NATIVE_STUB_FILE = nativeStubFile;
 
 export default defineConfig({
     testDir: './playwright',
+    // The shell spec launches the packaged app instead of the Vite dev server, so it needs its own
+    // config (`playwright/electron.config.ts`), its own build and its own command: `bun run test:electron`.
+    testIgnore: 'electron.spec.ts',
     timeout: 30_000,
     retries: 0,
     reporter: 'list',

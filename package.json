@@ -30,7 +30,8 @@
         "release:mac:signed": "bun do.ts release --signed",
         "release:mac:notarize": "bun do.ts release --notarize",
         "lint": "oxfmt && oxlint --fix && vue-tsc --noEmit",
-        "test:e2e": "playwright test"
+        "test:e2e": "playwright test",
+        "test:electron": "bun run build && playwright test --config playwright/electron.config.ts"
     },
     "dependencies": {
         "@guolao/vue-monaco-editor": "^1.6.0",
