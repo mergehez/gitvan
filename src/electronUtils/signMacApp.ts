@@ -1,11 +1,12 @@
-// Packaging renames `Electron Helper*.app` to `Gitvan Helper*.app` (and the main binary to `Gitvan`),
-// which invalidates the signatures Electron ships with. Chromium gives every helper process its own
-// macOS sandbox, and a helper can only inherit that sandbox when its bundle is signed with the
-// `com.apple.security.inherit` entitlement — without it the GPU process crash-loops and Chromium
-// aborts the whole app (`FATAL:gpu_data_manager_impl_private.cc GPU process isn't usable. Goodbye.`)
-// about a second after launch, so the window shows white and then the app is gone. electron-builder
-// leaves the bundle unsigned here because `electronConfig` sets `mac.identity: null`, so this signs
-// the renamed bundles ad-hoc, which is enough to make them valid for the sandbox again.
+// Packaging renames `Electron Helper*.app` to `<Product> Helper*.app` (and the main binary to the
+// product name), which invalidates the signatures Electron ships with. Chromium gives every helper
+// process its own macOS sandbox, and a helper can only inherit that sandbox when its bundle is
+// signed with the `com.apple.security.inherit` entitlement — without it the GPU process crash-loops
+// and Chromium aborts the whole app (`FATAL:gpu_data_manager_impl_private.cc GPU process isn't
+// usable. Goodbye.`) about a second after launch, so the window shows white and then the app is
+// gone. electron-builder leaves the bundle unsigned here because `electronConfig` sets
+// `mac.identity: null`, so this signs the renamed bundles ad-hoc, which is enough to make them valid
+// for the sandbox again.
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
