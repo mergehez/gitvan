@@ -29,6 +29,9 @@ Runtime shape, as the code actually is today:
   forwards it as an HTTP `POST /api/<method>` to the Express backend
   (`src/electronUtils/mainProloadHelpers.ts` `generateHandlers` → `callApiPost` in `helpers.ts`).
   This round trip is deliberate — see `todos.md` `[NOT_PLANNED] Keep the localhost Express backend…`.
+- **One window, and closing it quits the app.** There is no dock-only mode and no window re-creation:
+  `window-all-closed` calls `app.quit()` on every platform (`src/electronUtils/mainProloadHelpers.ts`).
+  See **Known problems 12** before adding a way back in.
 
 > The README and CHANGELOG describe an Electrobun / `bun:sqlite` migration that this checkout does **not**
 > contain, and list `build:canary` / `build:stable` scripts that do not exist. Trust `package.json`,
@@ -197,9 +200,13 @@ times out, investigate rather than raising it (`AGENTS.md`).
   generated repos are gitignored and always recreated by the run.
 - The provider stub (`support/providerStub.ts`, port 5278) answers OAuth/token calls; the native picker
   stub is a JSON file (`support/nativeStub.ts`). No spec reaches a real provider or the real keychain.
-- Only `bun run test:electron` launches the packaged app; it also covers the application menu and the PTY.
-- Extra env: `PLAYWRIGHT_SKIP_BUILD=1` reuses `dist/`, `PLAYWRIGHT_APP_DATA_DIR` keeps the temp DB,
-  `PLAYWRIGHT_VUE_PORT`/`PLAYWRIGHT_API_PORT` move the ports.
+- Only `bun run test:electron` launches the packaged app (`playwright/electron.spec.ts`, its own config and
+  a free 5376+ port pair); it also covers the application menu, the backend through the real preload bridge
+  and the window lifecycle. Its launcher passes `--no-sandbox`, because Chromium's process sandbox cannot
+  initialize inside a restricted runner, and the PTY case stands down where `posix_openpt` is refused.
+- Extra env: `PLAYWRIGHT_APP_DATA_DIR` keeps the browser run's temp DB, and
+  `PLAYWRIGHT_VUE_PORT`/`PLAYWRIGHT_API_PORT` move the browser run's ports. The shell spec always needs a
+  built `dist/` and `dist-electron/`; `bunx vite build` alone refreshes both when iterating on the shell.
 
 ## 10. Dev loop, ports, environment
 
@@ -266,6 +273,11 @@ times out, investigate rather than raising it (`AGENTS.md`).
 11. `dist/`, `dist-electron/`, `build/`, `release/`, `test-results/` and `sandbox/*/repo/` are build or test
     output — do not read them for the app's behaviour. `src/mainview/node_modules/` is an empty leftover
     directory, not a second dependency tree.
+12. **`createWindow` cannot run twice.** It registers one `ipcMain.handle` per `api:<name>`, and Electron
+    throws on a duplicate channel. That throw happens after `new BrowserWindow` and before the page loads,
+    so the symptom is a live window with a white screen — which is what the old dock-reopen path produced.
+    The app now quits when its last window closes and registers no `activate` handler; if a way back in is
+    ever wanted, make the handler registration idempotent (`ipcMain.removeHandler`) first.
 
 ## 13. Recipes
 
