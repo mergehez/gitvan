@@ -78,6 +78,10 @@ const sandboxResetScripts = [
         script: 'reset-pull-stash-repo.mjs',
     },
     {
+        folder: 'push-rejected',
+        script: 'reset-push-rejected-repo.mjs',
+    },
+    {
         folder: 'deep-history',
         script: 'reset-deep-history-repo.mjs',
     },
