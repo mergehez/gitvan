@@ -152,10 +152,10 @@ describe('createElectronHelpers.createWindow', () => {
         electron.windowInstance.webContents.send.mockClear();
         electron.app.whenReady.mockClear();
         electron.app.on.mockClear();
+        electron.app.quit.mockClear();
         electron.BrowserWindow.getAllWindows.mockReturnValue([electron.windowInstance]);
         existsSync.mockReset().mockReturnValue(true);
         callApiPost.mockReset().mockResolvedValue({ ok: true });
-
     });
 
     /**
@@ -276,27 +276,26 @@ describe('createElectronHelpers.createWindow', () => {
         }
     });
 
-    it('recreates the window on activate only while none is open', async () => {
+    it('quits the app when the last window closes instead of staying in the dock', async () => {
         const { opts } = makeOptions();
 
         await runCreateWindow(opts);
 
-        const activate = electron.app.on.mock.calls.find(([event]) => event === 'activate')?.[1] as () => void;
-        electron.BrowserWindow.getAllWindows.mockReturnValueOnce([]);
+        const allClosed = electron.app.on.mock.calls.find(([event]) => event === 'window-all-closed')?.[1] as () => void;
 
-        activate();
+        allClosed();
 
-        await vi.waitFor(() => expect(electron.BrowserWindow).toHaveBeenCalledTimes(2));
-        await vi.waitFor(() => expect(electron.windowInstance.loadFile).toHaveBeenCalledTimes(2));
+        // macOS used to keep the process alive here, which left a dock icon that reopened into a
+        // blank window (the second `createWindow` throws while re-registering the IPC handlers).
+        expect(electron.app.quit).toHaveBeenCalledTimes(1);
     });
 
-    it('registers the lifecycle listeners that stop the backend', async () => {
+    it('registers the two lifecycle listeners and no dock-reopen path', async () => {
         const { opts } = makeOptions();
 
         await runCreateWindow(opts);
 
-        expect(electron.app.on).toHaveBeenCalledWith('window-all-closed', expect.any(Function));
-        expect(electron.app.on).toHaveBeenCalledWith('will-quit', expect.any(Function));
+        expect(electron.app.on.mock.calls.map(([event]) => event).sort()).toEqual(['will-quit', 'window-all-closed']);
     });
 });
 

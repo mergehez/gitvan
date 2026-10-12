@@ -151,15 +151,15 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
             })();
             console.log('Backend started. Creating window...');
             await createWindow();
-            app.on('activate', () => {
-                if (BrowserWindow.getAllWindows().length === 0) createWindow();
-            });
         });
 
         function stopBackend() {}
+        // The app is single-window and has no dock-only mode: closing the window quits it. Reopening
+        // from the dock must not come back, because a second `createWindow` re-registers every
+        // `api:<name>` handler, which throws and leaves the new window blank.
         app.on('window-all-closed', () => {
             stopBackend();
-            if (process.platform !== 'darwin') app.quit();
+            app.quit();
         });
         app.on('will-quit', () => {
             stopBackend();
