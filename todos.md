@@ -23,6 +23,12 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 
 ## Done
 
+- **[SPEC] Fixed "Gitvan quits immediately after launch"**: the packaged app was unsigned, so macOS refused
+  its renamed helper bundles the Chromium sandbox, and the release's `fs.cp` install rewrote the bundle's
+  framework symlinks into absolute paths into `build/`. `electronConfig.afterPack` now ad-hoc signs the
+  helpers (with `com.apple.security.inherit`) and the app (`signMacApp.ts`), `installMacApp.ts` installs
+  with `ditto`, and `releaseHelpers.ts` re-checks the installed signature. Guarded by
+  `src/mainview/tests/backend/electron/signMacApp.spec.ts` and `installMacApp.spec.ts`.
 - Added a repeatable backend performance baseline that any item can be measured against with `bun do.ts perf`.
 - Made the per-repository sidebar status a single cached owner that mutating git commands invalidate.
 - Added finite timeouts and request-scoped cancellation to spawned git commands.

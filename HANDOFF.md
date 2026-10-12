@@ -230,6 +230,15 @@ times out, investigate rather than raising it (`AGENTS.md`).
 - `bun do.ts release [--signed] [--notarize]`, `bun do.ts audit`, `bun do.ts perf`.
 - Release is local and gated on `bun run test:validate`; there is no CI (`todos.md` `[NOT_PLANNED] No CI`).
 - Distribution is macOS Apple Silicon only.
+- **The bundle is signed ad-hoc after packing, and installed with `ditto`.** `mac.identity: null` means
+  electron-builder signs nothing, while packaging renames `Electron Helper*.app` → `Gitvan Helper*.app`,
+  which invalidates the signatures Electron ships with: macOS then refuses those helpers the Chromium
+  sandbox, the GPU and renderer processes crash-loop, and the app dies about a second after launch with a
+  white window (`FATAL:gpu_data_manager_impl_private.cc GPU process isn't usable. Goodbye.`; the 2026-10-12
+  launches left 45 `Gitvan Helper*` crash reports). `electronConfig.afterPack` → `signMacApp.ts` signs the
+  helpers with `com.apple.security.inherit` and then the app; `installMacApp.ts` copies the bundle with
+  `ditto`, because `fs.cp` rewrites the framework's relative symlinks into absolute paths into `build/`
+  and unseals the same signature again.
 
 ## 12. Known problems and traps
 

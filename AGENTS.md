@@ -65,6 +65,14 @@ Examples:
 - Prefer `openDirectoryInTerminal({ directoryPath })` over `openRepoInTerminal({ repoId })` when Vue already knows the directory.
 - Prefer frontend clipboard writes when no native capability is required.
 
+## Packaging Rules
+
+- The macOS bundle is signed ad-hoc after packing (`electronConfig.afterPack` → `signMacApp.ts`): without a
+  signature that carries `com.apple.security.inherit`, the renamed helper bundles cannot inherit a sandbox
+  and Chromium aborts the app about a second after launch (white window, then the app is gone).
+- Copy a built app bundle with `ditto` (`installMacApp.ts`), never `fs.cp`: it resolves the framework's
+  relative symlinks into absolute paths into `build/`, which unseals the signature the build just made.
+
 ## Refactor Style
 
 - Make incremental changes, not broad rewrites.
