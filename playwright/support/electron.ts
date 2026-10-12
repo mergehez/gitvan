@@ -9,8 +9,8 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
  * run that exercises `dist-electron/main.cjs`, the real preload bridge, the IPC registration, the
  * window and the application menu.
  *
- * Requires `bun run build` first; `bun run test:electron` does that for you, and
- * `PLAYWRIGHT_SKIP_BUILD=1` reuses whatever is already in `dist/` and `dist-electron/`.
+ * Requires a built `dist/` and `dist-electron/`; `bun run test:electron` builds them first, and
+ * `bunx vite build` alone refreshes both when iterating on the shell.
  */
 
 /** `playwright/electron.config.ts` created this before the workers started. */
@@ -52,7 +52,11 @@ function electronEnv(extra: Record<string, string>): Record<string, string> {
 export async function launchApp(): Promise<LaunchedApp> {
     const [apiPort, vuePort] = await freePortPair();
     const app = await electron.launch({
-        args: [join(process.cwd(), 'dist-electron', 'main.cjs')],
+        // Chromium's own process sandbox cannot initialize inside a restricted runner (it reports
+        // "sandbox initialization failed" and the utility processes crash before the first window).
+        // This spec asserts the shell integration — window, preload, IPC, menu, PTY — not that
+        // sandbox, so the switch keeps it runnable wherever the suite runs.
+        args: [join(process.cwd(), 'dist-electron', 'main.cjs'), '--no-sandbox'],
         cwd: process.cwd(),
         env: electronEnv({
             APP_DATA_DIR: join(dataDir, `app-${apiPort}`),
@@ -90,5 +94,8 @@ export async function resetSandboxRepos(page: Page) {
 }
 
 export async function openRepoContextMenu(page: Page, name: string) {
-    await page.getByRole('button', { name: new RegExp(`^${name}$`, 'i') }).first().click({ button: 'right' });
+    await page
+        .getByRole('button', { name: new RegExp(`^${name}$`, 'i') })
+        .first()
+        .click({ button: 'right' });
 }

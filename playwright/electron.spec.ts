@@ -1,8 +1,27 @@
 import { writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
+import { spawn } from 'node-pty';
 import { expect, test } from '@playwright/test';
 import { launchApp, modalBackdrop, openRepoContextMenu, resetSandboxRepos, type LaunchedApp } from './support/electron';
+
+/**
+ * A sandboxed runner refuses `posix_openpt`, so the session never starts and the terminal dialog stays
+ * on "Starting shell…". The unit PTY cases stand down the same way; probe it once here too, because a
+ * failure in this case would also skip the window-quit case that follows it in serial mode.
+ */
+function detectPtySupport() {
+    try {
+        const probe = spawn('/bin/sh', ['-c', 'true'], { name: 'xterm-256color', cols: 80, rows: 24 });
+        probe.kill('SIGHUP');
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+const ptyWorks = process.platform !== 'win32' && detectPtySupport();
 
 /**
  * The Electron shell, end to end against the packaged bundle: the real preload bridge, the IPC
@@ -98,9 +117,7 @@ test.describe('the Electron shell', () => {
 
         // A method the browser dev server answers instead of the backend still travels the same
         // `api:<name>` channel, so the unknown-method error proves the channel is registered.
-        await expect(page.evaluate(() => window.electronAPI!.invoke('notARealApiMethod', {}))).rejects.toThrow(
-            /No handler registered for 'api:notARealApiMethod'/
-        );
+        await expect(page.evaluate(() => window.electronAPI!.invoke('notARealApiMethod', {}))).rejects.toThrow(/No handler registered for 'api:notARealApiMethod'/);
     });
 
     test('runs a native method that has no browser counterpart', async () => {
@@ -112,12 +129,15 @@ test.describe('the Electron shell', () => {
             // `revealPathInFileManager` exists only in the shell; the same call reports the native
             // boundary in browser dev mode (see `native-boundary.spec.ts`). Both modes have to reach
             // the host: `shell.showItemInFolder` and `shell.openPath` each answer differently.
-            const results = await page.evaluate(async ({ filePath, directoryPath }) => {
-                return [
-                    await window.electronAPI!.invoke('revealPathInFileManager', { path: filePath, mode: 'reveal-item' }),
-                    await window.electronAPI!.invoke('revealPathInFileManager', { path: directoryPath, mode: 'open-directory' }),
-                ];
-            }, { filePath: probePath, directoryPath: dirname(probePath) });
+            const results = await page.evaluate(
+                async ({ filePath, directoryPath }) => {
+                    return [
+                        await window.electronAPI!.invoke('revealPathInFileManager', { path: filePath, mode: 'reveal-item' }),
+                        await window.electronAPI!.invoke('revealPathInFileManager', { path: directoryPath, mode: 'open-directory' }),
+                    ];
+                },
+                { filePath: probePath, directoryPath: dirname(probePath) }
+            );
 
             expect(results).toEqual([undefined, undefined]);
         } finally {
@@ -126,6 +146,8 @@ test.describe('the Electron shell', () => {
     });
 
     test('opens and closes the integrated terminal on a real PTY', async () => {
+        test.skip(!ptyWorks, 'This runner refuses posix_openpt, so no terminal session can start.');
+
         const { page } = launched;
 
         await resetSandboxRepos(page);
@@ -149,12 +171,14 @@ test.describe('the Electron shell', () => {
         await expect(page.locator('[role="dialog"]')).toBeHidden();
     });
 
-    test('quits the app on request', async () => {
+    test('quits when its last window is closed', async () => {
         const { app } = launched;
 
         const exited = new Promise<number | null>((resolve) => app.process().once('exit', resolve));
-        // `close()` waits for the process to go away, so it also fails if the quit is refused.
-        await app.close();
+
+        // This is exactly what the user does: close the window. The app has no dock-only mode, so it
+        // must exit with a clean code instead of staying alive and reopening into a blank window.
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
 
         expect(await exited).toBe(0);
     });
