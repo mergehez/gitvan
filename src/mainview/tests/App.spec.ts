@@ -246,6 +246,7 @@ function mountApp() {
                 AppIntegratedTerminalModal: stubComponent('AppIntegratedTerminalModal'),
                 AppMergeConflictModal: stubComponent('AppMergeConflictModal'),
                 AppPullBlockedByLocalChangesModal: stubComponent('AppPullBlockedByLocalChangesModal'),
+                AppPushRejectedModal: stubComponent('AppPushRejectedModal'),
                 AppSuccessToast: stubComponent('AppSuccessToast'),
                 EtSplitter: splitterStub,
                 GitClientHeader: gitClientHeaderStub,
@@ -290,6 +291,7 @@ describe('App', () => {
         expect(wrapper.get('[data-testid="AppIntegratedTerminalModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppSuccessToast"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="AppPullBlockedByLocalChangesModal"]')).toBeTruthy();
+        expect(wrapper.get('[data-testid="AppPushRejectedModal"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="Settings"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="SidebarRepositories"]')).toBeTruthy();
         expect(wrapper.get('[data-testid="GitClientHeader"]')).toBeTruthy();

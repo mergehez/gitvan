@@ -157,6 +157,8 @@ describe('useRepos remote operation feedback', () => {
         mockCoreState.selectedRepoId = 1;
         mockToast.showSuccessToast.mockClear();
         mockToast.showErrorToast.mockClear();
+        mockTasks.runRemoteOperation.run.mockReset();
+        mockTasks.runRemoteOperation.run.mockResolvedValue({ bootstrap: createBootstrap(), status: 'completed', stashed: false });
     });
 
     it('reports a pull conflict as an attention toast with the conflicting file count', async () => {
@@ -199,6 +201,48 @@ describe('useRepos remote operation feedback', () => {
         });
 
         expect(mockToast.showSuccessToast).toHaveBeenCalledWith('Pull completed.');
+    });
+
+    it('fetches and explains a rejected push instead of reporting it as an error', async () => {
+        const repos = _useRepositories();
+
+        await repos.handleRemoteOperationResult(1, 'push', {
+            bootstrap: createBootstrap(),
+            status: 'rejected-non-fast-forward',
+            stashed: false,
+        });
+
+        expect(mockTasks.runRemoteOperation.run).toHaveBeenCalledWith({ repoId: 1, operation: 'fetch' }, 'fetch-1');
+        expect(repos.isPushRejectedModalOpen).toBe(true);
+        expect(repos.pushRejectedRepoId).toBe(1);
+        expect(mockToast.showErrorToast).not.toHaveBeenCalled();
+        expect(mockToast.showSuccessToast).not.toHaveBeenCalled();
+    });
+
+    it('still explains the rejected push when the automatic fetch fails', async () => {
+        const repos = _useRepositories();
+        mockTasks.runRemoteOperation.run.mockRejectedValueOnce(new Error('offline'));
+
+        await repos.handleRemoteOperationResult(1, 'push', {
+            bootstrap: createBootstrap(),
+            status: 'rejected-non-fast-forward',
+            stashed: false,
+        });
+
+        expect(repos.isPushRejectedModalOpen).toBe(true);
+        expect(repos.pushRejectedRepoId).toBe(1);
+    });
+
+    it('closes the rejected-push dialog and forgets the repository', async () => {
+        const repos = _useRepositories();
+
+        repos.openPushRejectedModal(1);
+        expect(repos.isPushRejectedModalOpen).toBe(true);
+
+        repos.closePushRejectedModal();
+
+        expect(repos.isPushRejectedModalOpen).toBe(false);
+        expect(repos.pushRejectedRepoId).toBeUndefined();
     });
 });
 

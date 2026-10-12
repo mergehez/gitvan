@@ -53,6 +53,8 @@ export function _useRepositories() {
         isPullBlockedByLocalChangesModalOpen: false,
         pullBlockedRepoId: undefined as number | undefined,
         pullBlockedConflictingFiles: [] as string[],
+        isPushRejectedModalOpen: false,
+        pushRejectedRepoId: undefined as number | undefined,
 
         canFetch: (repo: Repo | undefined, forIcon = false) =>
             Boolean(repo?.status.hasRemote && !repo.status.error && (forIcon || !tasks.isBusy || isButtonBusyStateSilenced.value)),
@@ -214,8 +216,33 @@ export function _useRepositories() {
             this.pullBlockedRepoId = undefined;
             this.pullBlockedConflictingFiles = [];
         },
+        openPushRejectedModal(repoId: number) {
+            this.pushRejectedRepoId = repoId;
+            this.isPushRejectedModalOpen = true;
+        },
+        closePushRejectedModal() {
+            this.isPushRejectedModalOpen = false;
+            this.pushRejectedRepoId = undefined;
+        },
+        async handlePushRejectedByRemote(repoId: number) {
+            // The rejection means the remote moved on since the last fetch, so the behind count the
+            // dialog and the Pull button read is only current after a fetch.
+            try {
+                const fetchResult = await tasks.runRemoteOperation.run({ repoId, operation: 'fetch' }, `fetch-${repoId}`);
+                await applyMutation(fetchResult.bootstrap);
+            } catch {
+                // A fetch that cannot reach the remote must not replace the explanation with an error.
+            }
+
+            this.openPushRejectedModal(repoId);
+        },
         async handleRemoteOperationResult(repoId: number, operation: RemoteOperation, nextResult: RemoteOperationResult | RetryPullAfterStashResult) {
             await applyMutation(nextResult.bootstrap);
+
+            if (operation === 'push' && nextResult.status === 'rejected-non-fast-forward') {
+                await this.handlePushRejectedByRemote(repoId);
+                return;
+            }
 
             if (operation === 'pull' && nextResult.status === 'blocked-by-local-changes') {
                 this.openPullBlockedByLocalChangesModal(repoId, nextResult.conflictingFiles);
