@@ -6,6 +6,16 @@ This repository should evolve toward a thin native shell and a Vue-owned applica
 
 When working in this codebase, preserve the current product feel. Refactors should reduce Electrobun/native coupling without changing anything user-facing unless the user explicitly asks for a UX change.
 
+## Handoff Notes
+
+- Read `HANDOFF.md` first. It is the map of the repository: layout, how a request travels, the state
+  model, the test harness, the dev/release commands, known problems and the recipes for common changes.
+  It exists so a fresh session does not have to scan the tree.
+- Keep it current. When a change moves a file, changes a convention, the test harness, a command, or one
+  of the problems it lists, update the matching section of `HANDOFF.md` in the same commit.
+- It describes how the project is now: no changelog, no history, no "recently changed" notes. Prefer
+  paths over line numbers, because those drift.
+
 ## Product Expectations
 
 - Do not redesign the app unless explicitly asked.
