@@ -162,6 +162,23 @@ describe('app runRemoteOperation', () => {
         await expect(app.runRemoteOperation({ repoId, operation: 'fetch' })).rejects.toThrow('network down');
     });
 
+    it('turns a rejected push into the non-fast-forward result instead of an error', async () => {
+        gitMocks.mockFor('runRepoRemoteOperation').mockRejectedValue(new Error('rejected'));
+        gitMocks.mockFor('isPushRejectedByRemoteError').mockReturnValue(true);
+
+        await expect(app.runRemoteOperation({ repoId, operation: 'push' })).resolves.toMatchObject({
+            status: 'rejected-non-fast-forward',
+            stashed: false,
+        });
+    });
+
+    it('still throws the original push failure when the rejection is not recognised', async () => {
+        gitMocks.mockFor('runRepoRemoteOperation').mockRejectedValue(new Error('push rejected for another reason'));
+        gitMocks.mockFor('isPushRejectedByRemoteError').mockReturnValue(false);
+
+        await expect(app.runRemoteOperation({ repoId, operation: 'push' })).rejects.toThrow('push rejected for another reason');
+    });
+
     it('explains a remote the assigned account cannot see', async () => {
         const accountId = useDb().createAccount('Limited', 'github', 'https-token', 'octocat', 'github.com', false);
         useDb().assignRepoAccount(repoId, accountId);

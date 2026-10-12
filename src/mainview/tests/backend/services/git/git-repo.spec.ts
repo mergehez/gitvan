@@ -153,6 +153,44 @@ describe('repoGit pull error classification', () => {
     });
 });
 
+describe('repoGit push rejection classification', () => {
+    it('recognises the non-fast-forward rejection git prints when the branch is behind', () => {
+        const error = new GitCommandError(
+            'git push failed',
+            ['git', 'push'],
+            [
+                'To https://github.com/EezyTool/EezyAPI.git',
+                ' ! [rejected]        v1 -> v1 (non-fast-forward)',
+                "error: failed to push some refs to 'https://github.com/EezyTool/EezyAPI.git'",
+                'hint: Updates were rejected because the tip of your current branch is behind',
+                'hint: its remote counterpart. If you want to integrate the remote changes,',
+            ].join('\n')
+        );
+
+        expect(repoGit.isPushRejectedByRemoteError(error)).toBe(true);
+    });
+
+    it('recognises the fetch-first and remote-work wordings', () => {
+        const fetchFirst = new GitCommandError('git push failed', ['git', 'push'], ' ! [rejected]        main -> main (fetch first)');
+        const remoteWork = new GitCommandError('git push failed', ['git', 'push'], 'hint: Updates were rejected because the remote contains work that you do not');
+
+        expect(repoGit.isPushRejectedByRemoteError(fetchFirst)).toBe(true);
+        expect(repoGit.isPushRejectedByRemoteError(remoteWork)).toBe(true);
+    });
+
+    it('leaves a server-side rejection and unrelated failures alone', () => {
+        const protectedBranch = new GitCommandError(
+            'git push failed',
+            ['git', 'push'],
+            ' ! [remote rejected] main -> main (protected branch hook declined)\nerror: failed to push some refs'
+        );
+
+        expect(repoGit.isPushRejectedByRemoteError(protectedBranch)).toBe(false);
+        expect(repoGit.isPushRejectedByRemoteError(new GitCommandError('git push failed', ['git', 'push'], 'fatal: unable to access the remote'))).toBe(false);
+        expect(repoGit.isPushRejectedByRemoteError(new Error('nope'))).toBe(false);
+    });
+});
+
 describe('repoGit.resolveGitRepo', () => {
     it('names the repository after the top-level directory git reports', async () => {
         runGit.mockResolvedValueOnce('/tmp/work/gitvan');

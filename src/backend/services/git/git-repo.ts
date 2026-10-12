@@ -56,6 +56,18 @@ export const repoGit = {
 
         return files;
     },
+    /**
+     * A push git refuses because the remote branch carries commits the local branch does not
+     * have. `[rejected]` never matches `[remote rejected]`, which is a server-side rule.
+     */
+    isPushRejectedByRemoteError(error: unknown) {
+        if (!(error instanceof GitCommandError)) {
+            return false;
+        }
+
+        const details = `${error.message}\n${error.stderr}\n${error.stdout}`;
+        return /(! \[rejected\]|non-fast-forward|fetch first|updates were rejected)/i.test(details);
+    },
     isPullMergeConflictError(error: unknown) {
         if (!(error instanceof GitCommandError)) {
             return false;

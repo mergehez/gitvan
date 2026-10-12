@@ -164,6 +164,11 @@ type RemoteOperationResult =
           status: 'blocked-by-local-changes';
           stashed: false;
           conflictingFiles: string[];
+      }
+    | {
+          bootstrap: AppMutationApi;
+          status: 'rejected-non-fast-forward';
+          stashed: false;
       };
 
 type RetryPullAfterStashResult =
@@ -1353,6 +1358,14 @@ export const app = {
                     status: 'blocked-by-local-changes',
                     stashed: false,
                     conflictingFiles: git.getPullBlockedByLocalChangesFiles(error),
+                };
+            }
+
+            if (ps.operation === 'push' && git.isPushRejectedByRemoteError(error)) {
+                return {
+                    bootstrap: await buildMutationResult(),
+                    status: 'rejected-non-fast-forward',
+                    stashed: false,
                 };
             }
 
