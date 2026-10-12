@@ -265,11 +265,16 @@ function isFileOperationRunning(action: 'openFileInEditor' | 'discardFile' | 'st
     return tasks.isOperationRunning(`${action}:${path}`);
 }
 
-function stageAllUnlockedFiles() {
+async function stageAllUnlockedFiles() {
     const unstaged = repo.value.changes?.unstaged ?? [];
     const unlockedPaths = unstaged.filter((e) => !repo.value.isFileLocked(e.path)).map((e) => e.path);
     if (unlockedPaths.length > 0) {
-        repo.value.stageFiles(unlockedPaths);
+        try {
+            await repo.value.stageFiles(unlockedPaths);
+        } catch {
+            // The task layer already recorded the failure for the error banner, so this only keeps
+            // the rejected promise from reaching Vue's unhandled-error path.
+        }
     }
 }
 

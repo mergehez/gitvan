@@ -20,6 +20,11 @@ test.describe('staging while the index is locked', () => {
         expectBackendError('Another Git program is using this repository');
         await openSandboxRepo(page, 'partial-changes');
 
+        // The failed stage-all is a handled outcome: the banner explains it and the rejected
+        // promise must not also surface as an unhandled rejection in the console.
+        const unhandled: string[] = [];
+        page.on('pageerror', (error) => unhandled.push(error.message));
+
         writeFileSync(lockPath, '', 'utf8');
 
         await page.getByTestId('changes-stage-all').click();
@@ -27,5 +32,6 @@ test.describe('staging while the index is locked', () => {
         const banner = page.locator('#app-error-banner p');
         await expect(banner).toContainText('Another Git program is using this repository');
         await expect(banner).not.toContainText('index.lock');
+        expect(unhandled).toEqual([]);
     });
 });
