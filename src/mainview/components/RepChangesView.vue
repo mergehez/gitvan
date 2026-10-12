@@ -948,6 +948,7 @@ onUnmounted(() => {
                                 <IconButton
                                     severity="raised"
                                     v-show="item.children.length > 0"
+                                    :data-testid="item.isStaged ? 'changes-unstage-all' : 'changes-stage-all'"
                                     v-tooltip="item.isStaged ? 'Unstage all files' : 'Stage all files'"
                                     v-loading="tasks.isOperationRunning(item.isStaged ? 'unstageAllFiles' : 'stageAllFiles')"
                                     @click="item.isStaged ? repo.unstageAllFiles() : stageAllUnlockedFiles()"

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
     createRemoteGitEnv,
     createRemoteGitEnvForUrl,
+    GitCommandError,
     runGit,
     runGitBuffer,
     runGitBufferWithInput,
@@ -82,6 +83,27 @@ describe('a working directory that is gone', () => {
     });
 });
 
+describe('a repository whose index is locked', () => {
+    /**
+     * A `.git/index.lock` left behind by another program (or a killed run) makes git refuse to write
+     * the index with a message that names the file and reads as an internal fault. The app reports
+     * the one thing the person can act on instead, while the raw output stays on the error.
+     */
+    it('reports a friendly message instead of the raw lock failure', async () => {
+        const repoPath = createRepo();
+        writeFileSync(join(repoPath, '.git', 'index.lock'), '', 'utf8');
+        writeFileSync(join(repoPath, 'story.txt'), 'two\n', 'utf8');
+
+        const error = await runGit(['add', '--', 'story.txt'], repoPath).catch((thrown: unknown) => thrown);
+
+        expect(error).toBeInstanceOf(GitCommandError);
+        expect((error as Error).message).toMatch(/Another Git program is using this repository/);
+        expect((error as Error).message).not.toMatch(/fatal:/);
+        // The raw git output is kept for the classifiers that read it.
+        expect((error as GitCommandError).stderr).toMatch(/index\.lock/);
+    });
+});
+
 function runWithInput(args: string[], cwd: string, input: string) {
     return execFileSync('git', args, { cwd, input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 }
@@ -112,9 +134,7 @@ describe('createRemoteGitEnvForUrl', () => {
     });
 
     it('refuses a remote that is not HTTP, because the token cannot travel over it', () => {
-        expect(() => createRemoteGitEnvForUrl('git@github.com:acme/repo.git', auth)).toThrow(
-            'The assigned HTTPS token account can only be used with HTTPS remotes.'
-        );
+        expect(() => createRemoteGitEnvForUrl('git@github.com:acme/repo.git', auth)).toThrow('The assigned HTTPS token account can only be used with HTTPS remotes.');
         expect(() => createRemoteGitEnvForUrl('ssh://git@github.com/acme/repo.git', auth)).toThrow(/only be used with HTTPS remotes/);
     });
 

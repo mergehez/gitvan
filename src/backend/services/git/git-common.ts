@@ -119,6 +119,25 @@ function toGitCommandError(error: unknown, args: string[], cwd: string) {
     return new GitCommandError(message, [resolveGitExecutable(), ...args], message);
 }
 
+/**
+ * Git writes the index and the refs through a `.lock` file and refuses to start while one exists,
+ * naming the file and printing "Another git process seems to be running…". That reads like an
+ * internal fault, but the person can act on it, so the banner says what to do instead of dumping
+ * the git output.
+ */
+function friendlyGitErrorMessage(details: string) {
+    if (/(unable to create [^\n]*\.lock[^\n]*file exists|another git process seems to be running)/i.test(details)) {
+        return "Another Git program is using this repository, so this action could not be completed. Wait for it to finish and try again; if nothing else is running, delete the stale .lock file in the repository's .git folder.";
+    }
+
+    return details;
+}
+
+/** The one thrower every run variant hands to `executeCommand`, so message shaping lives in one place. */
+function gitCommandErrorThrower(gitExecutable: string, args: string[]) {
+    return (stdout: string, stderr: string) => new GitCommandError(friendlyGitErrorMessage(stderr || stdout || 'Git command failed.'), [gitExecutable, ...args], stderr, stdout);
+}
+
 export async function runGit(args: string[], cwd: string, allowedExitCodes: number[] = [0], trimOutput = true, env: NodeJS.ProcessEnv = {}) {
     try {
         const gitExecutable = resolveGitExecutable();
@@ -130,7 +149,7 @@ export async function runGit(args: string[], cwd: string, allowedExitCodes: numb
             env: createGitProcessEnv(env),
             timeoutMs: gitTimeoutMsFor(args),
             allowedExitCodes,
-            getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
+            getErrorToThrow: gitCommandErrorThrower(gitExecutable, args),
         });
 
         return trimOutput ? stdout.trim() : stdout;
@@ -151,7 +170,7 @@ export async function runGitWithInput(args: string[], cwd: string, input: string
             timeoutMs: gitTimeoutMsFor(args),
             input,
             allowedExitCodes,
-            getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
+            getErrorToThrow: gitCommandErrorThrower(gitExecutable, args),
         });
 
         return trimOutput ? stdout.trim() : stdout;
@@ -172,7 +191,7 @@ export async function runGitBuffer(args: string[], cwd: string, allowedExitCodes
             timeoutMs: gitTimeoutMsFor(args),
             bufferOnly: true,
             allowedExitCodes,
-            getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
+            getErrorToThrow: gitCommandErrorThrower(gitExecutable, args),
         });
 
         return stdout;
@@ -194,7 +213,7 @@ export async function runGitBufferWithInput(args: string[], cwd: string, input: 
             input,
             bufferOnly: true,
             allowedExitCodes,
-            getErrorToThrow: (stdout, stderr) => new GitCommandError(stderr || stdout || 'Git command failed.', [gitExecutable, ...args], stderr, stdout),
+            getErrorToThrow: gitCommandErrorThrower(gitExecutable, args),
         });
 
         return stdout;
