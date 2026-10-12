@@ -156,7 +156,7 @@ now exists is not listed here; it moves to **Done** with `[SPEC]`.
     - Why it is deliberate: a network dependency in the suite is flaky, needs credentials and hits rate limits, while answering nothing the stub does not. The sign-in and discovery flows are already covered end to end against it.
 
 - **[NOT_PLANNED] [BACKEND UNIT]** The performance baseline stays a manual `bun do.ts perf` run.
-    - What it is: `src/electronUtils/perfBaseline.ts` measures the hot endpoints, but no spec asserts a budget.
+    - What it is: `scripts/perfBaseline.ts` measures the hot endpoints, but no spec asserts a budget.
     - Why it is deliberate: a wall-clock budget in the suite would be machine-dependent and flaky. The baseline is meant to be read before and after a change, which the Done entry records.
 
 How to run what exists today: `bun run test:ui` (Vitest, unit and component) and

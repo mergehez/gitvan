@@ -65,6 +65,16 @@ Examples:
 - Prefer `openDirectoryInTerminal({ directoryPath })` over `openRepoInTerminal({ repoId })` when Vue already knows the directory.
 - Prefer frontend clipboard writes when no native capability is required.
 
+## Shared Electron Utils
+
+- `src/electronUtils` is project-agnostic and byte-identical to the copy in the sibling app. It is copied
+  between projects unchanged, so app-specific behaviour arrives through its options (`nativeStandins`,
+  `classifyError`, `runInRequestScope`, `fileExists`, `loadBackend`), through `package.json` via `appConfig`
+  (name, ports, `APP_DATA_DIR`), or through an app-owned script outside the folder (`scripts/perfBaseline.ts`).
+- Never branch on the app's name or hardcode one in the folder (comments included), and keep its specs under
+  `src/mainview/tests/**` so the two copies stay identical. The renderer reads no `process.env` there: a
+  bundler cannot inline a derived name, so the folder guards the read instead.
+
 ## Packaging Rules
 
 - The macOS bundle is signed ad-hoc after packing (`electronConfig.afterPack` → `signMacApp.ts`): without a
