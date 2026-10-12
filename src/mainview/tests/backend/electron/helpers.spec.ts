@@ -9,7 +9,7 @@ function freshImport() {
 }
 
 function jsonResponse(payload: unknown) {
-    return { ok: true, json: () => Promise.resolve(payload) };
+    return { ok: true, text: () => Promise.resolve(payload === undefined ? '' : JSON.stringify(payload)) };
 }
 
 describe('appConfig', () => {
@@ -102,5 +102,12 @@ describe('callApiPost', () => {
         const { callApiPost } = await freshImport();
 
         await expect(callApiPost('loadRepos')).rejects.toThrow('connect ECONNREFUSED');
+    });
+
+    it('reads an empty body as no result instead of a parse failure', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('') }));
+        const { callApiPost } = await freshImport();
+
+        await expect(callApiPost('stageFile', { repoId: 1 })).resolves.toBeUndefined();
     });
 });

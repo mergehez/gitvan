@@ -36,8 +36,9 @@ const electron = vi.hoisted(() => {
             whenReady: vi.fn().mockReturnValue({ then: (fn: () => unknown) => Promise.resolve().then(fn) }),
             on: vi.fn(),
             quit: vi.fn(),
+            requestSingleInstanceLock: vi.fn(() => true),
         },
-        ipcMain: { handle: vi.fn(), on: vi.fn() },
+        ipcMain: { handle: vi.fn(), on: vi.fn(), removeHandler: vi.fn(), removeAllListeners: vi.fn() },
         Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn((template: unknown) => ({ template })) },
         screen: {
             getCursorScreenPoint: vi.fn().mockReturnValue({ x: 0, y: 0 }),
@@ -290,12 +291,23 @@ describe('createElectronHelpers.createWindow', () => {
         expect(electron.app.quit).toHaveBeenCalledTimes(1);
     });
 
-    it('registers the two lifecycle listeners and no dock-reopen path', async () => {
+    it('registers the lifecycle listeners, the second-instance handover and no dock-reopen path', async () => {
         const { opts } = makeOptions();
 
         await runCreateWindow(opts);
 
-        expect(electron.app.on.mock.calls.map(([event]) => event).sort()).toEqual(['will-quit', 'window-all-closed']);
+        expect(electron.app.on.mock.calls.map(([event]) => event).sort()).toEqual(['second-instance', 'will-quit', 'window-all-closed']);
+        expect(electron.app.requestSingleInstanceLock).toHaveBeenCalled();
+    });
+
+    it('hands a second launch to the open window instead of starting a second backend', async () => {
+        const { opts } = makeOptions();
+        electron.app.requestSingleInstanceLock.mockReturnValueOnce(false);
+
+        buildHelpers(opts).start(() => ({ ready: Promise.resolve() }));
+
+        expect(electron.app.quit).toHaveBeenCalled();
+        expect(electron.app.whenReady).not.toHaveBeenCalled();
     });
 });
 

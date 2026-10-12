@@ -11,6 +11,11 @@ import { appConfig, callApiPost } from './helpers';
 
 const config = appConfig;
 
+/** The channel the renderer sends its console/window diagnostics on, both ends of it. */
+const RENDERER_DIAGNOSTIC_CHANNEL = 'renderer:diagnostic';
+/** Handlers are namespaced on the wire, so an app method cannot clash with an Electron channel. */
+const IPC_CHANNEL_PREFIX = 'api:';
+
 // __dirname: CJS provides it directly; ESM needs fileURLToPath(import.meta.url)
 const __dirname = typeof __filename !== 'undefined' ? dirname(__filename) : dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
@@ -62,15 +67,19 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
 
     function registerIpcHandlers(handlers: Record<string, any>) {
         for (const [name, handler] of Object.entries(handlers)) {
-            ipcMain.handle(`api:${name}`, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
+            // Registering the same name twice throws, so a handler of a window that is gone is
+            // replaced rather than added next to its predecessor.
+            ipcMain.removeHandler(`${IPC_CHANNEL_PREFIX}${name}`);
+            ipcMain.handle(`${IPC_CHANNEL_PREFIX}${name}`, async (_event, ps) => (handler as (ps?: unknown) => Promise<unknown>)(ps));
         }
 
         const ANSI_RESET = '\x1b[0m';
         const ANSI_GREEN = '\x1b[32m';
         const ANSI_YELLOW = '\x1b[33m';
         const ANSI_RED = '\x1b[31m';
-        // ipcMain.on('renderer-diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
-        ipcMain.on('renderer:diagnostic', (_event, diagnostic: RendererDiagnosticPayload) => {
+        // Same for the listener: it does not belong to a window, so it is registered once.
+        ipcMain.removeAllListeners(RENDERER_DIAGNOSTIC_CHANNEL);
+        ipcMain.on(RENDERER_DIAGNOSTIC_CHANNEL, (_event, diagnostic: RendererDiagnosticPayload) => {
             const write =
                 diagnostic.type === 'console-debug'
                     ? console.debug
@@ -143,6 +152,26 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
         const _require = createRequire(typeof __filename !== 'undefined' ? __filename : import.meta.url);
         const load = loadBackend ?? (() => _require('./backend.cjs') as { ready?: Promise<void> });
 
+        // A second launch of the same app cannot take the API port the first one owns, and it never
+        // reached `createWindow` — the EADDRINUSE had nowhere to go. The launch is handed to the
+        // window that is already open instead.
+        if (!app.requestSingleInstanceLock()) {
+            app.quit();
+            return;
+        }
+
+        app.on('second-instance', () => {
+            const [mainWindow] = BrowserWindow.getAllWindows();
+
+            if (!mainWindow) {
+                return;
+            }
+
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        });
+
         app.whenReady().then(async () => {
             console.log('Starting backend server...');
             await (async (): Promise<void> => {
@@ -154,9 +183,9 @@ export function createElectronHelpers<AppServiceType extends Record<string, any>
         });
 
         function stopBackend() {}
-        // The app is single-window and has no dock-only mode: closing the window quits it. Reopening
-        // from the dock must not come back, because a second `createWindow` re-registers every
-        // `api:<name>` handler, which throws and leaves the new window blank.
+        // The app is single-window and has no dock-only mode: closing the window quits it, so a
+        // dock click starts the app afresh. Coming back would re-register every handler, and the
+        // second registration throws.
         app.on('window-all-closed', () => {
             stopBackend();
             app.quit();
@@ -182,7 +211,7 @@ export function createPreloadApi<NativeCommand>(ipcRenderer: Electron.IpcRendere
 
     const api = {
         invoke: (name: string, params?: unknown) => {
-            return ipcRenderer.invoke(`api:${name}`, params);
+            return ipcRenderer.invoke(`${IPC_CHANNEL_PREFIX}${name}`, params);
         },
         onNativeCommand: (listener: (command: NativeCommand) => void) => {
             nativeCommandListeners.add(listener);
@@ -190,7 +219,7 @@ export function createPreloadApi<NativeCommand>(ipcRenderer: Electron.IpcRendere
                 nativeCommandListeners.delete(listener);
             };
         },
-        sendDiagnostic: (payload: unknown) => ipcRenderer.send('renderer:diagnostic', payload),
+        sendDiagnostic: (payload: unknown) => ipcRenderer.send(RENDERER_DIAGNOSTIC_CHANNEL, payload),
     };
     contextBridge.exposeInMainWorld('electronAPI', api);
     return api;

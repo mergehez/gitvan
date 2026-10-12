@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { currentRequestAbortSignal } from './requestContext.js';
+import { currentRequestAbortSignal } from './requestContext.ts';
 
 type CommandParams = {
     command: string;

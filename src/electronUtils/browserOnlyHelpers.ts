@@ -1,15 +1,15 @@
-import { readFileSync } from 'fs';
 import express from 'express';
-import { isRepositoryNotFoundError } from '../shared/repositoryErrors.ts';
+import type { Server } from 'node:http';
 import { appConfig } from './helpers.ts';
 import type { RendererDiagnosticPayload } from './mainProloadHelpers.ts';
+
 export type DevServerRequestScope = <T>(signal: AbortSignal, task: () => Promise<T>) => Promise<T>;
 
 /**
- * The native host owns these methods, so browser dev mode has nothing to run them in. The distinct
- * code keeps the boundary a handled outcome for the specs instead of an internal fault.
+ * A method only the native host can run: browser dev mode has nothing to run it in. The distinct
+ * code keeps that boundary a handled outcome for the specs instead of an internal fault.
  */
-class BrowserUnavailableError extends Error {
+export class BrowserUnavailableError extends Error {
     readonly code = 'not-available-in-browser';
 
     constructor(methodName: string) {
@@ -17,71 +17,39 @@ class BrowserUnavailableError extends Error {
     }
 }
 
-type NativePickerStub = {
-    directory?: string;
-    editor?: { path: string; label?: string };
-    terminal?: { path: string; label?: string; locked?: boolean };
-};
-
-/**
- * What the browser run asks a picker to answer with. There is no native host to open a dialog, so
- * a spec writes this file and the stand-ins below read it; see `playwright/support/nativeStub.ts`.
- */
-function readNativePickerStub(): NativePickerStub {
-    const stubPath = process.env.GITVAN_NATIVE_STUB_FILE;
-    if (!stubPath) {
-        return {};
-    }
-
-    try {
-        return JSON.parse(readFileSync(stubPath, 'utf8')) as NativePickerStub;
-    } catch {
-        return {};
-    }
-}
-
-/** The label the native pickers derive from a chosen application path. */
-function applicationLabelFromPath(path: string) {
-    const label = path.split('/').pop() || path;
-
-    return label.endsWith('.app') || label.endsWith('.exe') ? label.slice(0, -4) : label;
-}
-
-/**
- * The native methods browser dev mode answers instead of reporting the boundary. Opening the
- * provider's sign-in page and choosing a file or application have no native host to run them, but
- * the flows that call them have to be able to finish there.
- */
-const nativeStandins: Record<string, (params: any) => Promise<unknown>> = {
-    openExternalUrl: async (params: { url: string }) => {
-        console.log(`[devServer] openExternalUrl: ${params?.url ?? ''}`);
-
-        return { opened: true };
-    },
-    pickDirectory: async () => readNativePickerStub().directory,
-    pickEditorApplication: async () => {
-        const editor = readNativePickerStub().editor;
-
-        return editor ? { path: editor.path, label: editor.label ?? applicationLabelFromPath(editor.path) } : undefined;
-    },
-    pickTerminalApplication: async () => {
-        const terminal = readNativePickerStub().terminal;
-
-        return terminal ? { path: terminal.path, label: terminal.label ?? applicationLabelFromPath(terminal.path), locked: terminal.locked ?? false } : undefined;
-    },
+export type BrowserDevServerOptions = {
+    port?: number;
+    /** Runs a request's work inside its abort scope, so work it spawns dies with the request. */
+    runInRequestScope?: DevServerRequestScope;
+    /** Answers for the native methods a browser run has to keep working, keyed by method name. */
+    nativeStandins?: Record<string, (params: any) => Promise<unknown>>;
+    /** Classifies a handler failure for `/health`; anything unclassified counts as internal. */
+    classifyError?: (error: unknown, message: string) => string | undefined;
 };
 
 /**
  * Browser-only dev server that exposes backend app methods as HTTP endpoints.
  * Run with: tsx src/backend/devServer.ts
  */
+/** Why the API could not take its port, in the words the person starting the app needs. */
+export function describeApiListenError(port: number, error: NodeJS.ErrnoException) {
+    if (error.code === 'EADDRINUSE') {
+        return `Port ${port} is already in use: another ${appConfig.appName} window (or "bun run dev") is running. Close it and start again.`;
+    }
+
+    return `The backend API could not listen on port ${port}: ${error.message}`;
+}
+
 export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
     app: GitClientRequestApi,
     apiMethods: readonly string[],
     db: { configureDatabase: () => void },
-    options: { runInRequestScope?: DevServerRequestScope } = {}
+    options: BrowserDevServerOptions = {}
 ) {
-    // Initialize database (normally done by the Electrobun entrypoint)
+    const port = options.port ?? appConfig.apiPort;
+    const nativeStandins = options.nativeStandins ?? {};
+
+    // Initialize database (normally done by the Electron entrypoint)
     db.configureDatabase();
 
     const methodMap: GitClientRequestApi = apiMethods.reduce((acc, methodName) => {
@@ -119,20 +87,6 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
     function isCancellation(message: string) {
         return /cancelled|canceled|aborted/i.test(message);
     }
-
-    // // CORS preflight (dev mode only — standalone serves from the same origin)
-    // if (!IS_STANDALONE) {
-    //     serverApp.use((req, res, next) => {
-    //         if (req.method === 'OPTIONS') {
-    //             res.set('Access-Control-Allow-Origin', '*');
-    //             res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    //             res.set('Access-Control-Allow-Headers', 'Content-Type');
-    //             res.sendStatus(204);
-    //             return;
-    //         }
-    //         next();
-    //     });
-    // }
 
     serverApp.use(express.text({ type: '*/*', limit: '10mb' }));
     serverApp.use((_req, res, next) => {
@@ -175,8 +129,8 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
             return;
         }
 
-        // Aborting when the response closes without finishing is what kills the git process
-        // the request started; otherwise the client gives up and the child keeps running.
+        // Aborting when the response closes without finishing is what kills the work the request
+        // started; otherwise the client gives up and the work keeps running.
         const controller = new AbortController();
         const onResponseClosed = () => {
             if (!res.writableEnded) {
@@ -195,16 +149,14 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
                 }
 
                 const result = await runWithTimeout(Promise.resolve(handler(params)), REQUEST_TIMEOUT_MS, controller);
-                // The renderer parses every answer as JSON, so a method that returns nothing has to
-                // answer `null` rather than an empty body.
+                // The renderer parses every answer as JSON, so a method that returns nothing answers
+                // `null` rather than an empty body.
                 res.json(result ?? null);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
 
                 if (!isCancellation(message)) {
-                    // A repository removed mid-request is a race the client handles, and a method
-                    // only the native host can run is a boundary the specs assert on purpose.
-                    const code = isRepositoryNotFoundError(message) ? 'repository-not-found' : error instanceof BrowserUnavailableError ? error.code : 'internal';
+                    const code = error instanceof BrowserUnavailableError ? error.code : (options.classifyError?.(error, message) ?? 'internal');
 
                     recordHandlerError(method ?? 'unknown', message, code);
 
@@ -228,10 +180,20 @@ export function createBrowserOnlyDevServer<GitClientRequestApi extends object>(
         res.status(404).send('Not found');
     });
 
-    return new Promise<void>((resolve) => {
-        serverApp.listen(appConfig.apiPort, () => {
-            console.log(`[devServer] Backend API running at http://localhost:${appConfig.apiPort}`);
-            resolve();
+    return new Promise<Server>((resolve, reject) => {
+        const server = serverApp.listen(port, () => {
+            // A bind that fails reports this callback first and the error right after it, so the
+            // address — not the callback — is what says the API is really listening.
+            if (server.address()) {
+                console.log(`[devServer] Backend API running at http://localhost:${port}`);
+                resolve(server);
+            }
+        });
+
+        // A busy port used to surface as an unhandled 'error' event: the backend never came up and
+        // the window waited forever, so the reason is reported instead.
+        server.on('error', (error: NodeJS.ErrnoException) => {
+            reject(new Error(describeApiListenError(port, error)));
         });
     });
 }
@@ -286,7 +248,7 @@ export function createBrowserOnlyAppClientPpc(timeoutMs: number = 75_000) {
 
     function installDev2AppClientBridge() {
         installRendererDiagnostics();
-        // Minimal stub of the Electrobun bridge shape
+        // Minimal stub of the Electron preload bridge shape
         window.electronAPI = {
             invoke,
             onNativeCommand: () => () => {},

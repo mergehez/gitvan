@@ -291,11 +291,15 @@ async function main() {
     const shouldSign = shouldNotarize || process.argv.includes('--signed');
     const shouldInstall = !process.argv.includes('--no-install');
     const shouldSkipTests = process.argv.includes('--skip-tests');
+    // The release is the last gate before an install, so it runs the project's own validate script
+    // when there is one; a project without it releases without the suite, as it always did.
+    const validateScript = (pkg.scripts as Record<string, string> | undefined)?.['test:validate'];
 
     await ensureMacIconset();
 
-    // There is no CI here, so the release path is the only place the suites can be enforced.
-    if (shouldSkipTests) {
+    if (!validateScript) {
+        console.log('No test:validate script in this project; releasing without the suite.');
+    } else if (shouldSkipTests) {
         console.log('Skipping the test suite and typecheck (--skip-tests).');
     } else {
         console.log('Running the test suite and typecheck...');

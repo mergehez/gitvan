@@ -21,12 +21,6 @@ export default defineConfig({
         }),
     ],
     root: 'src/mainview',
-    // `helpers.ts` reads the ports from `process.env`, which does not exist in the renderer;
-    // replacing the reads here keeps the served app pointing at the backend that serves it.
-    define: {
-        'process.env.GITVAN_VUE_PORT': JSON.stringify(process.env.GITVAN_VUE_PORT ?? ''),
-        'process.env.GITVAN_API_PORT': JSON.stringify(process.env.GITVAN_API_PORT ?? ''),
-    },
     build: {
         outDir: '../../dist',
     },
