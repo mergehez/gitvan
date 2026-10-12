@@ -12,10 +12,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { changesGit } from '../backend/services/git/git-changes.js';
-import { runGit } from '../backend/services/git/git-common.js';
-import { historyGit } from '../backend/services/git/git-history.js';
-import { invalidateAllRepoSidebarStatuses, readRepoSidebarStatus } from '../backend/services/repoStatusCache.js';
+import { changesGit } from '../src/backend/services/git/git-changes.js';
+import { runGit } from '../src/backend/services/git/git-common.js';
+import { historyGit } from '../src/backend/services/git/git-history.js';
+import { invalidateAllRepoSidebarStatuses, readRepoSidebarStatus } from '../src/backend/services/repoStatusCache.js';
 
 type Options = {
     repos: number;
