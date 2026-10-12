@@ -98,6 +98,10 @@ if (reapOnly) {
 // Vite is spawned through its own entry and through `node`, not through this launcher's runtime:
 // that entry is an ESM script with a `node` shebang, and running it under Bun panics on a NAPI
 // call — which is exactly how a dev server ends up left behind for the next run to trip over.
+// The renderer has no `process`, so the ports travel to it as `VITE_*` vars the bundler inlines.
+process.env.VITE_API_PORT ??= String(apiPort);
+process.env.VITE_VUE_PORT ??= String(vuePort);
+
 const viteBin = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', 'vite', 'bin', 'vite.js');
 const nodePath = execSync('command -v node || true', { shell: '/bin/bash' }).toString().trim() || process.execPath;
 const child = spawn(nodePath, [viteBin, ...viteArgs], { stdio: 'inherit' });
