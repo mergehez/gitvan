@@ -2,6 +2,8 @@
 import {
     FileDiff,
     UnresolvedFile,
+    VirtualizedFileDiff,
+    Virtualizer,
     parseDiffFromFile,
     type ChangeContent,
     type FileContents,
@@ -37,9 +39,22 @@ const props = defineProps<{
 
 const settings = useSettings();
 
+const scrollRootRef = ref<HTMLDivElement>();
 const renderHostRef = ref<HTMLDivElement>();
 const fileDiffRef = shallowRef<FileDiff | UnresolvedFile>();
 const renderedNodeRef = shallowRef<HTMLElement>();
+/** Bumped on every post-render, so anchors are rebuilt when the renderer replaces the node. */
+let renderedNodeEpoch = 0;
+/**
+ * Rows the diff renderer mounts around the viewport. Without it a large diff (a 790 KB JSON is
+ * ~14k lines) renders every line and token, which blocks the renderer for seconds and keeps the
+ * whole app slow afterwards.
+ */
+const diffVirtualizer = shallowRef<Virtualizer>();
+/** Change blocks beyond this are not anchored: a button per changed line of a 14k-line file is unusable. */
+const maxHunkAnchors = 500;
+/** Diffs larger than this render through the windowed renderer; smaller ones render whole. */
+const virtualizationLineThreshold = 2_000;
 const hoveredActionZoneId = ref<string>();
 const hoveringActionZone = ref(false);
 let pendingHoveredActionZoneClearTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -78,7 +93,14 @@ function createFile(name: string, contents: string): FileContents {
     return { name, contents };
 }
 
-function createRenderedDiff(name: string, original: string, modified: string, ignoredChars: string, showWhitespaceChanges: boolean, normalizedPair?: { original: string; modified: string }) {
+function createRenderedDiff(
+    name: string,
+    original: string,
+    modified: string,
+    ignoredChars: string,
+    showWhitespaceChanges: boolean,
+    normalizedPair?: { original: string; modified: string }
+) {
     const hideWhitespace = !showWhitespaceChanges;
     const ignoreOptions = { sortModuleImports: isJavaScriptTypeScriptPath(name) };
     const normalizedOriginal = normalizedPair?.original ?? normalizeComparableDiffText(original, ignoredChars, hideWhitespace, ignoreOptions);
@@ -125,9 +147,7 @@ const diffState = computed(() => {
     const original = props.original ?? '';
     const modified = props.modified ?? '';
     const normalizedPair =
-        props.normalizedOriginal !== undefined && props.normalizedModified !== undefined
-            ? { original: props.normalizedOriginal, modified: props.normalizedModified }
-            : undefined;
+        props.normalizedOriginal !== undefined && props.normalizedModified !== undefined ? { original: props.normalizedOriginal, modified: props.normalizedModified } : undefined;
 
     return createRenderedDiff(name, original, modified, props.diffIgnoredChars ?? '', props.showWhitespaceChanges ?? false, normalizedPair);
 });
@@ -151,6 +171,7 @@ const diffOptions = computed<DiffOptions>(() => {
         disableBackground: shouldHideDecorations,
         useTokenTransformer: true,
         onPostRender(node: HTMLElement, _instance?: unknown) {
+            renderedNodeEpoch += 1;
             renderedNodeRef.value = node;
             void revealTargetLine();
         },
@@ -377,10 +398,11 @@ let anchoredSignature = '';
 
 /**
  * Identifies the anchors a rendered node carries. The render epoch covers nodes the renderer
- * reuses across renders, so a rewritten diff is rebuilt even when its patch text is unchanged.
+ * reuses across renders, so a rewritten diff is rebuilt even when its patch text is unchanged; the
+ * first and last rendered row cover a windowed renderer, whose rows change as the view scrolls.
  */
-function anchorSignature(patch: string) {
-    return [renderEpoch, props.original ?? '', props.modified ?? '', patch].join('\u0000');
+function anchorSignature(patch: string, firstRenderedLine: string | null, lastRenderedLine: string | null, renderedCount: number, hunkCount: number) {
+    return [renderEpoch, renderedNodeEpoch, props.original ?? '', props.modified ?? '', patch, firstRenderedLine, lastRenderedLine, renderedCount, hunkCount].join('\u0000');
 }
 
 function setHunkAnchors() {
@@ -389,9 +411,31 @@ function setHunkAnchors() {
     const cfg = props.hunkActionsConfig;
     if (!sr || !host || !cfg || cfg.oldSizeBytes <= 0 || cfg.newSizeBytes <= 0) return;
 
+    const gutter = sr.querySelector<HTMLElement>('[data-additions] > [data-gutter]');
+    const adds = gutter?.querySelectorAll<HTMLElement>(':scope > div');
+    if (!gutter || !adds?.length) return;
+
+    const renderedAdditionLines = new Set<string>();
+
+    for (const row of adds) {
+        const columnNumber = row.getAttribute('data-column-number');
+
+        if (columnNumber !== null) {
+            renderedAdditionLines.add(columnNumber);
+        }
+    }
+
+    const allHunks = diffState.value.renderedDiff?.rawHunks ?? [];
+
     // The post-render callback and the reveal path both land here, so the pass is keyed on what is
     // rendered and only runs again when that changes.
-    const signature = anchorSignature(cfg.patch);
+    const signature = anchorSignature(
+        cfg.patch,
+        adds[0]?.getAttribute('data-column-number') ?? null,
+        adds[adds.length - 1]?.getAttribute('data-column-number') ?? null,
+        adds.length,
+        allHunks.length
+    );
     if (signature === anchoredSignature) return;
 
     // we add actions wrapper only once, and populate its content on button hover, so that we don't have 100+ action wrappers in the DOM for large diffs
@@ -425,19 +469,37 @@ function setHunkAnchors() {
     }
     hunkActionsWrapper = actions;
 
-    const gutter = sr.querySelector<HTMLElement>('[data-additions] > [data-gutter]');
-    const adds = gutter?.querySelectorAll<HTMLElement>(':scope > div');
-    if (!gutter || !adds?.length) return;
+    // A windowed renderer reuses rows, so a change block that is gone (or scrolled away) would
+    // otherwise leave its button behind: clear the set and replay the ones still rendered.
+    for (const button of sr.querySelectorAll<HTMLElement>('.gitvan-hunk-button')) {
+        button.remove();
+    }
 
-    const hunks = diffState.value.renderedDiff?.rawHunks ?? [];
-    for (let i = 0; i < hunks.length; i++) {
-        const hunk = hunks[i];
-        const selector = hunk.additionLineIndex == 0 ? `:scope > div` : `:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`;
+    let anchored = 0;
+    const firstRenderedColumn = adds[0]?.getAttribute('data-column-number') ?? null;
+    // The first change block anchors to the list's first row, which is only the file's first row
+    // while the window starts there (the renderers number that row 0 or 1).
+    const startsAtTop = firstRenderedColumn === '0' || firstRenderedColumn === '1';
+
+    for (let i = 0; i < allHunks.length && anchored < maxHunkAnchors; i++) {
+        const hunk = allHunks[i];
+        const isWholeFileStart = hunk.additionLineIndex == 0;
+
+        // Only a change block whose row is mounted can anchor, so a large diff never queries the
+        // DOM per off-screen hunk. The original index is kept: the patch is built from it.
+        if (isWholeFileStart ? !startsAtTop : !renderedAdditionLines.has(String(hunk.additionLineIndex))) {
+            continue;
+        }
+
+        const selector = isWholeFileStart ? `:scope > div` : `:scope > div[data-column-number="${hunk.additionLineIndex}"] + div`;
         const addLine = gutter.querySelector<HTMLElement>(selector);
+
         if (!addLine) {
             continue;
         }
+
         addHunkElsToDom(`#${i + 1} (${hunk.hunkSpecs})`, addLine, i);
+        anchored += 1;
     }
 
     anchoredSignature = signature;
@@ -456,10 +518,27 @@ async function revealTargetLine() {
     lineElement?.scrollIntoView({ block: 'center', inline: 'nearest' });
 }
 
-function ensureDiffInstance() {
+/** Tracks which renderer the current instance is, so crossing the threshold rebuilds it. */
+let diffInstanceVirtualized = false;
+
+function ensureDiffInstance(useVirtualization: boolean) {
+    if (fileDiffRef.value && !props.conflictFile && diffInstanceVirtualized !== useVirtualization) {
+        cleanUpInstance();
+    }
+
     if (!fileDiffRef.value) {
         const opts = diffOptions.value;
-        fileDiffRef.value = props.conflictFile ? new UnresolvedFile(opts) : new FileDiff(opts);
+
+        if (props.conflictFile) {
+            fileDiffRef.value = new UnresolvedFile(opts);
+            diffInstanceVirtualized = false;
+        } else if (useVirtualization && diffVirtualizer.value) {
+            fileDiffRef.value = new VirtualizedFileDiff(opts, diffVirtualizer.value);
+            diffInstanceVirtualized = true;
+        } else {
+            fileDiffRef.value = new FileDiff(opts);
+            diffInstanceVirtualized = false;
+        }
     }
 
     return fileDiffRef.value;
@@ -473,7 +552,9 @@ function renderDiff() {
 
     renderEpoch += 1;
 
-    const instance = ensureDiffInstance();
+    const renderedDiff = props.conflictFile ? undefined : diffState.value.renderedDiff;
+    const renderedLineCount = renderedDiff ? renderedDiff.deletionLines.length + renderedDiff.additionLines.length : 0;
+    const instance = ensureDiffInstance(renderedLineCount > virtualizationLineThreshold);
     const opts = diffOptions.value;
     instance.setOptions(opts);
 
@@ -489,7 +570,6 @@ function renderDiff() {
         return;
     }
 
-    const renderedDiff = diffState.value.renderedDiff;
     if (!renderedDiff) return;
 
     (instance as FileDiff).render({
@@ -509,12 +589,25 @@ function cleanUpInstance() {
 }
 
 onMounted(() => {
+    // The renderer mounts only the rows near the viewport and keeps the rest as height, so a very
+    // large diff does not build every line node; the conflict resolver keeps its full render.
+    const scrollRoot = scrollRootRef.value;
+    const content = renderHostRef.value;
+
+    if (!props.conflictFile && scrollRoot && content) {
+        const virtualizer = new Virtualizer();
+        virtualizer.setup(scrollRoot, content);
+        diffVirtualizer.value = virtualizer;
+    }
+
     renderDiff();
 });
 
 onUnmounted(() => {
     clearPendingHoveredActionZoneClear();
     cleanUpInstance();
+    diffVirtualizer.value?.cleanUp();
+    diffVirtualizer.value = undefined;
 });
 
 // An array of getters, not one getter returning an array: the latter produces a new array on
@@ -543,6 +636,15 @@ watch(
     }
 );
 
+// The hunk actions arrive from the selected change, which can resolve after the diff's first
+// render; anchor the already-rendered rows instead of waiting for the next diff.
+watch(
+    () => props.hunkActionsConfig,
+    () => {
+        void revealTargetLine();
+    }
+);
+
 const hostStyle = computed(() => ({
     '--diffs-font-size': `${settings.state.diffFontSize}px`,
     '--diffs-font-family': 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
@@ -552,7 +654,7 @@ const hostStyle = computed(() => ({
 </script>
 
 <template>
-    <div data-testid="diffs-diff-editor-root" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
+    <div ref="scrollRootRef" data-testid="diffs-diff-editor-root" class="relative w-full min-h-40 flex-1 overflow-y-auto" :class="props.class" :style="hostStyle">
         <div ref="renderHostRef" class="min-h-full gitvan-diffs-host" />
     </div>
 </template>

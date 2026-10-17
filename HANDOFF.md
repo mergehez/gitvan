@@ -196,11 +196,13 @@ times out, investigate rather than raising it (`AGENTS.md`).
 - `openSandboxRepo(page, '<lab>')` resets the sandbox labs _and_ the persisted settings, then selects the
   lab. Do not re-implement reset/selection.
 - Sandbox labs: `merge-conflict`, `pull-conflict`, `pull-stash`, `push-rejected`, `deep-history`,
-  `partial-changes`, `cosmetics`, `empty`. Registered in `sandboxResetScripts` (`services/app.ts`); the
-  generated repos are gitignored and always recreated by the run.
-- Windowing needs more rows than a lab ships: `playwright/file-tree-windowing.spec.ts` writes 1000 files
-  into `partial-changes-lab/repo`, stages a slice of them and deletes them in `afterAll`. It covers a
-  single long section and two virtualized sections sharing the panel's scroller.
+  `partial-changes`, `cosmetics`, `empty`, `wide-tree`. Registered in `sandboxResetScripts`
+  (`services/app.ts`); the generated repos are gitignored and always recreated by the run.
+- Windowing needs more rows than a lab ships: `file-tree-windowing.spec.ts` writes 1000 files into
+  `partial-changes-lab/repo` (and stages a slice), `large-diff.spec.ts` writes a 14k-line JSON, and the
+  Explorer case uses `wide-tree`'s 400 committed files. Each removes what it added in `afterAll`.
+- A panel scroller has no height until the layout settles. A spec that scrolls one first waits for
+  `scrollHeight > clientHeight`, or the offset clamps to zero and the window never moves.
 - The provider stub (`support/providerStub.ts`, port 5278) answers OAuth/token calls; the native picker
   stub is a JSON file (`support/nativeStub.ts`). No spec reaches a real provider or the real keychain.
 - Only `bun run test:electron` launches the packaged app (`playwright/electron.spec.ts`, its own config and

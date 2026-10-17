@@ -11,3 +11,15 @@ if (typeof globalThis.ResizeObserver !== 'function') {
         disconnect() {}
     } as unknown as typeof ResizeObserver;
 }
+
+// The diff viewer's windowing sets up an IntersectionObserver when it mounts.
+if (typeof globalThis.IntersectionObserver !== 'function') {
+    globalThis.IntersectionObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+            return [];
+        }
+    } as unknown as typeof IntersectionObserver;
+}

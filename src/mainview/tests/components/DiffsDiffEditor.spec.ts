@@ -18,10 +18,12 @@ const pierre = vi.hoisted(() => {
     const state = {
         instances: [] as any[],
         unresolvedInstances: [] as any[],
+        virtualizers: [] as any[],
         renderCalls: [] as any[],
         setOptionsCalls: [] as any[],
         lastOptions: undefined as any,
         cleanup: vi.fn(),
+        virtualizerCleanup: vi.fn(),
         diffOverride: undefined as any,
     };
 
@@ -150,16 +152,38 @@ const pierre = vi.hoisted(() => {
         }
     }
 
+    class MockVirtualizedFileDiff extends MockFileDiff {
+        constructor(options: any, _virtualizer: unknown) {
+            super(options);
+        }
+    }
+
+    class MockVirtualizer {
+        type = 'simple' as const;
+        virtualizer = true;
+
+        constructor() {
+            state.virtualizers.push(this);
+        }
+
+        setup() {}
+        cleanUp() {
+            state.virtualizerCleanup();
+        }
+    }
+
     const parseDiffFromFile = vi.fn((oldFile: any, newFile: any) => state.diffOverride ?? buildParsedDiff(oldFile?.contents ?? '', newFile?.contents ?? ''));
 
     function reset() {
         state.instances.length = 0;
         state.unresolvedInstances.length = 0;
+        state.virtualizers.length = 0;
         state.renderCalls.length = 0;
         state.setOptionsCalls.length = 0;
         state.lastOptions = undefined;
         state.diffOverride = undefined;
         state.cleanup.mockClear();
+        state.virtualizerCleanup.mockClear();
         parseDiffFromFile.mockClear();
     }
 
@@ -176,12 +200,23 @@ const pierre = vi.hoisted(() => {
         };
     }
 
-    return { state, FileDiff: MockFileDiff, UnresolvedFile: MockUnresolvedFile, parseDiffFromFile, reset, makeChangeDiff };
+    return {
+        state,
+        FileDiff: MockFileDiff,
+        UnresolvedFile: MockUnresolvedFile,
+        VirtualizedFileDiff: MockVirtualizedFileDiff,
+        Virtualizer: MockVirtualizer,
+        parseDiffFromFile,
+        reset,
+        makeChangeDiff,
+    };
 });
 
 vi.mock('@pierre/diffs', () => ({
     FileDiff: pierre.FileDiff,
     UnresolvedFile: pierre.UnresolvedFile,
+    VirtualizedFileDiff: pierre.VirtualizedFileDiff,
+    Virtualizer: pierre.Virtualizer,
     parseDiffFromFile: pierre.parseDiffFromFile,
 }));
 
@@ -378,14 +413,30 @@ describe('DiffsDiffEditor rendering', () => {
         expect(pierre.state.lastOptions).toMatchObject({ mergeConflictActionsType: 'none', maxContextLines: 3 });
     });
 
-    it('cleans up the renderer on unmount', () => {
+    it('cleans up the renderer and its virtualizer on unmount', () => {
         const wrapper = mountEditor();
 
         expect(pierre.state.cleanup).not.toHaveBeenCalled();
+        expect(pierre.state.virtualizers).toHaveLength(1);
 
         wrapper.unmount();
 
         expect(pierre.state.cleanup).toHaveBeenCalledTimes(1);
+        expect(pierre.state.virtualizerCleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders a small diff whole and a large one through the windowed renderer', () => {
+        const small = mountEditor();
+
+        expect(pierre.state.instances.at(-1)).toBeInstanceOf(pierre.FileDiff);
+        small.unmount();
+
+        const original = Array.from({ length: 2_500 }, (_, index) => `line ${index}`).join('\n');
+        const modified = original.replace('line 1', 'line one');
+        mountEditor({ original, modified, pathForLanguage: 'big.json' });
+
+        // A 790 KB JSON is ~14k lines; the plain renderer would mount every one of them.
+        expect(pierre.state.instances.at(-1)).toBeInstanceOf(pierre.VirtualizedFileDiff);
     });
 });
 

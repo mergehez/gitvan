@@ -70,7 +70,15 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Clamped a windowed tree's slice to its own rows: a section scrolled fully out of view used to grow its
   spacer with the offset, pushing the section below it away and making the last rows unreachable. A tree
   whose own section scrolls is now windowed too. Guarded by `FileTree.spec.ts` and
-  `playwright/file-tree-windowing.spec.ts`.
+  `playwright/file-tree-windowing.spec.ts`; the Explorer case (its section is the scroller) is guarded by
+  `explorer-view.spec.ts` over the new `wide-tree` lab.
+- Windowed the diff renderer: a diff over 2000 lines now goes through `VirtualizedFileDiff`, mounts only
+  the rows around the viewport and keeps the rest as height. A 790 KB / 14k-line JSON used to block the
+  renderer for seconds and leave the app slow. Hunk anchors are limited to the mounted rows and re-anchored
+  when the renderer replaces its node. Guarded by `playwright/large-diff.spec.ts` and
+  `DiffsDiffEditor.spec.ts`.
+- Ignored a Monaco module load that resolves after its view unmounted, instead of creating an editor from
+  a removed container and leaving an unhandled rejection behind every quick view switch.
 
 ### Tests
 
