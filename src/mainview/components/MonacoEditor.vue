@@ -45,10 +45,14 @@ async function ensureEditor() {
 
     try {
         const monaco = await getMonacoModule();
+        // The module can resolve after the component unmounted (a view switch during load), and
+        // Monaco cannot create an editor without its container.
+        const container = editorContainerRef.value;
+        if (!container) return;
         configureMonaco(monaco);
         monaco.editor.setTheme('vs-dark');
         modelRef.value = monaco.editor.createModel(modelValue.value ?? '', finalLanguage.value);
-        editorRef.value = monaco.editor.create(editorContainerRef.value, options.value);
+        editorRef.value = monaco.editor.create(container, options.value);
         editorRef.value.setModel(modelRef.value);
         modelRef.value.onDidChangeContent(() => {
             if (applyingExternalValue) return;

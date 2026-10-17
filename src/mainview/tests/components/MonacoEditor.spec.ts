@@ -34,6 +34,11 @@ const { monaco, model, editor } = vi.hoisted(() => {
     return { monaco, model, editor };
 });
 
+const loading = vi.hoisted(() => ({
+    gate: false,
+    release: undefined as (() => void) | undefined,
+}));
+
 vi.mock('../../lib/monaco', () => ({
     configureMonacoEnvironment: vi.fn(),
     configureMonaco: vi.fn(),
@@ -43,7 +48,15 @@ vi.mock('../../lib/monaco', () => ({
         fontSize: params.fontSize ?? 12,
     }),
     getMonacoLanguage: (language?: string, pathForLanguage?: string) => pathForLanguage ?? language ?? 'plaintext',
-    getMonacoModule: async () => monaco,
+    getMonacoModule: () => {
+        if (!loading.gate) {
+            return Promise.resolve(monaco);
+        }
+
+        return new Promise((resolve) => {
+            loading.release = () => resolve(monaco);
+        });
+    },
 }));
 
 vi.mock('../../composables/useSettings', () => ({
@@ -75,6 +88,8 @@ function mountEditor(props: Record<string, unknown> = {}) {
 beforeEach(() => {
     model.value = 'hello';
     model.changeHandler = undefined;
+    loading.gate = false;
+    loading.release = undefined;
     vi.clearAllMocks();
 });
 
@@ -134,6 +149,19 @@ describe('MonacoEditor', () => {
 
         expect(editor.updateOptions).toHaveBeenCalledTimes(1);
         expect(editor.layout).not.toHaveBeenCalled();
+    });
+
+    it('does not build an editor when the component unmounts while Monaco loads', async () => {
+        loading.gate = true;
+
+        const wrapper = mountEditor();
+        wrapper.unmount();
+        loading.release?.();
+        await flushPromises();
+
+        // Monaco cannot create an editor from a container the view already removed.
+        expect(monaco.editor.createModel).not.toHaveBeenCalled();
+        expect(monaco.editor.create).not.toHaveBeenCalled();
     });
 
     it('switches the model language when the path changes', async () => {
