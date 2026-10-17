@@ -66,6 +66,35 @@ test.describe('explorer view', () => {
         await expect(page.getByTestId('explorer-file-title')).toHaveText('notes/note-01.txt');
     });
 
+    /**
+     * In this layout the tree's own `<section>` is the scroll container, not an ancestor. The tree
+     * used to render every row in that case, so a committed tree of a few hundred files froze the
+     * whole app as soon as Explorer opened.
+     */
+    test('windows a long committed tree that scrolls in its own section', async ({ page }) => {
+        await openSandboxRepo(page, 'wide-tree');
+        await page.getByRole('button', { name: 'Explorer', exact: true }).click();
+        await expect(page.getByTestId('file-tree-header-committed-tree')).toBeVisible();
+
+        const tree = page.getByTestId('file-tree-header-committed-tree').locator('xpath=ancestor::section[1]');
+        const explorerRows = tree.locator('[data-file-tree-row]');
+
+        // 400 notes + the notes directory + README; only the viewport's window is mounted.
+        await expect.poll(async () => explorerRows.count()).toBeLessThan(200);
+
+        // The section is the scroller once the panel has its height; before that it reports the
+        // height of its header, and a scroll offset set then is clamped back to zero.
+        await expect.poll(() => tree.evaluate((element) => element.scrollHeight > element.clientHeight + 1)).toBe(true);
+
+        await tree.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
+
+        await expect(page.getByTestId('file-tree-item-file:notes/note-400.txt')).toBeVisible();
+        await expect(page.getByTestId('file-tree-item-file:README.md')).toBeVisible();
+        await expect.poll(async () => explorerRows.count()).toBeLessThan(200);
+    });
+
     test('collapses a directory to hide the files inside it', async ({ page }) => {
         await openExplorer(page);
         await expect(explorerRow(page, 'notes/note-01.txt')).toBeVisible();

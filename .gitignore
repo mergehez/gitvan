@@ -25,6 +25,7 @@ sandbox/push-rejected-lab/origin.git/
 sandbox/push-rejected-lab/upstream/
 sandbox/deep-history-lab/repo/
 sandbox/empty-lab/repo/
+sandbox/wide-tree-lab/repo/
 artifacts/
 src/mainview/directivesOld/
 test-results/

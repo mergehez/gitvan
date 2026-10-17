@@ -80,6 +80,9 @@ test.describe('file tree windowing', () => {
 
         const scroller = await changesScroller(bulkRow(page, 0));
 
+        // The panel has its final height once the layout settles; a scroll set before that clamps.
+        await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight + 1)).toBe(true);
+
         await scroller.evaluate((element) => {
             element.scrollTop = element.scrollHeight;
         });
@@ -112,6 +115,8 @@ test.describe('file tree windowing', () => {
         const scroller = await changesScroller(bulkRow(page, 0, 'staged'));
         const initialScrollHeight = await scroller.evaluate((element) => element.scrollHeight);
         const initialStagedHeight = await stagedSection.evaluate((element) => element!.getBoundingClientRect().height);
+
+        await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight + 1)).toBe(true);
 
         await scroller.evaluate((element) => {
             element.scrollTop = element.scrollHeight;

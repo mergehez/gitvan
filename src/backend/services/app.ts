@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { dirname, join, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { executeCommand } from '../../electronUtils/executeCommand.js';
@@ -96,6 +96,10 @@ const sandboxResetScripts = [
     {
         folder: 'empty',
         script: 'reset-empty-repo.mjs',
+    },
+    {
+        folder: 'wide-tree',
+        script: 'reset-wide-tree-repo.mjs',
     },
 ] as const;
 
@@ -810,6 +814,8 @@ export const app = {
             const folderPath = join(labsPath, sandbox.folder + '-lab');
             const repoPath = join(folderPath, 'repo');
             const scriptPath = join(folderPath, sandbox.script);
+            // The script recreates the repo, but it is spawned with the repo as its cwd.
+            mkdirSync(repoPath, { recursive: true });
             console.log('running:', process.execPath, [scriptPath], repoPath);
             await executeCommand({
                 // Electron is its own Node runtime; `node` is not on PATH for app-launched builds.
