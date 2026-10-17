@@ -413,30 +413,35 @@ describe('DiffsDiffEditor rendering', () => {
         expect(pierre.state.lastOptions).toMatchObject({ mergeConflictActionsType: 'none', maxContextLines: 3 });
     });
 
-    it('cleans up the renderer and its virtualizer on unmount', () => {
+    it('cleans up the renderer on unmount without building a virtualizer for a small diff', () => {
         const wrapper = mountEditor();
 
         expect(pierre.state.cleanup).not.toHaveBeenCalled();
-        expect(pierre.state.virtualizers).toHaveLength(1);
+        expect(pierre.state.virtualizers).toHaveLength(0);
 
         wrapper.unmount();
 
         expect(pierre.state.cleanup).toHaveBeenCalledTimes(1);
-        expect(pierre.state.virtualizerCleanup).toHaveBeenCalledTimes(1);
     });
 
-    it('renders a small diff whole and a large one through the windowed renderer', () => {
+    it('builds and cleans up the virtualizer only for a large diff', () => {
         const small = mountEditor();
 
         expect(pierre.state.instances.at(-1)).toBeInstanceOf(pierre.FileDiff);
+        expect(pierre.state.virtualizers).toHaveLength(0);
         small.unmount();
 
         const original = Array.from({ length: 2_500 }, (_, index) => `line ${index}`).join('\n');
         const modified = original.replace('line 1', 'line one');
-        mountEditor({ original, modified, pathForLanguage: 'big.json' });
+        const large = mountEditor({ original, modified, pathForLanguage: 'big.json' });
 
         // A 790 KB JSON is ~14k lines; the plain renderer would mount every one of them.
         expect(pierre.state.instances.at(-1)).toBeInstanceOf(pierre.VirtualizedFileDiff);
+        expect(pierre.state.virtualizers).toHaveLength(1);
+
+        large.unmount();
+
+        expect(pierre.state.virtualizerCleanup).toHaveBeenCalledTimes(1);
     });
 });
 

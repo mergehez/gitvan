@@ -76,7 +76,11 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
   the rows around the viewport and keeps the rest as height. A 790 KB / 14k-line JSON used to block the
   renderer for seconds and leave the app slow. Hunk anchors are limited to the mounted rows and re-anchored
   when the renderer replaces its node. Guarded by `playwright/large-diff.spec.ts` and
-  `DiffsDiffEditor.spec.ts`.
+  `DiffsDiffEditor.spec.ts`. The virtualizer (observers plus the shared render queue) is built only while
+  a large diff is shown, so normal diffs keep their previous timing.
+- Decided a tree's row uniformity once: the sample is the mounted window, so allowing a later sample to
+  re-enable windowing after one disabled it could flip between "window" and "every row" indefinitely.
+  Measurements are also written only when they change.
 - Ignored a Monaco module load that resolves after its view unmounted, instead of creating an editor from
   a removed container and leaving an unhandled rejection behind every quick view switch.
 

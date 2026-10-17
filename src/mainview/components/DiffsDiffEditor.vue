@@ -521,24 +521,61 @@ async function revealTargetLine() {
 /** Tracks which renderer the current instance is, so crossing the threshold rebuilds it. */
 let diffInstanceVirtualized = false;
 
+/**
+ * The virtualizer installs observers and a shared render queue, so it exists only while a diff is
+ * actually large: every normal diff keeps the plain renderer and its previous timing exactly.
+ */
+function ensureDiffVirtualizer() {
+    if (diffVirtualizer.value || props.conflictFile) {
+        return diffVirtualizer.value;
+    }
+
+    const scrollRoot = scrollRootRef.value;
+    const content = renderHostRef.value;
+
+    if (!scrollRoot || !content) {
+        return undefined;
+    }
+
+    const virtualizer = new Virtualizer();
+    virtualizer.setup(scrollRoot, content);
+    diffVirtualizer.value = virtualizer;
+
+    return virtualizer;
+}
+
+function dropDiffVirtualizer() {
+    diffVirtualizer.value?.cleanUp();
+    diffVirtualizer.value = undefined;
+}
+
 function ensureDiffInstance(useVirtualization: boolean) {
     if (fileDiffRef.value && !props.conflictFile && diffInstanceVirtualized !== useVirtualization) {
         cleanUpInstance();
     }
 
-    if (!fileDiffRef.value) {
-        const opts = diffOptions.value;
+    if (fileDiffRef.value) {
+        return fileDiffRef.value;
+    }
 
-        if (props.conflictFile) {
-            fileDiffRef.value = new UnresolvedFile(opts);
-            diffInstanceVirtualized = false;
-        } else if (useVirtualization && diffVirtualizer.value) {
-            fileDiffRef.value = new VirtualizedFileDiff(opts, diffVirtualizer.value);
-            diffInstanceVirtualized = true;
-        } else {
-            fileDiffRef.value = new FileDiff(opts);
-            diffInstanceVirtualized = false;
-        }
+    const opts = diffOptions.value;
+
+    if (props.conflictFile) {
+        fileDiffRef.value = new UnresolvedFile(opts);
+        diffInstanceVirtualized = false;
+
+        return fileDiffRef.value;
+    }
+
+    const virtualizer = useVirtualization ? ensureDiffVirtualizer() : undefined;
+
+    if (virtualizer) {
+        fileDiffRef.value = new VirtualizedFileDiff(opts, virtualizer);
+        diffInstanceVirtualized = true;
+    } else {
+        dropDiffVirtualizer();
+        fileDiffRef.value = new FileDiff(opts);
+        diffInstanceVirtualized = false;
     }
 
     return fileDiffRef.value;
@@ -589,25 +626,13 @@ function cleanUpInstance() {
 }
 
 onMounted(() => {
-    // The renderer mounts only the rows near the viewport and keeps the rest as height, so a very
-    // large diff does not build every line node; the conflict resolver keeps its full render.
-    const scrollRoot = scrollRootRef.value;
-    const content = renderHostRef.value;
-
-    if (!props.conflictFile && scrollRoot && content) {
-        const virtualizer = new Virtualizer();
-        virtualizer.setup(scrollRoot, content);
-        diffVirtualizer.value = virtualizer;
-    }
-
     renderDiff();
 });
 
 onUnmounted(() => {
     clearPendingHoveredActionZoneClear();
     cleanUpInstance();
-    diffVirtualizer.value?.cleanUp();
-    diffVirtualizer.value = undefined;
+    dropDiffVirtualizer();
 });
 
 // An array of getters, not one getter returning an array: the latter produces a new array on
