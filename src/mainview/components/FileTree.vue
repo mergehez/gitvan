@@ -152,18 +152,24 @@ const windowRange = computed(() => {
 
     const height = rowHeight.value;
     const relativeTop = scrollTop.value - listOffsetTop.value;
-    const start = Math.max(0, Math.floor(relativeTop / height) - rowOverscan);
-    const end = Math.min(total, Math.ceil((relativeTop + viewportHeight.value) / height) + rowOverscan);
-    const resolvedEnd = Math.max(start, end);
+    // A tree sharing a scroller can be scrolled fully out of view (the section above it is
+    // taller, or the panel scrolled past it). Its window must stop at its own bounds: an
+    // unclamped start keeps growing with the scroll offset, and the spacer standing in for the
+    // rows then grows too — pushing every section below it further away on every scroll.
+    const start = Math.min(total, Math.max(0, Math.floor(relativeTop / height) - rowOverscan));
+    const end = Math.min(total, Math.max(start, Math.ceil((relativeTop + viewportHeight.value) / height) + rowOverscan));
 
-    return { start, end: resolvedEnd, top: start * height, bottom: (total - resolvedEnd) * height };
+    return { start, end, top: start * height, bottom: (total - end) * height };
 });
 
 const renderedRows = computed(() => visibleChildren.value.slice(windowRange.value.start, windowRange.value.end));
 
-/** The nearest ancestor that actually scrolls; a tree without one renders whole. */
+/**
+ * The nearest ancestor that actually scrolls; a tree without one renders whole. The window is
+ * measured from the row list, so a tree whose own section is the scroller is found too.
+ */
 function findScrollParent(element: HTMLElement | undefined) {
-    for (let current = element?.parentElement ?? null; current; current = current.parentElement) {
+    for (let current = element ?? null; current; current = current.parentElement) {
         const overflowY = window.getComputedStyle(current).overflowY;
 
         if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && current.scrollHeight > current.clientHeight + 1) {
@@ -179,7 +185,7 @@ function resolveScrollParent() {
         return undefined;
     }
 
-    const next = findScrollParent(sectionRef.value);
+    const next = findScrollParent(rowsTopRef.value);
     scrollParentResolved.value = true;
 
     if (next !== scrollParent.value) {

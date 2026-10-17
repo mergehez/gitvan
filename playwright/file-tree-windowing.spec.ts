@@ -1,7 +1,8 @@
+import { execFileSync } from 'child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, openSandboxRepo, test } from './support/sandbox';
 
 /**
@@ -11,26 +12,54 @@ import { expect, openSandboxRepo, test } from './support/sandbox';
  */
 const labRepoPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'sandbox', 'partial-changes-lab', 'repo');
 const bulkDirectory = join(labRepoPath, 'zz-bulk');
-const bulkFileCount = 140;
+const bulkFileCount = 1000;
+const stagedBulkFileCount = 120;
+
+function bulkFileName(index: number) {
+    return `zz-bulk-${String(index).padStart(3, '0')}.txt`;
+}
 
 function writeBulkFiles() {
     rmSync(bulkDirectory, { recursive: true, force: true });
     mkdirSync(bulkDirectory, { recursive: true });
 
     for (let index = 0; index < bulkFileCount; index += 1) {
-        writeFileSync(join(bulkDirectory, `zz-bulk-${String(index).padStart(3, '0')}.txt`), `bulk ${index}\n`, 'utf8');
+        writeFileSync(join(bulkDirectory, bulkFileName(index)), `bulk ${index}\n`, 'utf8');
     }
 }
 
-function bulkRow(page: Page, index: number) {
-    return page.getByTestId(`file-tree-item-unstaged-zz-bulk/zz-bulk-${String(index).padStart(3, '0')}.txt`);
+/** Leaves `stagedBulkFileCount` files in the index and the rest in the working tree. */
+function stageBulkFiles() {
+    execFileSync('git', ['add', '--', ...Array.from({ length: stagedBulkFileCount }, (_, index) => join('zz-bulk', bulkFileName(index)))], {
+        cwd: labRepoPath,
+        stdio: 'ignore',
+    });
 }
 
-async function reloadChanges(page: Page) {
+function bulkRow(page: Page, index: number, kind: 'staged' | 'unstaged' = 'unstaged') {
+    return page.getByTestId(`file-tree-item-${kind}-zz-bulk/${bulkFileName(index)}`);
+}
+
+async function reloadChanges(page: Page, expectedRow: Locator) {
     // Selecting another repository and coming back re-reads the changes list from disk.
     await page.getByRole('button', { name: 'cosmetics', exact: true }).click();
     await page.getByRole('button', { name: 'partial-changes', exact: true }).click();
-    await expect(bulkRow(page, 0)).toBeAttached();
+    await expect(expectedRow).toBeAttached();
+}
+
+/** The element that owns the scroll position of the changes panel. */
+function changesScroller(row: Locator) {
+    return row.evaluateHandle((element) => {
+        for (let current = element.parentElement; current; current = current.parentElement) {
+            const style = getComputedStyle(current);
+
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && current.scrollHeight > current.clientHeight + 1) {
+                return current;
+            }
+        }
+
+        throw new Error('No scroll container above the changes tree.');
+    });
 }
 
 test.afterAll(() => {
@@ -41,7 +70,7 @@ test.describe('file tree windowing', () => {
     test('mounts a window for a long changes list and reveals the rest on scroll', async ({ page }) => {
         await openSandboxRepo(page, 'partial-changes');
         writeBulkFiles();
-        await reloadChanges(page);
+        await reloadChanges(page, bulkRow(page, 0));
 
         const unstagedRows = page.locator('[data-testid^="file-tree-item-unstaged-"]');
 
@@ -49,14 +78,53 @@ test.describe('file tree windowing', () => {
         await expect(unstagedRows.first()).toBeVisible();
         expect(await unstagedRows.count()).toBeLessThan(bulkFileCount);
 
-        await bulkRow(page, 0).hover();
+        const scroller = await changesScroller(bulkRow(page, 0));
 
-        for (let step = 0; step < 6; step += 1) {
-            await page.mouse.wheel(0, 1200);
-        }
+        await scroller.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
 
         // The list keeps its full height, so the end of it is reachable.
         await expect(bulkRow(page, bulkFileCount - 1)).toBeVisible();
         expect(await unstagedRows.count()).toBeLessThan(bulkFileCount);
+    });
+
+    /**
+     * Both sections share the panel's scroll container. A windowed section that scrolls past
+     * the viewport must stop at its own end; otherwise its spacer grows with every scroll,
+     * pushing the section below it away and leaving the list unreachable.
+     */
+    test('keeps a windowed section above the viewport at its own height', async ({ page }) => {
+        await openSandboxRepo(page, 'partial-changes');
+        writeBulkFiles();
+        stageBulkFiles();
+        await reloadChanges(page, bulkRow(page, 0, 'staged'));
+
+        const stagedRows = page.locator('[data-testid^="file-tree-item-staged-"]');
+        const unstagedRows = page.locator('[data-testid^="file-tree-item-unstaged-"]');
+        const stagedSection = await bulkRow(page, 0, 'staged').evaluateHandle((element) => element!.closest('section'));
+        const unstagedCount = bulkFileCount - stagedBulkFileCount;
+
+        await expect(bulkRow(page, 0, 'staged')).toBeVisible();
+        expect(await stagedRows.count()).toBeLessThan(stagedBulkFileCount);
+        expect(await unstagedRows.count()).toBeLessThan(unstagedCount);
+
+        const scroller = await changesScroller(bulkRow(page, 0, 'staged'));
+        const initialScrollHeight = await scroller.evaluate((element) => element.scrollHeight);
+        const initialStagedHeight = await stagedSection.evaluate((element) => element!.getBoundingClientRect().height);
+
+        await scroller.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
+
+        // The list below is reachable, and scrolling by a fixed amount cannot grow the panel.
+        await expect(bulkRow(page, bulkFileCount - 1)).toBeVisible();
+        expect(await scroller.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(initialScrollHeight + 4);
+
+        // The section above the viewport keeps its real height instead of a spacer that grew with
+        // the scroll offset: the extra height would be the blank strip the user scrolls through.
+        const stagedHeight = await stagedSection.evaluate((element) => element!.getBoundingClientRect().height);
+        expect(stagedHeight).toBeLessThanOrEqual(initialStagedHeight + 4);
+        expect(await stagedRows.count()).toBe(0);
     });
 });

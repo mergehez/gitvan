@@ -67,6 +67,10 @@ implemented. Do not store benchmark numbers or implementation detail in **Done**
 - Made closing the window quit the app instead of leaving a dock icon that reopened into a blank window.
 - Made the amend button read the branch tip instead of the history page the Changes view never reloads.
 - Ignored a changes read that lands after a newer one, so it cannot put committed files back in the view.
+- Clamped a windowed tree's slice to its own rows: a section scrolled fully out of view used to grow its
+  spacer with the offset, pushing the section below it away and making the last rows unreachable. A tree
+  whose own section scrolls is now windowed too. Guarded by `FileTree.spec.ts` and
+  `playwright/file-tree-windowing.spec.ts`.
 
 ### Tests
 

@@ -45,8 +45,8 @@ function createScroller(scrollHeight: number, clientHeight = viewportHeight) {
     return scroller;
 }
 
-function mountTree(options: { rows: number; virtualize?: boolean; titleSlot?: boolean; rowHeight?: (row: Element) => number }) {
-    const scroller = createScroller(options.rows * rowHeight + 100);
+function mountTree(options: { rows: number; virtualize?: boolean; titleSlot?: boolean; rowHeight?: (row: Element) => number; extraScrollHeight?: number }) {
+    const scroller = createScroller(options.rows * rowHeight + (options.extraScrollHeight ?? 100));
     installLayoutMock(scroller, { rowHeight: options.rowHeight });
 
     const titleSlot = defineComponent({
@@ -148,6 +148,51 @@ describe('FileTree windowing', () => {
         await scrollTo(scroller, 200 * rowHeight - viewportHeight);
 
         expect(wrapper.findAll('[data-row-index]')[0]!.attributes('data-row-index')).toBe('182');
+    });
+
+    it('keeps its own height when scrolled fully past by a longer list below it', async () => {
+        const rows = 200;
+        // The scroller has other content below the tree, so it can scroll beyond the tree's end.
+        const { wrapper, scroller } = mountTree({ rows, virtualize: true, extraScrollHeight: 6000 });
+        await flushPromises();
+
+        await scrollTo(scroller, rows * rowHeight + 2000);
+
+        expect(renderedRowIds(wrapper)).toHaveLength(0);
+        // The spacer stands in for the whole list, never for rows scrolled past it: a spacer
+        // that grows with the offset would push the next section away on every scroll.
+        expect(spacerHeight(wrapper, 'top')).toContain(`${rows * rowHeight}px`);
+        expect(spacerHeight(wrapper, 'bottom')).toBeUndefined();
+    });
+
+    it('windows a tree whose own section is the scroller', async () => {
+        const wrapper = mount(FileTree, {
+            attachTo: document.body,
+            props: {
+                item: { id: 'tree', title: 'Tree', children: createChildren(200) },
+                virtualize: true,
+                onSelect: () => undefined,
+            },
+            global: { directives: { menu: { mounted() {}, updated() {} } } },
+        });
+        await flushPromises();
+
+        const section = wrapper.get('section').element as HTMLElement;
+        section.style.overflowY = 'auto';
+        Object.defineProperty(section, 'scrollHeight', { value: 200 * rowHeight, configurable: true });
+        Object.defineProperty(section, 'clientHeight', { value: viewportHeight, configurable: true });
+        installLayoutMock(section);
+
+        section.dispatchEvent(new Event('scroll'));
+        await flushPromises();
+
+        expect(renderedRowIds(wrapper)).toHaveLength(18);
+
+        section.scrollTop = 200 * rowHeight - viewportHeight;
+        section.dispatchEvent(new Event('scroll'));
+        await flushPromises();
+
+        expect(renderedRowIds(wrapper).at(-1)).toBe('file-tree-item-row-199');
     });
 
     it('falls back to every row when the mounted rows differ in height', async () => {
