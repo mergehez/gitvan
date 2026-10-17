@@ -213,13 +213,18 @@ function measureWindow() {
     const listRect = listTop.getBoundingClientRect();
     const nextListOffset = listRect.top - parentRect.top + parent.scrollTop;
 
-    listOffsetTop.value = nextListOffset;
-    scrollTop.value = parent.scrollTop;
-    viewportHeight.value = parent.clientHeight;
+    // Written only when it changed: an equal write still invalidates dependents in some paths and
+    // there is no reason to re-enter the render for a measurement that moved nothing.
+    if (listOffsetTop.value !== nextListOffset) listOffsetTop.value = nextListOffset;
+    if (scrollTop.value !== parent.scrollTop) scrollTop.value = parent.scrollTop;
+    if (viewportHeight.value !== parent.clientHeight) viewportHeight.value = parent.clientHeight;
 }
 
 function measureRowHeight() {
-    if (!props.virtualize) {
+    // Uniformity is decided once per tree. The sample is the mounted window, so letting a
+    // different sample re-enable windowing after one disabled it would flip the tree between
+    // "render the window" and "render every row" forever.
+    if (!props.virtualize || !rowsAreUniform.value) {
         return;
     }
 
