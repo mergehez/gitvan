@@ -22,6 +22,7 @@ const pierre = vi.hoisted(() => {
         renderCalls: [] as any[],
         setOptionsCalls: [] as any[],
         lastOptions: undefined as any,
+        editors: [] as any[],
         cleanup: vi.fn(),
         virtualizerCleanup: vi.fn(),
         diffOverride: undefined as any,
@@ -172,7 +173,31 @@ const pierre = vi.hoisted(() => {
         }
     }
 
+    class MockEditor {
+        type: string;
+        options: any;
+        instance: any;
+        cleanedUp = false;
+
+        constructor(type: string, options?: any) {
+            this.type = type;
+            this.options = options;
+            state.editors.push(this);
+        }
+
+        edit(instance: any) {
+            this.instance = instance;
+
+            return () => this.cleanUp();
+        }
+
+        cleanUp() {
+            this.cleanedUp = true;
+        }
+    }
+
     const parseDiffFromFile = vi.fn((oldFile: any, newFile: any) => state.diffOverride ?? buildParsedDiff(oldFile?.contents ?? '', newFile?.contents ?? ''));
+    const resolveEditorCommandFromKeyboardEvent = vi.fn(() => undefined);
 
     function reset() {
         state.instances.length = 0;
@@ -180,6 +205,7 @@ const pierre = vi.hoisted(() => {
         state.virtualizers.length = 0;
         state.renderCalls.length = 0;
         state.setOptionsCalls.length = 0;
+        state.editors.length = 0;
         state.lastOptions = undefined;
         state.diffOverride = undefined;
         state.cleanup.mockClear();
@@ -206,7 +232,9 @@ const pierre = vi.hoisted(() => {
         UnresolvedFile: MockUnresolvedFile,
         VirtualizedFileDiff: MockVirtualizedFileDiff,
         Virtualizer: MockVirtualizer,
+        Editor: MockEditor,
         parseDiffFromFile,
+        resolveEditorCommandFromKeyboardEvent,
         reset,
         makeChangeDiff,
     };
@@ -218,6 +246,11 @@ vi.mock('@pierre/diffs', () => ({
     VirtualizedFileDiff: pierre.VirtualizedFileDiff,
     Virtualizer: pierre.Virtualizer,
     parseDiffFromFile: pierre.parseDiffFromFile,
+}));
+
+vi.mock('@pierre/diffs/edit', () => ({
+    Editor: pierre.Editor,
+    resolveEditorCommandFromKeyboardEvent: pierre.resolveEditorCommandFromKeyboardEvent,
 }));
 
 import DiffsDiffEditor from '../../components/DiffsDiffEditor.vue';
@@ -411,6 +444,26 @@ describe('DiffsDiffEditor rendering', () => {
         expect(pierre.state.unresolvedInstances).toHaveLength(1);
         expect(pierre.state.renderCalls[0].file.contents).toContain('<<<<<<< HEAD');
         expect(pierre.state.lastOptions).toMatchObject({ mergeConflictActionsType: 'none', maxContextLines: 3 });
+        // The unresolved renderer has no editable surface.
+        expect(pierre.state.editors).toHaveLength(0);
+    });
+
+    it('keeps one read-only edit session per rendered diff', async () => {
+        const wrapper = mountEditor({ readonly: true });
+
+        expect(pierre.state.editors).toHaveLength(1);
+        expect(pierre.state.editors[0].type).toBe('file-diff');
+        expect(pierre.state.editors[0].instance).toBe(pierre.state.instances[0]);
+
+        // A re-render reuses the renderer, so it must reuse its edit session too.
+        await wrapper.setProps({ showWhitespaceChanges: true });
+
+        expect(pierre.state.instances).toHaveLength(1);
+        expect(pierre.state.editors).toHaveLength(1);
+
+        wrapper.unmount();
+
+        expect(pierre.state.editors[0].cleanedUp).toBe(true);
     });
 
     it('cleans up the renderer on unmount without building a virtualizer for a small diff', () => {

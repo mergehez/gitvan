@@ -11,6 +11,7 @@ import {
     type FileDiffOptions,
     type UnresolvedFileOptions,
 } from '@pierre/diffs';
+import { Editor, resolveEditorCommandFromKeyboardEvent, type EditorCommand } from '@pierre/diffs/edit';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { isJavaScriptTypeScriptPath, normalizeComparableDiffText } from '../../shared/diffIgnoredChars';
 import { useSettings } from '../composables/useSettings';
@@ -45,6 +46,14 @@ const fileDiffRef = shallowRef<FileDiff | UnresolvedFile>();
 const renderedNodeRef = shallowRef<HTMLElement>();
 /** Bumped on every post-render, so anchors are rebuilt when the renderer replaces the node. */
 let renderedNodeEpoch = 0;
+/**
+ * Edit mode brings the selection, search and keyboard navigation the plain renderer lacks. It is
+ * attached read-only: the content stays the editor's surface, but input is blocked below.
+ */
+const diffEditorRef = shallowRef<Editor<'file-diff'>>();
+let editSessionInstance: FileDiff | undefined;
+/** The content column an edit session marks editable; the editor's search field lives outside it. */
+let readOnlyContentElement: HTMLElement | undefined;
 /**
  * Rows the diff renderer mounts around the viewport. Without it a large diff (a 790 KB JSON is
  * ~14k lines) renders every line and token, which blocks the renderer for seconds and keeps the
@@ -173,6 +182,7 @@ const diffOptions = computed<DiffOptions>(() => {
         onPostRender(node: HTMLElement, _instance?: unknown) {
             renderedNodeEpoch += 1;
             renderedNodeRef.value = node;
+            refreshReadOnlyContent();
             void revealTargetLine();
         },
         renderAnnotation: undefined,
@@ -439,7 +449,8 @@ function setHunkAnchors() {
     if (signature === anchoredSignature) return;
 
     // we add actions wrapper only once, and populate its content on button hover, so that we don't have 100+ action wrappers in the DOM for large diffs
-    let actions = host.querySelector<HTMLElement>('.gitvan-hunk-actions');
+    // It lives on the shadow root, not inside `pre`: the renderer treats `pre`'s children as code columns.
+    let actions = sr.querySelector<HTMLElement>('.gitvan-hunk-actions');
     if (!actions) {
         actions = document.createElement('div');
         actions.className = 'gitvan-hunk-actions';
@@ -465,7 +476,7 @@ function setHunkAnchors() {
         actions.onmouseenter = (e) => ((e.target as HTMLElement)!.style.display = 'flex');
         actions.onmouseleave = (e) => ((e.target as HTMLElement)!.style.display = 'none');
 
-        host.appendChild(actions);
+        sr.appendChild(actions);
     }
     hunkActionsWrapper = actions;
 
@@ -581,6 +592,124 @@ function ensureDiffInstance(useVirtualization: boolean) {
     return fileDiffRef.value;
 }
 
+function refreshReadOnlyContent() {
+    const shadowRoot = renderedNodeRef.value?.shadowRoot;
+    readOnlyContentElement = shadowRoot?.querySelector<HTMLElement>('[data-code]:not([data-deletions]) > [data-content]') ?? undefined;
+}
+
+function disposeEditSession() {
+    diffEditorRef.value?.cleanUp('discard');
+    diffEditorRef.value = undefined;
+    editSessionInstance = undefined;
+    readOnlyContentElement = undefined;
+}
+
+/**
+ * Edits are discarded (no `onEditChange`/`onEditComplete` handler) and, while `readonly` is set,
+ * typing is blocked below. The renderer keeps owning highlighting, layout and virtualization.
+ */
+function ensureEditSession(instance: FileDiff) {
+    if (editSessionInstance === instance && diffEditorRef.value) {
+        refreshReadOnlyContent();
+        return;
+    }
+
+    disposeEditSession();
+
+    const editor = new Editor('file-diff');
+
+    try {
+        editor.edit(instance);
+    } catch {
+        editor.cleanUp('discard');
+        return;
+    }
+
+    diffEditorRef.value = editor;
+    editSessionInstance = instance;
+    refreshReadOnlyContent();
+}
+
+const blockedEditEvents = ['beforeinput', 'paste', 'cut', 'drop', 'compositionstart', 'compositionend'] as const;
+/** Editor shortcuts that change the document rather than move or extend a selection. */
+const mutatingEditorCommands = new Set<EditorCommand>([
+    'indent',
+    'outdent',
+    'indentLess',
+    'indentMore',
+    'undo',
+    'redo',
+    'moveLineUp',
+    'moveLineDown',
+    'copyLineUp',
+    'copyLineDown',
+    'insertBlankLine',
+    'deleteHardLineForward',
+    'toggleComment',
+    'toggleBlockComment',
+]);
+
+function isEditableContentEvent(event: Event) {
+    const target = event.composedPath()[0];
+
+    return readOnlyContentElement !== undefined && target instanceof Node && readOnlyContentElement.contains(target);
+}
+
+function onBlockedEditEvent(event: Event) {
+    if (!props.readonly || !isEditableContentEvent(event)) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}
+
+/** The editor's keymap can edit without `beforeinput`, so its mutating shortcuts are dropped too. */
+function onReadOnlyKeydown(event: KeyboardEvent) {
+    if (!props.readonly || !isEditableContentEvent(event)) return;
+
+    const command = resolveEditorCommandFromKeyboardEvent(event);
+
+    if (command === undefined || !mutatingEditorCommands.has(command)) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}
+
+/**
+ * The editor marks the keys it handled, so the app's document-level shortcuts (`⌘F` opens the
+ * file filter) do not also fire while the diff's own search is open.
+ */
+function onEditorKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented) {
+        event.stopPropagation();
+    }
+}
+
+function bindHostEventGuards() {
+    const host = renderHostRef.value;
+
+    if (!host) return;
+
+    for (const eventName of blockedEditEvents) {
+        host.addEventListener(eventName, onBlockedEditEvent, true);
+    }
+
+    host.addEventListener('keydown', onReadOnlyKeydown, true);
+    host.addEventListener('keydown', onEditorKeydown);
+}
+
+function unbindHostEventGuards() {
+    const host = renderHostRef.value;
+
+    if (!host) return;
+
+    for (const eventName of blockedEditEvents) {
+        host.removeEventListener(eventName, onBlockedEditEvent, true);
+    }
+
+    host.removeEventListener('keydown', onReadOnlyKeydown, true);
+    host.removeEventListener('keydown', onEditorKeydown);
+}
+
 function renderDiff() {
     const host = renderHostRef.value;
     if (!host) {
@@ -615,17 +744,21 @@ function renderDiff() {
         forceRender: true,
     });
 
+    ensureEditSession(instance as FileDiff);
+
     emit('visibleDiffChange', diffState.value.hasVisibleChanges);
     void revealTargetLine();
 }
 
 function cleanUpInstance() {
+    disposeEditSession();
     fileDiffRef.value?.cleanUp();
     fileDiffRef.value = undefined;
     renderedNodeRef.value = undefined;
 }
 
 onMounted(() => {
+    bindHostEventGuards();
     renderDiff();
 });
 
@@ -633,6 +766,7 @@ onUnmounted(() => {
     clearPendingHoveredActionZoneClear();
     cleanUpInstance();
     dropDiffVirtualizer();
+    unbindHostEventGuards();
 });
 
 // An array of getters, not one getter returning an array: the latter produces a new array on
